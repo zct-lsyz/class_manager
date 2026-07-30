@@ -1,0 +1,14 @@
+# Django
+django>=5.2,<5.3
+
+# Excel 处理
+openpyxl>=3.1
+
+# 数据验证
+pydantic>=2.0
+
+# 生产部署
+gunicorn>=23.0
+
+# 生产环境（可选）
+# psycopg2-binary  # 未来迁移到 PostgreSQL 时使用

@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+{% load static %}
+<html lang="zh-hans">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}班级教学管理平台{% endblock %}</title>
+    <!-- Bootstrap 5 -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Bootstrap Icons -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <!-- HTMX -->
+    <script src="https://cdn.jsdelivr.net/npm/htmx.org@1.9.10/dist/htmx.min.js"></script>
+    <!-- 自定义样式 -->
+    <link href="{% static 'css/style.css' %}" rel="stylesheet">
+    {% block extra_head %}{% endblock %}
+</head>
+<body>
+    {% if user.is_authenticated %}
+    <!-- 顶部蓝色班级信息栏 -->
+    <nav class="navbar navbar-expand-lg top-navbar">
+        <div class="container-fluid">
+            <a class="navbar-brand text-white" href="{% url 'dashboard:index' %}">
+                <i class="bi bi-mortarboard-fill me-2"></i>
+                班级教学管理平台
+            </a>
+            <div class="d-flex align-items-center">
+                {% if current_class %}
+                <span class="badge bg-light text-primary me-3 py-2 px-3">
+                    <i class="bi bi-building me-1"></i>
+                    {{ current_class.name }}
+                    {% if current_semester %}
+                    — {{ current_semester.get_display_name }}
+                    {% endif %}
+                </span>
+                {% endif %}
+                <div class="dropdown">
+                    <button class="btn btn-light btn-sm dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                        <i class="bi bi-person-circle me-1"></i>
+                        {{ user.username }}
+                    </button>
+                    <ul class="dropdown-menu dropdown-menu-end">
+                        <li><a class="dropdown-item" href="{% url 'accounts:settings' %}">
+                            <i class="bi bi-gear me-2"></i>账户与安全
+                        </a></li>
+                        <li><hr class="dropdown-divider"></li>
+                        <li><a class="dropdown-item" href="{% url 'accounts:logout' %}">
+                            <i class="bi bi-box-arrow-right me-2"></i>退出登录
+                        </a></li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container-fluid">
+        <div class="row">
+            <!-- 左侧固定导航 -->
+            <nav class="col-md-2 d-none d-md-block sidebar">
+                <div class="sidebar-sticky pt-3">
+                    <!-- 工作台 -->
+                    <div class="nav-section-title">工作台</div>
+                    <ul class="nav flex-column">
+                        <li class="nav-item">
+                            <a class="nav-link {% if request.resolver_match.app_name == 'dashboard' %}active{% endif %}" href="{% url 'dashboard:index' %}">
+                                <i class="bi bi-grid-1x2-fill me-2"></i>工作台首页
+                            </a>
+                        </li>
+                    </ul>
+
+                    <!-- 班级基础 -->
+                    <div class="nav-section-title">班级基础</div>
+                    <ul class="nav flex-column">
+                        <li class="nav-item">
+                            <a class="nav-link {% if request.resolver_match.app_name == 'students' and not 'student_detail' in request.path %}active{% endif %}" href="{% url 'students:list' %}">
+                                <i class="bi bi-people-fill me-2"></i>学生花名册
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="{% url 'classes:settings' %}">
+                                <i class="bi bi-building me-2"></i>班级与学期
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="{% url 'classes:committee_list' %}">
+                                <i class="bi bi-person-badge me-2"></i>班委名单
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="{% url 'classes:study_groups' %}">
+                                <i class="bi bi-people me-2"></i>学习小组
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="{% url 'students:guardian_list' %}">
+                                <i class="bi bi-telephone-fill me-2"></i>家长联系方式
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="{% url 'classes:course_schedule' %}">
+                                <i class="bi bi-calendar-week me-2"></i>课程表
+                            </a>
+                        </li>
+                    </ul>
+
+                    <!-- 日常管理 -->
+                    <div class="nav-section-title">日常管理</div>
+                    <ul class="nav flex-column">
+                        <li class="nav-item">
+                            <a class="nav-link" href="{% url 'seating:index' %}">
+                                <i class="bi bi-layout-text-window me-2"></i>座位表
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="{% url 'duty:index' %}">
+                                <i class="bi bi-brush me-2"></i>值日生表
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="{% url 'attendance:index' %}">
+                                <i class="bi bi-clipboard-check me-2"></i>考勤管理
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="{% url 'homework:index' %}">
+                                <i class="bi bi-journal-text me-2"></i>作业检查
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="{% url 'discipline:classroom_list' %}">
+                                <i class="bi bi-exclamation-triangle me-2"></i>课堂纪律
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="{% url 'dormitory:index' %}">
+                                <i class="bi bi-house-door me-2"></i>宿舍管理
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="{% url 'rewards:index' %}">
+                                <i class="bi bi-star-fill me-2"></i>奖励与表扬
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="{% url 'rewards:points' %}">
+                                <i class="bi bi-trophy me-2"></i>奖惩积分
+                            </a>
+                        </li>
+                    </ul>
+
+                    <!-- 教学管理 -->
+                    <div class="nav-section-title">教学管理</div>
+                    <ul class="nav flex-column">
+                        <li class="nav-item">
+                            <a class="nav-link" href="{% url 'scores:exam_list' %}">
+                                <i class="bi bi-file-earmark-text me-2"></i>考试管理
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="{% url 'scores:score_entry' %}">
+                                <i class="bi bi-pencil-square me-2"></i>成绩录入
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="{% url 'scores:analysis' %}">
+                                <i class="bi bi-bar-chart-fill me-2"></i>成绩分析
+                            </a>
+                        </li>
+                    </ul>
+
+                    <!-- 成长记录 -->
+                    <div class="nav-section-title">成长记录</div>
+                    <ul class="nav flex-column">
+                        <li class="nav-item">
+                            <a class="nav-link" href="{% url 'comments:list' %}">
+                                <i class="bi bi-chat-quote me-2"></i>学生评语
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="{% url 'communications:conversations' %}">
+                                <i class="bi bi-chat-dots me-2"></i>学生谈话
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="{% url 'communications:home_school' %}">
+                                <i class="bi bi-chat-left-dots me-2"></i>家校沟通
+                            </a>
+                        </li>
+                    </ul>
+
+                    <!-- 班级活动 -->
+                    <div class="nav-section-title">班级活动</div>
+                    <ul class="nav flex-column">
+                        <li class="nav-item">
+                            <a class="nav-link" href="{% url 'activities:class_meetings' %}">
+                                <i class="bi bi-people-fill me-2"></i>主题班会
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="{% url 'activities:activities' %}">
+                                <i class="bi bi-activity me-2"></i>文体活动
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="{% url 'activities:culture' %}">
+                                <i class="bi bi-palette me-2"></i>班级文化
+                            </a>
+                        </li>
+                    </ul>
+
+                    <!-- 数据中心 -->
+                    <div class="nav-section-title">数据中心</div>
+                    <ul class="nav flex-column">
+                        <li class="nav-item">
+                            <a class="nav-link" href="{% url 'exports:export_center' %}">
+                                <i class="bi bi-download me-2"></i>模块数据导出
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="{% url 'exports:full_export' %}">
+                                <i class="bi bi-archive me-2"></i>全量数据导出
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="{% url 'exports:import_data' %}">
+                                <i class="bi bi-upload me-2"></i>数据导入
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="{% url 'backups:index' %}">
+                                <i class="bi bi-shield-check me-2"></i>备份管理
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="{% url 'audit:log_list' %}">
+                                <i class="bi bi-journal-code me-2"></i>操作日志
+                            </a>
+                        </li>
+                    </ul>
+
+                    <!-- 系统设置 -->
+                    <div class="nav-section-title">系统设置</div>
+                    <ul class="nav flex-column">
+                        <li class="nav-item">
+                            <a class="nav-link" href="{% url 'classes:settings' %}">
+                                <i class="bi bi-gear-wide-connected me-2"></i>班级与学期
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="{% url 'scores:subject_settings' %}">
+                                <i class="bi bi-book me-2"></i>科目与考试设置
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="{% url 'seating:layout' %}">
+                                <i class="bi bi-columns-gap me-2"></i>教室布局
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="{% url 'discipline:classroom_items' %}">
+                                <i class="bi bi-list-check me-2"></i>课堂纪律条目
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="{% url 'discipline:dorm_items' %}">
+                                <i class="bi bi-list-check me-2"></i>宿舍纪律条目
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="{% url 'rewards:rules' %}">
+                                <i class="bi bi-trophy me-2"></i>奖励与积分规则
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="{% url 'homework:status_settings' %}">
+                                <i class="bi bi-check2-square me-2"></i>作业状态设置
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="{% url 'comments:templates' %}">
+                                <i class="bi bi-file-text me-2"></i>评语模板
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="{% url 'accounts:settings' %}">
+                                <i class="bi bi-shield-lock me-2"></i>账户与安全
+                            </a>
+                        </li>
+                    </ul>
+                </div>
+            </nav>
+
+            <!-- 主内容区 -->
+            <main class="col-md-10 ms-sm-auto main-content">
+                <!-- 消息提示 -->
+                {% if messages %}
+                <div class="mt-3">
+                    {% for message in messages %}
+                    <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+                        {% if message.tags == 'success' %}
+                        <i class="bi bi-check-circle-fill me-2"></i>
+                        {% elif message.tags == 'warning' %}
+                        <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                        {% elif message.tags == 'error' %}
+                        <i class="bi bi-x-circle-fill me-2"></i>
+                        {% else %}
+                        <i class="bi bi-info-circle-fill me-2"></i>
+                        {% endif %}
+                        {{ message }}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% endif %}
+
+                {% block content %}{% endblock %}
+            </main>
+        </div>
+    </div>
+
+    <!-- 移动端底部导航 -->
+    <nav class="mobile-bottom-nav d-md-none">
+        <div class="d-flex justify-content-around py-2 bg-white border-top">
+            <a href="{% url 'dashboard:index' %}" class="text-center text-muted">
+                <i class="bi bi-grid-1x2-fill d-block fs-5"></i>
+                <small>首页</small>
+            </a>
+            <a href="{% url 'students:list' %}" class="text-center text-muted">
+                <i class="bi bi-people-fill d-block fs-5"></i>
+                <small>学生</small>
+            </a>
+            <a href="{% url 'attendance:index' %}" class="text-center text-muted">
+                <i class="bi bi-clipboard-check d-block fs-5"></i>
+                <small>考勤</small>
+            </a>
+            <a href="{% url 'seating:index' %}" class="text-center text-muted">
+                <i class="bi bi-layout-text-window d-block fs-5"></i>
+                <small>座位</small>
+            </a>
+            <button class="text-center text-muted border-0 bg-transparent" type="button" data-bs-toggle="offcanvas" data-bs-target="#mobileMenu">
+                <i class="bi bi-list d-block fs-5"></i>
+                <small>菜单</small>
+            </button>
+        </div>
+    </nav>
+
+    <!-- 移动端侧滑菜单 -->
+    <div class="offcanvas offcanvas-start d-md-none" tabindex="-1" id="mobileMenu">
+        <div class="offcanvas-header">
+            <h5 class="offcanvas-title">菜单</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas"></button>
+        </div>
+        <div class="offcanvas-body">
+            <!-- 侧滑菜单内容与左侧导航一致（通过JS动态加载或直接复制） -->
+            <p class="text-muted small">完整菜单请在桌面端查看</p>
+        </div>
+    </div>
+    {% else %}
+    <!-- 未登录时只显示登录页面内容 -->
+    {% block login_content %}{% endblock %}
+    {% endif %}
+
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    {% block extra_js %}{% endblock %}
+</body>
+</html>

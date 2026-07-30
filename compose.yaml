@@ -1,0 +1,55 @@
+# =====================================
+# 班级教学管理平台 - Docker Compose
+# =====================================
+
+services:
+  nginx:
+    image: nginx:1.25-alpine
+    container_name: classroom-nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+      - staticfiles:/app/staticfiles:ro
+      - media:/app/media:ro
+    depends_on:
+      - web
+    restart: unless-stopped
+
+  web:
+    build: .
+    container_name: classroom-web
+    expose:
+      - "8000"
+    volumes:
+      - data:/app/data
+      - media:/app/media
+      - backups:/app/backups
+      - exports:/app/exports
+      - logs:/app/logs
+      - staticfiles:/app/staticfiles
+    env_file:
+      - .env
+    environment:
+      - DJANGO_SETTINGS_MODULE=config.settings.production
+    restart: unless-stopped
+    command: >
+      sh -c "
+        python manage.py migrate --noinput &&
+        python manage.py collectstatic --noinput --clear &&
+        gunicorn config.wsgi:application
+        --bind 0.0.0.0:8000
+        --workers 2
+        --timeout 120
+        --access-logfile /app/logs/gunicorn_access.log
+        --error-logfile /app/logs/gunicorn_error.log
+      "
+
+volumes:
+  data:
+  media:
+  backups:
+  exports:
+  logs:
+  staticfiles:

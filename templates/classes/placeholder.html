@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}{{ title }} - 班级教学管理平台{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center mt-5">
+    <div class="col-md-6 text-center">
+        <div class="card">
+            <div class="card-body py-5">
+                <i class="bi bi-tools text-primary" style="font-size: 4rem;"></i>
+                <h4 class="mt-3">{{ title }}</h4>
+                <p class="text-muted mt-3">{{ message }}</p>
+                <p class="text-muted small">
+                    <i class="bi bi-info-circle me-1"></i>
+                    该功能将在后续开发阶段中实现。
+                </p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}家长联系方式 - 班级教学管理平台{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center mt-3">
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header">
+                <i class="bi bi-telephone me-2"></i>
+                {% if student %}{{ student.name }} 的{% endif %}家长联系方式
+            </div>
+            <div class="card-body">
+                <form method="post" novalidate>
+                    {% csrf_token %}
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label small">{{ form.father_name.label }}</label>
+                            {{ form.father_name }}
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label small">{{ form.father_phone.label }}</label>
+                            {{ form.father_phone }}
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label small">{{ form.mother_name.label }}</label>
+                            {{ form.mother_name }}
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label small">{{ form.mother_phone.label }}</label>
+                            {{ form.mother_phone }}
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label small">{{ form.other_guardian.label }}</label>
+                            {{ form.other_guardian }}
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label small">{{ form.primary_contact.label }}</label>
+                            {{ form.primary_contact }}
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small">{{ form.home_address.label }}</label>
+                        {{ form.home_address }}
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small">{{ form.remarks.label }}</label>
+                        {{ form.remarks }}
+                    </div>
+                    <hr>
+                    <div class="d-flex justify-content-between">
+                        <a href="{% if student %}{% url 'students:detail' student.pk %}{% else %}{% url 'students:guardian_list' %}{% endif %}" class="btn btn-outline-secondary">
+                            <i class="bi bi-arrow-left me-1"></i>返回
+                        </a>
+                        <button type="submit" class="btn btn-primary">
+                            <i class="bi bi-check-lg me-1"></i>保存
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

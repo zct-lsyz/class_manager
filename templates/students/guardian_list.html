@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}家长联系方式 - 班级教学管理平台{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mt-3 mb-4">
+    <h4 class="mb-0">
+        <i class="bi bi-telephone-fill me-2 text-primary"></i>家长联系方式
+    </h4>
+    <small class="text-muted">
+        <i class="bi bi-shield-lock me-1"></i>手机号列表默认脱敏
+    </small>
+</div>
+
+<div class="filter-bar">
+    <form method="get" class="row g-2">
+        <div class="col-md-4">
+            <input type="text" name="search" class="form-control form-control-sm"
+                placeholder="按学生姓名或学号搜索" value="{{ search }}">
+        </div>
+        <div class="col-md-2">
+            <button type="submit" class="btn btn-primary btn-sm w-100">
+                <i class="bi bi-search me-1"></i>搜索
+            </button>
+        </div>
+    </form>
+</div>
+
+<div class="card">
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover mb-0">
+                <thead>
+                    <tr>
+                        <th>学生</th>
+                        <th>学号</th>
+                        <th>父亲</th>
+                        <th>母亲</th>
+                        <th>主要联系人</th>
+                        <th>操作</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for guardian in page_obj %}
+                    <tr>
+                        <td>
+                            <a href="{% url 'students:detail' guardian.student.pk %}" class="text-decoration-none">
+                                {{ guardian.student.name }}
+                            </a>
+                        </td>
+                        <td>{{ guardian.student.student_id }}</td>
+                        <td>
+                            {{ guardian.father_name|default:"-" }}
+                            {% if guardian.father_phone %}
+                            <small class="text-muted ms-1">
+                                ({{ guardian.father_phone|slice:":3" }}****{{ guardian.father_phone|slice:"-4:" }})
+                            </small>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {{ guardian.mother_name|default:"-" }}
+                            {% if guardian.mother_phone %}
+                            <small class="text-muted ms-1">
+                                ({{ guardian.mother_phone|slice:":3" }}****{{ guardian.mother_phone|slice:"-4:" }})
+                            </small>
+                            {% endif %}
+                        </td>
+                        <td>{{ guardian.get_primary_contact_display|default:"-" }}</td>
+                        <td>
+                            <a href="{% url 'students:guardian_edit' guardian.pk %}" class="btn btn-sm btn-outline-primary">
+                                <i class="bi bi-pencil"></i> 编辑
+                            </a>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="6" class="text-center text-muted py-4">
+                            <i class="bi bi-telephone d-block fs-3 mb-2"></i>
+                            暂无家长联系方式数据。
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

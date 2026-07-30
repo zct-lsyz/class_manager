@@ -1,0 +1,57 @@
+# 环境变量
+.env
+
+# 数据库
+*.sqlite3
+*.db
+
+# 数据文件
+data/*
+!data/.gitkeep
+
+# 上传文件
+media/*
+!media/.gitkeep
+
+# 备份文件
+backups/*
+!backups/.gitkeep
+
+# 导出文件
+exports/*
+!exports/.gitkeep
+
+# 编译缓存
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+
+# 虚拟环境
+.venv/
+venv/
+env/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# 静态文件收集目录
+staticfiles/
+
+# 日志
+*.log
+logs/
+
+# Excel 和 CSV 数据文件
+*.xlsx
+*.csv
+*.zip
+
+# 操作系统
+.DS_Store
+Thumbs.db

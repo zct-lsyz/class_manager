@@ -1,0 +1,110 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}{{ student.name }} - 学生档案 - 班级教学管理平台{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mt-3 mb-4">
+    <h4 class="mb-0">
+        <i class="bi bi-file-person me-2 text-primary"></i>{{ student.name }} 的综合档案
+    </h4>
+    <div>
+        <a href="{% url 'students:edit' student.pk %}" class="btn btn-primary btn-sm">
+            <i class="bi bi-pencil me-1"></i>编辑信息
+        </a>
+        <a href="{% url 'students:list' %}" class="btn btn-outline-secondary btn-sm">
+            <i class="bi bi-arrow-left me-1"></i>返回花名册
+        </a>
+    </div>
+</div>
+
+<!-- 综合摘要卡片 -->
+<div class="row g-3 mb-4">
+    <div class="col-md-3 col-6">
+        <div class="card text-center p-3 h-100">
+            <small class="text-muted">性别</small>
+            <span class="fs-5 fw-bold">
+                {% if student.gender == 'male' %}♂ 男{% else %}♀ 女{% endif %}
+            </span>
+        </div>
+    </div>
+    <div class="col-md-3 col-6">
+        <div class="card text-center p-3 h-100">
+            <small class="text-muted">班级</small>
+            <span class="fs-5 fw-bold">{{ student.school_class.name|default:"-" }}</span>
+        </div>
+    </div>
+    <div class="col-md-3 col-6">
+        <div class="card text-center p-3 h-100">
+            <small class="text-muted">宿舍</small>
+            <span class="fs-5 fw-bold">{{ student.dormitory|default:"-" }}</span>
+        </div>
+    </div>
+    <div class="col-md-3 col-6">
+        <div class="card text-center p-3 h-100">
+            <small class="text-muted">职务</small>
+            <span class="fs-5 fw-bold">{{ student.class_position|default:"-" }}</span>
+        </div>
+    </div>
+</div>
+
+<!-- 标签页 -->
+<div class="card">
+    <div class="card-header p-0">
+        <ul class="nav nav-tabs card-header-tabs mx-2 mt-2" id="studentTabs" role="tablist">
+            <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#basic" type="button">基本信息</button></li>
+            <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#guardian" type="button">家长</button></li>
+            <li class="nav-item"><button class="nav-link disabled" type="button">成绩</button></li>
+            <li class="nav-item"><button class="nav-link disabled" type="button">考勤</button></li>
+            <li class="nav-item"><button class="nav-link disabled" type="button">纪律</button></li>
+            <li class="nav-item"><button class="nav-link disabled" type="button">评语</button></li>
+            <li class="nav-item"><button class="nav-link disabled" type="button">成长时间线</button></li>
+        </ul>
+    </div>
+    <div class="card-body">
+        <div class="tab-content">
+            <!-- 基本信息 -->
+            <div class="tab-pane fade show active" id="basic">
+                <table class="table table-borderless">
+                    <tr><td class="text-muted" style="width:120px">学号</td><td>{{ student.student_id }}</td></tr>
+                    <tr><td class="text-muted">姓名</td><td>{{ student.name }}</td></tr>
+                    <tr><td class="text-muted">性别</td><td>{% if student.gender == 'male' %}男{% else %}女{% endif %}</td></tr>
+                    <tr><td class="text-muted">出生日期</td><td>{{ student.birth_date|date:"Y-m-d"|default:"未填写" }}</td></tr>
+                    <tr><td class="text-muted">身高</td><td>{{ student.height|default:"未填写" }}{% if student.height %} cm{% endif %}</td></tr>
+                    <tr><td class="text-muted">视力情况</td><td>{{ student.vision|default:"未填写" }}</td></tr>
+                    <tr><td class="text-muted">特殊座位需求</td><td>{{ student.seat_requirement|default:"无" }}</td></tr>
+                    <tr><td class="text-muted">班级职务</td><td>{{ student.class_position|default:"无" }}</td></tr>
+                    <tr><td class="text-muted">宿舍 / 床位</td><td>{{ student.dormitory|default:"未分配" }} {% if student.bed_number %}/ {{ student.bed_number }}{% endif %}</td></tr>
+                    <tr><td class="text-muted">主要联系人</td><td>{{ student.primary_contact|default:"未填写" }}</td></tr>
+                    <tr><td class="text-muted">联系电话</td><td>{{ student.primary_phone|default:"未填写" }}</td></tr>
+                    <tr><td class="text-muted">备注</td><td>{{ student.remarks|linebreaks|default:"无" }}</td></tr>
+                </table>
+            </div>
+
+            <!-- 家长信息 -->
+            <div class="tab-pane fade" id="guardian">
+                {% if guardian %}
+                <table class="table table-borderless">
+                    <tr><td class="text-muted" style="width:120px">父亲</td><td>{{ guardian.father_name|default:"未填写" }} {% if guardian.father_phone %}({{ guardian.father_phone|slice:":3" }}****{{ guardian.father_phone|slice:"-4:" }}){% endif %}</td></tr>
+                    <tr><td class="text-muted">母亲</td><td>{{ guardian.mother_name|default:"未填写" }} {% if guardian.mother_phone %}({{ guardian.mother_phone|slice:":3" }}****{{ guardian.mother_phone|slice:"-4:" }}){% endif %}</td></tr>
+                    <tr><td class="text-muted">其他监护人</td><td>{{ guardian.other_guardian|default:"无" }}</td></tr>
+                    <tr><td class="text-muted">主要联系人</td><td>{{ guardian.get_primary_contact_display|default:"未设置" }}</td></tr>
+                    <tr><td class="text-muted">家庭地址</td><td>{{ guardian.home_address|default:"未填写" }}</td></tr>
+                </table>
+                <a href="{% url 'students:guardian_edit' guardian.pk %}" class="btn btn-outline-primary btn-sm">
+                    <i class="bi bi-pencil me-1"></i>编辑
+                </a>
+                {% else %}
+                <div class="text-center py-4 text-muted">
+                    <i class="bi bi-telephone d-block fs-1 mb-2"></i>
+                    <p>暂无家长联系方式</p>
+                    <a href="{% url 'students:guardian_create' student.pk %}" class="btn btn-primary btn-sm">
+                        <i class="bi bi-plus-lg me-1"></i>添加家长信息
+                    </a>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

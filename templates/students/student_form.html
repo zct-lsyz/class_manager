@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}{{ title }} - 班级教学管理平台{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center mt-3">
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header">
+                <i class="bi bi-{% if student %}pencil{% else %}plus-circle{% endif %} me-2"></i>{{ title }}
+            </div>
+            <div class="card-body">
+                <form method="post" novalidate>
+                    {% csrf_token %}
+                    <div class="row">
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label small">{{ form.student_id.label }}</label>
+                            {{ form.student_id }}
+                            {% if form.student_id.errors %}<div class="text-danger small">{{ form.student_id.errors.0 }}</div>{% endif %}
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label small">{{ form.name.label }}</label>
+                            {{ form.name }}
+                            {% if form.name.errors %}<div class="text-danger small">{{ form.name.errors.0 }}</div>{% endif %}
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label small">{{ form.gender.label }}</label>
+                            {{ form.gender }}
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label small">{{ form.school_class.label }}</label>
+                            {{ form.school_class }}
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label small">{{ form.birth_date.label }}</label>
+                            {{ form.birth_date }}
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label small">{{ form.height.label }}</label>
+                            {{ form.height }}
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label small">{{ form.vision.label }}</label>
+                            {{ form.vision }}
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label small">{{ form.seat_requirement.label }}</label>
+                            {{ form.seat_requirement }}
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label small">{{ form.class_position.label }}</label>
+                            {{ form.class_position }}
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label small">{{ form.dormitory.label }}</label>
+                            {{ form.dormitory }}
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label small">{{ form.bed_number.label }}</label>
+                            {{ form.bed_number }}
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label small">{{ form.primary_contact.label }}</label>
+                            {{ form.primary_contact }}
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label small">{{ form.primary_phone.label }}</label>
+                            {{ form.primary_phone }}
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small">{{ form.remarks.label }}</label>
+                        {{ form.remarks }}
+                    </div>
+                    <hr>
+                    <div class="d-flex justify-content-between">
+                        <a href="{% url 'students:list' %}" class="btn btn-outline-secondary">
+                            <i class="bi bi-arrow-left me-1"></i>返回列表
+                        </a>
+                        <button type="submit" class="btn btn-primary">
+                            <i class="bi bi-check-lg me-1"></i>保存
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

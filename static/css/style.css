@@ -1,0 +1,346 @@
+/* ========================================
+   班级教学管理平台 - 自定义样式
+   主题：浅色背景 / 蓝色主色
+   ======================================== */
+
+/* ===== 全局 ===== */
+body {
+    background-color: #f5f7fa;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+        "Microsoft YaHei", "Helvetica Neue", Arial, sans-serif;
+    font-size: 0.9rem;
+}
+
+a {
+    text-decoration: none;
+}
+
+/* ===== 顶部导航 ===== */
+.top-navbar {
+    background: linear-gradient(135deg, #1a73e8, #1557b0);
+    padding: 0.5rem 1rem;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+    z-index: 1030;
+    min-height: 56px;
+}
+
+.top-navbar .navbar-brand {
+    font-size: 1.15rem;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+}
+
+/* ===== 左侧导航 ===== */
+.sidebar {
+    position: fixed;
+    top: 56px;
+    bottom: 0;
+    left: 0;
+    z-index: 100;
+    padding: 0;
+    overflow-x: hidden;
+    overflow-y: auto;
+    background-color: #fff;
+    border-right: 1px solid #e9ecef;
+    box-shadow: 1px 0 4px rgba(0, 0, 0, 0.05);
+}
+
+.sidebar-sticky {
+    padding-bottom: 2rem;
+}
+
+.nav-section-title {
+    padding: 0.75rem 1rem 0.25rem;
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    color: #6c757d;
+    letter-spacing: 0.5px;
+}
+
+.sidebar .nav-link {
+    padding: 0.4rem 1rem;
+    color: #495057;
+    font-size: 0.85rem;
+    border-left: 3px solid transparent;
+    transition: all 0.2s;
+}
+
+.sidebar .nav-link:hover {
+    background-color: #e8f0fe;
+    color: #1a73e8;
+    border-left-color: #1a73e8;
+}
+
+.sidebar .nav-link.active {
+    background-color: #e8f0fe;
+    color: #1a73e8;
+    font-weight: 600;
+    border-left-color: #1a73e8;
+}
+
+.sidebar .nav-link i {
+    width: 20px;
+    text-align: center;
+}
+
+/* ===== 主内容区 ===== */
+.main-content {
+    padding: 1rem 1.5rem 5rem;
+    min-height: calc(100vh - 56px);
+}
+
+/* ===== 卡片 ===== */
+.card {
+    border: 1px solid #e9ecef;
+    border-radius: 10px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+    margin-bottom: 1rem;
+}
+
+.card-header {
+    background-color: #fff;
+    border-bottom: 1px solid #e9ecef;
+    padding: 0.75rem 1.25rem;
+    font-weight: 600;
+    font-size: 0.95rem;
+    border-radius: 10px 10px 0 0 !important;
+}
+
+.card-header i {
+    color: #1a73e8;
+}
+
+/* ===== 统计卡片 ===== */
+.stat-card {
+    border-radius: 12px;
+    padding: 1.25rem;
+    transition: transform 0.2s;
+}
+
+.stat-card:hover {
+    transform: translateY(-2px);
+}
+
+.stat-card .stat-icon {
+    width: 48px;
+    height: 48px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.5rem;
+}
+
+.stat-card .stat-number {
+    font-size: 1.8rem;
+    font-weight: 700;
+    line-height: 1.2;
+}
+
+.stat-card .stat-label {
+    font-size: 0.85rem;
+    color: #6c757d;
+}
+
+/* ===== 表格 ===== */
+.table th {
+    font-weight: 600;
+    font-size: 0.85rem;
+    color: #495057;
+    background-color: #f8f9fa;
+    border-bottom: 2px solid #dee2e6;
+    white-space: nowrap;
+}
+
+.table td {
+    vertical-align: middle;
+    font-size: 0.85rem;
+}
+
+.table-hover tbody tr:hover {
+    background-color: #f0f4ff;
+}
+
+/* ===== 搜索和筛选 ===== */
+.filter-bar {
+    background-color: #fff;
+    border: 1px solid #e9ecef;
+    border-radius: 10px;
+    padding: 1rem;
+    margin-bottom: 1rem;
+}
+
+/* ===== 分页 ===== */
+.pagination {
+    margin-bottom: 0;
+}
+
+.page-link {
+    color: #1a73e8;
+    border: 1px solid #dee2e6;
+    font-size: 0.85rem;
+    padding: 0.4rem 0.75rem;
+}
+
+.page-item.active .page-link {
+    background-color: #1a73e8;
+    border-color: #1a73e8;
+}
+
+/* ===== 按钮 ===== */
+.btn-primary {
+    background-color: #1a73e8;
+    border-color: #1a73e8;
+}
+
+.btn-primary:hover {
+    background-color: #1557b0;
+    border-color: #1557b0;
+}
+
+.btn-outline-primary {
+    color: #1a73e8;
+    border-color: #1a73e8;
+}
+
+.btn-outline-primary:hover {
+    background-color: #1a73e8;
+    border-color: #1a73e8;
+}
+
+/* ===== 颜色语义 ===== */
+.text-primary {
+    color: #1a73e8 !important;
+}
+
+.bg-primary {
+    background-color: #1a73e8 !important;
+}
+
+/* 绿色 - 正常/优秀 */
+.bg-success-soft {
+    background-color: #e6f7e6;
+    color: #28a745;
+}
+
+/* 橙色 - 提醒 */
+.bg-warning-soft {
+    background-color: #fff3e0;
+    color: #f57c00;
+}
+
+/* 红色 - 严重/失败 */
+.bg-danger-soft {
+    background-color: #fce4ec;
+    color: #dc3545;
+}
+
+/* 蓝色 - 信息 */
+.bg-info-soft {
+    background-color: #e3f2fd;
+    color: #1a73e8;
+}
+
+/* ===== 状态徽标 ===== */
+.badge-status {
+    padding: 0.35em 0.65em;
+    font-size: 0.75rem;
+    font-weight: 500;
+    border-radius: 20px;
+}
+
+/* ===== 空数据提示 ===== */
+.empty-state {
+    text-align: center;
+    padding: 3rem 1rem;
+    color: #adb5bd;
+}
+
+.empty-state i {
+    font-size: 3rem;
+    display: block;
+    margin-bottom: 1rem;
+}
+
+/* ===== 登录页 ===== */
+.login-page {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    min-height: 100vh;
+}
+
+.login-page .card {
+    border: none;
+    border-radius: 16px;
+}
+
+/* ===== 打印样式 ===== */
+@media print {
+    .top-navbar,
+    .sidebar,
+    .mobile-bottom-nav,
+    .btn,
+    .no-print {
+        display: none !important;
+    }
+    .main-content {
+        margin-left: 0 !important;
+        padding: 0 !important;
+    }
+    .card {
+        border: none !important;
+        box-shadow: none !important;
+    }
+}
+
+/* ===== 移动端适配 ===== */
+@media (max-width: 767.98px) {
+    .sidebar {
+        display: none;
+    }
+    .main-content {
+        padding: 0.75rem;
+        padding-bottom: 5rem;
+        margin-left: 0;
+    }
+    .mobile-bottom-nav {
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        z-index: 1050;
+    }
+    .stat-card .stat-number {
+        font-size: 1.4rem;
+    }
+}
+
+/* ===== 加载动画 ===== */
+.htmx-indicator {
+    opacity: 0;
+    transition: opacity 200ms ease-in;
+}
+.htmx-request .htmx-indicator {
+    opacity: 1;
+}
+.htmx-request.htmx-indicator {
+    opacity: 1;
+}
+
+/* ===== 滚动条美化 ===== */
+.sidebar::-webkit-scrollbar {
+    width: 4px;
+}
+.sidebar::-webkit-scrollbar-thumb {
+    background-color: #c1c1c1;
+    border-radius: 2px;
+}
+.sidebar::-webkit-scrollbar-track {
+    background-color: transparent;
+}
+
+/* ===== 移动端底部导航优化 ===== */
+.mobile-bottom-nav a.active,
+.mobile-bottom-nav a:active {
+    color: #1a73e8 !important;
+}

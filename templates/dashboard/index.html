@@ -1,0 +1,250 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}工作台 - 班级教学管理平台{% endblock %}
+
+{% block content %}
+<!-- 欢迎横幅 -->
+<div class="d-flex justify-content-between align-items-center mt-3 mb-4">
+    <h4 class="mb-0">
+        <i class="bi bi-grid-1x2-fill me-2 text-primary"></i>工作台首页
+    </h4>
+    <span class="text-muted small">
+        <i class="bi bi-calendar3 me-1"></i>{{ today|date:"Y年m月d日 l" }}
+    </span>
+</div>
+
+<!-- 提醒区域 -->
+{% if reminders %}
+<div class="mb-4">
+    {% for reminder in reminders %}
+    <div class="alert alert-{{ reminder.type }} alert-dismissible fade show" role="alert">
+        <i class="bi {{ reminder.icon }} me-2"></i>{{ reminder.text }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+    {% endfor %}
+</div>
+{% endif %}
+
+<!-- 统计卡片 -->
+<div class="row g-3 mb-4">
+    <div class="col-6 col-md-3">
+        <div class="stat-card bg-white border">
+            <div class="d-flex align-items-center">
+                <div class="stat-icon bg-primary bg-opacity-10 text-primary me-3">
+                    <i class="bi bi-people-fill"></i>
+                </div>
+                <div>
+                    <div class="stat-number">{{ total_students }}</div>
+                    <div class="stat-label">全班人数</div>
+                </div>
+            </div>
+            <div class="mt-2 small text-muted">
+                <span class="text-primary">♂ {{ male_count }}</span>
+                <span class="ms-2 text-danger">♀ {{ female_count }}</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-6 col-md-3">
+        <div class="stat-card bg-white border">
+            <div class="d-flex align-items-center">
+                <div class="stat-icon bg-warning bg-opacity-10 text-warning me-3">
+                    <i class="bi bi-clipboard-check"></i>
+                </div>
+                <div>
+                    <div class="stat-number">{{ today_absent }}</div>
+                    <div class="stat-label">今日缺勤</div>
+                </div>
+            </div>
+            {% if attendance_rate %}
+            <div class="mt-2 small text-muted">
+                本月出勤率：<span class="text-success">{{ attendance_rate }}%</span>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="col-6 col-md-3">
+        <div class="stat-card bg-white border">
+            <div class="d-flex align-items-center">
+                <div class="stat-icon bg-danger bg-opacity-10 text-danger me-3">
+                    <i class="bi bi-journal-text"></i>
+                </div>
+                <div>
+                    <div class="stat-number">{{ week_unsubmitted }}</div>
+                    <div class="stat-label">本周未交作业</div>
+                </div>
+            </div>
+            <div class="mt-2 small text-muted">
+                纪律事件：课堂 {{ week_discipline }} / 宿舍 {{ week_dorm_discipline }}
+            </div>
+        </div>
+    </div>
+
+    <div class="col-6 col-md-3">
+        <div class="stat-card bg-white border">
+            <div class="d-flex align-items-center">
+                <div class="stat-icon bg-success bg-opacity-10 text-success me-3">
+                    <i class="bi bi-star-fill"></i>
+                </div>
+                <div>
+                    <div class="stat-number">{{ this_month_rewards }}</div>
+                    <div class="stat-label">本月奖励</div>
+                </div>
+            </div>
+            {% if exam_avg_score %}
+            <div class="mt-2 small text-muted">
+                最近考试均分：<span class="text-primary">{{ exam_avg_score|floatformat:1 }}</span>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<div class="row g-4">
+    <!-- 快捷入口 -->
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header">
+                <i class="bi bi-lightning-charge me-2"></i>快捷操作
+            </div>
+            <div class="card-body">
+                <div class="row g-2">
+                    <div class="col-6 col-md-4">
+                        <a href="{% url 'attendance:index' %}" class="btn btn-outline-primary w-100 text-start">
+                            <i class="bi bi-clipboard-check me-2"></i>录入考勤
+                        </a>
+                    </div>
+                    <div class="col-6 col-md-4">
+                        <a href="{% url 'discipline:classroom_list' %}" class="btn btn-outline-warning w-100 text-start">
+                            <i class="bi bi-exclamation-triangle me-2"></i>登记课堂纪律
+                        </a>
+                    </div>
+                    <div class="col-6 col-md-4">
+                        <a href="{% url 'dormitory:index' %}" class="btn btn-outline-info w-100 text-start">
+                            <i class="bi bi-house-door me-2"></i>登记宿舍卫生
+                        </a>
+                    </div>
+                    <div class="col-6 col-md-4">
+                        <a href="{% url 'dormitory:discipline' %}" class="btn btn-outline-secondary w-100 text-start">
+                            <i class="bi bi-house-exclamation me-2"></i>登记宿舍纪律
+                        </a>
+                    </div>
+                    <div class="col-6 col-md-4">
+                        <a href="{% url 'homework:index' %}" class="btn btn-outline-danger w-100 text-start">
+                            <i class="bi bi-journal-text me-2"></i>登记作业未交
+                        </a>
+                    </div>
+                    <div class="col-6 col-md-4">
+                        <a href="{% url 'scores:exam_list' %}" class="btn btn-outline-success w-100 text-start">
+                            <i class="bi bi-file-earmark-text me-2"></i>新建考试
+                        </a>
+                    </div>
+                    <div class="col-6 col-md-4">
+                        <a href="{% url 'scores:score_entry' %}" class="btn btn-outline-primary w-100 text-start">
+                            <i class="bi bi-pencil-square me-2"></i>录入成绩
+                        </a>
+                    </div>
+                    <div class="col-6 col-md-4">
+                        <a href="{% url 'seating:index' %}" class="btn btn-outline-info w-100 text-start">
+                            <i class="bi bi-layout-text-window me-2"></i>调整座位
+                        </a>
+                    </div>
+                    <div class="col-6 col-md-4">
+                        <a href="{% url 'comments:list' %}" class="btn btn-outline-primary w-100 text-start">
+                            <i class="bi bi-chat-quote me-2"></i>写评语
+                        </a>
+                    </div>
+                    <div class="col-6 col-md-4">
+                        <a href="{% url 'backups:index' %}" class="btn btn-outline-dark w-100 text-start">
+                            <i class="bi bi-shield-check me-2"></i>执行备份
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 提醒汇总 -->
+        <div class="card mt-3">
+            <div class="card-header">
+                <i class="bi bi-bell me-2"></i>待办提醒
+            </div>
+            <div class="card-body">
+                <div class="list-group list-group-flush">
+                    {% if today_absent == 0 and total_students > 0 %}
+                    <div class="list-group-item px-0">
+                        <i class="bi bi-check-circle text-success me-2"></i>
+                        今日考勤已全部正常
+                    </div>
+                    {% endif %}
+                    {% if pending_comments > 0 %}
+                    <div class="list-group-item px-0">
+                        <i class="bi bi-exclamation-circle text-warning me-2"></i>
+                        尚有 <strong>{{ pending_comments }}</strong> 条评语待完成
+                    </div>
+                    {% endif %}
+                    {% if total_students == 0 %}
+                    <div class="list-group-item px-0">
+                        <i class="bi bi-info-circle text-info me-2"></i>
+                        尚未导入学生数据，请先进入「学生花名册」导入。
+                    </div>
+                    {% endif %}
+                    <div class="list-group-item px-0 text-muted small">
+                        <i class="bi bi-info-circle me-2"></i>
+                        更多提醒将在各模块数据完善后自动显示。
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 右侧信息 -->
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-header">
+                <i class="bi bi-info-circle me-2"></i>基本信息
+            </div>
+            <div class="card-body">
+                <table class="table table-borderless mb-0">
+                    <tr>
+                        <td class="text-muted small">班级</td>
+                        <td>{{ current_class.name|default:"未设置" }}</td>
+                    </tr>
+                    <tr>
+                        <td class="text-muted small">学期</td>
+                        <td>{{ current_semester.get_display_name|default:"未设置" }}</td>
+                    </tr>
+                    <tr>
+                        <td class="text-muted small">班主任</td>
+                        <td>{{ current_class.head_teacher|default:"未设置" }}</td>
+                    </tr>
+                    <tr>
+                        <td class="text-muted small">学校</td>
+                        <td>{{ current_class.school_name|default:"未设置" }}</td>
+                    </tr>
+                </table>
+            </div>
+        </div>
+
+        <div class="card mt-3">
+            <div class="card-header">
+                <i class="bi bi-calendar-check me-2"></i>快捷查看
+            </div>
+            <div class="card-body">
+                <div class="d-grid gap-2">
+                    <a href="{% url 'students:list' %}" class="btn btn-sm btn-outline-primary text-start">
+                        <i class="bi bi-people me-2"></i>学生花名册
+                    </a>
+                    <a href="{% url 'classes:settings' %}" class="btn btn-sm btn-outline-primary text-start">
+                        <i class="bi bi-building me-2"></i>班级设置
+                    </a>
+                    <a href="{% url 'audit:log_list' %}" class="btn btn-sm btn-outline-primary text-start">
+                        <i class="bi bi-journal-code me-2"></i>操作日志
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
