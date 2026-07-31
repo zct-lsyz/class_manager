@@ -29,7 +29,7 @@
                             {{ form.gender }}
                         </div>
                     </div>
-                    <div class="form-text mb-3">班级职务、宿舍床位和主要联系人为只读汇总，请分别在“班委名单”“宿舍管理”和“家长联系方式”中维护。</div>
+                    <div class="form-text mb-3">班级职务由“班委名单”汇总；宿舍床位和联系人可在这里直接录入，也可在对应管理页面继续完善。</div>
                     <div class="row">
                         <div class="col-md-4 mb-3">
                             <label class="form-label small">{{ form.school_class.label }}</label>
@@ -76,6 +76,16 @@
                         <div class="col-md-6 mb-3">
                             <label class="form-label small">{{ form.primary_phone.label }}</label>
                             {{ form.primary_phone }}
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label small">{{ form.secondary_contact.label }}</label>
+                            {{ form.secondary_contact }}
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label small">{{ form.secondary_phone.label }}</label>
+                            {{ form.secondary_phone }}
                         </div>
                     </div>
                     <div class="mb-3">

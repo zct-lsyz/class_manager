@@ -14,15 +14,17 @@ class RewardItemForm(forms.ModelForm):
             "is_active": forms.CheckboxInput(attrs={"class": "form-check-input"}),
             "sort_order": forms.NumberInput(attrs={"class": "form-control"}),
         }
+        labels = {"name": "奖惩名称", "default_points": "默认积分"}
 
 
 class RewardRecordForm(forms.ModelForm):
     class Meta:
         model = RewardRecord
-        fields = ["student", "date", "item", "custom_name", "level", "points", "description", "certificate_photo"]
+        fields = ["student", "date", "record_type", "item", "custom_name", "level", "points", "description", "certificate_photo"]
         widgets = {
             "student": forms.Select(attrs={"class": "form-select"}),
             "date": forms.DateInput(attrs={"class": "form-control", "type": "date"}),
+            "record_type": forms.Select(attrs={"class": "form-select"}),
             "item": forms.Select(attrs={"class": "form-select"}),
             "custom_name": forms.TextInput(attrs={"class": "form-control"}),
             "level": forms.Select(attrs={"class": "form-select"}),
@@ -31,11 +33,20 @@ class RewardRecordForm(forms.ModelForm):
             "certificate_photo": forms.FileInput(attrs={"class": "form-control"}),
         }
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, current_class=None, **kwargs):
         super().__init__(*args, **kwargs)
-        self.fields["student"].queryset = Student.objects.filter(is_deleted=False)
-        self.fields["item"].queryset = RewardItem.objects.filter(is_active=True)
+        students = Student.objects.filter(is_deleted=False)
+        items = RewardItem.objects.filter(is_active=True)
+        if current_class:
+            students = students.filter(school_class=current_class)
+            items = items.filter(school_class=current_class)
+        self.fields["student"].queryset = students
+        self.fields["item"].queryset = items
         self.fields["item"].required = False
+        self.fields["item"].label = "奖惩条目（可选）"
+        self.fields["custom_name"].label = "自定义奖惩名称"
+        self.fields["points"].label = "积分变动"
+        self.fields["description"].label = "奖惩说明"
 
 
 class PointRecordForm(forms.ModelForm):

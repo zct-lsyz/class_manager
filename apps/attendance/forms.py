@@ -24,6 +24,14 @@ class AttendanceForm(forms.ModelForm):
             "leave_proof": "请假证明",
         }
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, current_class=None, **kwargs):
         super().__init__(*args, **kwargs)
-        self.fields["student"].queryset = Student.objects.filter(is_deleted=False)
+        students = Student.objects.filter(is_deleted=False)
+        if current_class:
+            students = students.filter(school_class=current_class)
+        self.fields["student"].queryset = students
+        self.fields["status"].choices = [
+            choice for choice in AttendanceRecord.STATUS_CHOICES if choice[0] != "normal"
+        ]
+        if not self.is_bound and not self.instance.pk:
+            self.initial.setdefault("status", "late")

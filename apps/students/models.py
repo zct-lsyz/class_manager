@@ -57,6 +57,12 @@ class Student(BaseModel):
     primary_phone = models.CharField(
         "主要联系电话", max_length=20, blank=True, default=""
     )
+    secondary_contact = models.CharField(
+        "备用联系人", max_length=50, blank=True, default=""
+    )
+    secondary_phone = models.CharField(
+        "备用联系电话", max_length=20, blank=True, default=""
+    )
     remarks = models.TextField("备注", blank=True, default="")
     sort_order = models.IntegerField("排序", default=0)
 

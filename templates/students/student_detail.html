@@ -77,6 +77,8 @@
                     <tr><td class="text-muted">宿舍 / 床位</td><td>{{ student.display_dormitory|default:"未分配" }} {% if student.display_bed_number %}/ {{ student.display_bed_number }}{% endif %}</td></tr>
                     <tr><td class="text-muted">主要联系人</td><td>{{ student.display_primary_contact|default:"未填写" }}</td></tr>
                     <tr><td class="text-muted">联系电话</td><td>{{ student.display_primary_phone|default:"未填写" }}</td></tr>
+                    <tr><td class="text-muted">备用联系人</td><td>{{ student.secondary_contact|default:"未填写" }}</td></tr>
+                    <tr><td class="text-muted">备用电话</td><td>{{ student.secondary_phone|default:"未填写" }}</td></tr>
                     <tr><td class="text-muted">备注</td><td>{{ student.remarks|linebreaks|default:"无" }}</td></tr>
                 </table>
             </div>
@@ -118,8 +120,8 @@
             </div>
 
             <div class="tab-pane fade" id="discipline">
-                <h6>奖励与表扬</h6>
-                <ul class="list-group list-group-flush mb-3">{% for item in reward_records %}<li class="list-group-item px-0"><span class="text-muted me-2">{{ item.date }}</span>{{ item.item.name|default:item.custom_name }} <span class="badge bg-success">+{{ item.points }}</span></li>{% empty %}<li class="list-group-item text-muted px-0">暂无奖励记录</li>{% endfor %}</ul>
+                <h6>奖惩记录</h6>
+                <ul class="list-group list-group-flush mb-3">{% for item in reward_records %}<li class="list-group-item px-0"><span class="text-muted me-2">{{ item.date }}</span>{{ item.item.name|default:item.custom_name }} <span class="badge {% if item.points < 0 %}bg-danger{% else %}bg-success{% endif %}">{{ item.points|stringformat:"+d" }}</span></li>{% empty %}<li class="list-group-item text-muted px-0">暂无奖惩记录</li>{% endfor %}</ul>
                 <h6>课堂纪律</h6>
                 <ul class="list-group list-group-flush mb-3">{% for item in classroom_records %}<li class="list-group-item px-0"><span class="text-muted me-2">{{ item.date }}</span>{{ item.item.name|default:item.custom_content }}{% if item.points_deducted %} <span class="badge bg-danger">-{{ item.points_deducted }}</span>{% endif %}</li>{% empty %}<li class="list-group-item text-muted px-0">暂无课堂纪律记录</li>{% endfor %}</ul>
                 <h6>宿舍纪律</h6>

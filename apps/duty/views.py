@@ -3,7 +3,7 @@ from django.contrib.auth.decorators import login_required
 from django.shortcuts import render, redirect, get_object_or_404
 from django.core.paginator import Paginator
 
-from apps.duty.models import DutyTask, DutyGroup, DutyRecord
+from apps.duty.models import DutyTask, DutyGroup, DutyRecord, DutyMemberTask
 from apps.duty.forms import DutyTaskForm, DutyGroupForm, DutyRecordForm
 from apps.classes.models import SchoolClass
 from django.utils import timezone
@@ -51,7 +51,7 @@ def group_create(request):
     """创建值日小组"""
     current_class = SchoolClass.objects.filter(is_current=True).first()
     if request.method == "POST":
-        form = DutyGroupForm(request.POST)
+        form = DutyGroupForm(request.POST, current_class=current_class)
         if form.is_valid():
             group = form.save(commit=False)
             group.school_class = current_class
@@ -60,9 +60,42 @@ def group_create(request):
             messages.success(request, f"小组「{group.name}」已创建。")
             return redirect("duty:index")
     else:
-        form = DutyGroupForm()
+        form = DutyGroupForm(current_class=current_class)
 
     return render(request, "duty/group_form.html", {"form": form, "title": "创建值日小组"})
+
+
+@login_required
+def group_edit(request, pk):
+    """修改值日小组及每位成员的任务"""
+    current_class = SchoolClass.objects.filter(is_current=True).first()
+    group = get_object_or_404(DutyGroup, pk=pk, school_class=current_class)
+    if request.method == "POST":
+        form = DutyGroupForm(request.POST, instance=group, current_class=current_class)
+        if form.is_valid():
+            group = form.save()
+            valid_tasks = {task.pk: task for task in group.tasks.all()}
+            member_ids = set(group.members.values_list("pk", flat=True))
+            DutyMemberTask.objects.filter(group=group).exclude(student_id__in=member_ids).delete()
+            for student_id in member_ids:
+                task_id = request.POST.get(f"task_{student_id}", "")
+                if task_id.isdigit() and int(task_id) in valid_tasks:
+                    DutyMemberTask.objects.update_or_create(
+                        group=group, student_id=student_id,
+                        defaults={"task": valid_tasks[int(task_id)]},
+                    )
+                else:
+                    DutyMemberTask.objects.filter(group=group, student_id=student_id).delete()
+            messages.success(request, f"小组「{group.name}」及成员任务已更新。")
+            return redirect("duty:index")
+    else:
+        form = DutyGroupForm(instance=group, current_class=current_class)
+    assignments = {item.student_id: item for item in DutyMemberTask.objects.filter(group=group)}
+    return render(request, "duty/group_form.html", {
+        "form": form, "title": "修改值日小组", "group": group,
+        "members_for_tasks": group.members.all().order_by("student_id"),
+        "tasks_for_assignment": group.tasks.all(), "assignments": assignments,
+    })
 
 
 @login_required
@@ -117,4 +150,7 @@ def group_detail(request, pk):
     return render(request, "duty/group_detail.html", {
         "group": group, "members": members,
         "today": today, "today_map": today_map, "history": history,
+        "assignments": {
+            item.student_id: item for item in DutyMemberTask.objects.filter(group=group).select_related("task")
+        },
     })

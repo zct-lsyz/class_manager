@@ -61,8 +61,8 @@
             <nav class="col-md-2 d-none d-md-block sidebar">
                 <div class="sidebar-sticky pt-3" id="desktopSidebarContent">
                     <!-- 工作台 -->
-                    <div class="nav-section-title">工作台</div>
-                    <ul class="nav flex-column">
+                    <button class="nav-section-title nav-section-toggle" type="button"><span>工作台</span><i class="bi bi-caret-right-fill nav-toggle-icon"></i></button>
+                    <ul class="nav flex-column nav-section-menu">
                         <li class="nav-item">
                             <a class="nav-link {% if request.resolver_match.app_name == 'dashboard' %}active{% endif %}" href="{% url 'dashboard:index' %}">
                                 <i class="bi bi-grid-1x2-fill me-2"></i>工作台首页
@@ -71,8 +71,8 @@
                     </ul>
 
                     <!-- 班级基础 -->
-                    <div class="nav-section-title">班级基础</div>
-                    <ul class="nav flex-column">
+                    <button class="nav-section-title nav-section-toggle" type="button"><span>班级基础</span><i class="bi bi-caret-right-fill nav-toggle-icon"></i></button>
+                    <ul class="nav flex-column nav-section-menu">
                         <li class="nav-item">
                             <a class="nav-link {% if request.resolver_match.app_name == 'students' and not 'student_detail' in request.path %}active{% endif %}" href="{% url 'students:list' %}">
                                 <i class="bi bi-people-fill me-2"></i>学生花名册
@@ -106,8 +106,8 @@
                     </ul>
 
                     <!-- 日常管理 -->
-                    <div class="nav-section-title">日常管理</div>
-                    <ul class="nav flex-column">
+                    <button class="nav-section-title nav-section-toggle" type="button"><span>日常管理</span><i class="bi bi-caret-right-fill nav-toggle-icon"></i></button>
+                    <ul class="nav flex-column nav-section-menu">
                         <li class="nav-item">
                             <a class="nav-link" href="{% url 'seating:index' %}">
                                 <i class="bi bi-layout-text-window me-2"></i>座位表
@@ -140,19 +140,19 @@
                         </li>
                         <li class="nav-item">
                             <a class="nav-link" href="{% url 'rewards:index' %}">
-                                <i class="bi bi-star-fill me-2"></i>奖励与表扬
+                                <i class="bi bi-star-fill me-2"></i>奖惩管理
                             </a>
                         </li>
                         <li class="nav-item">
                             <a class="nav-link" href="{% url 'rewards:points' %}">
-                                <i class="bi bi-trophy me-2"></i>奖惩积分
+                                <i class="bi bi-trophy me-2"></i>积分排名
                             </a>
                         </li>
                     </ul>
 
                     <!-- 教学管理 -->
-                    <div class="nav-section-title">教学管理</div>
-                    <ul class="nav flex-column">
+                    <button class="nav-section-title nav-section-toggle" type="button"><span>教学管理</span><i class="bi bi-caret-right-fill nav-toggle-icon"></i></button>
+                    <ul class="nav flex-column nav-section-menu">
                         <li class="nav-item">
                             <a class="nav-link" href="{% url 'scores:exam_list' %}">
                                 <i class="bi bi-file-earmark-text me-2"></i>考试管理
@@ -186,8 +186,8 @@
                     </ul>
 
                     <!-- 成长记录 -->
-                    <div class="nav-section-title">成长记录</div>
-                    <ul class="nav flex-column">
+                    <button class="nav-section-title nav-section-toggle" type="button"><span>成长记录</span><i class="bi bi-caret-right-fill nav-toggle-icon"></i></button>
+                    <ul class="nav flex-column nav-section-menu">
                         <li class="nav-item">
                             <a class="nav-link" href="{% url 'comments:list' %}">
                                 <i class="bi bi-chat-quote me-2"></i>学生评语
@@ -211,8 +211,8 @@
                     </ul>
 
                     <!-- 班级活动 -->
-                    <div class="nav-section-title">班级活动</div>
-                    <ul class="nav flex-column">
+                    <button class="nav-section-title nav-section-toggle" type="button"><span>班级活动</span><i class="bi bi-caret-right-fill nav-toggle-icon"></i></button>
+                    <ul class="nav flex-column nav-section-menu">
                         <li class="nav-item">
                             <a class="nav-link" href="{% url 'activities:class_meetings' %}">
                                 <i class="bi bi-people-fill me-2"></i>主题班会
@@ -231,8 +231,8 @@
                     </ul>
 
                     <!-- 数据中心 -->
-                    <div class="nav-section-title">数据中心</div>
-                    <ul class="nav flex-column">
+                    <button class="nav-section-title nav-section-toggle" type="button"><span>数据中心</span><i class="bi bi-caret-right-fill nav-toggle-icon"></i></button>
+                    <ul class="nav flex-column nav-section-menu">
                         <li class="nav-item">
                             <a class="nav-link" href="{% url 'exports:export_center' %}">
                                 <i class="bi bi-download me-2"></i>模块数据导出
@@ -266,8 +266,8 @@
                     </ul>
 
                     <!-- 系统设置 -->
-                    <div class="nav-section-title">系统设置</div>
-                    <ul class="nav flex-column">
+                    <button class="nav-section-title nav-section-toggle" type="button"><span>系统设置</span><i class="bi bi-caret-right-fill nav-toggle-icon"></i></button>
+                    <ul class="nav flex-column nav-section-menu">
                         <li class="nav-item">
                             <a class="nav-link" href="{% url 'classes:settings' %}">
                                 <i class="bi bi-gear-wide-connected me-2"></i>班级与学期
@@ -295,7 +295,7 @@
                         </li>
                         <li class="nav-item">
                             <a class="nav-link" href="{% url 'rewards:rules' %}">
-                                <i class="bi bi-trophy me-2"></i>奖励与积分规则
+                                <i class="bi bi-trophy me-2"></i>奖惩与积分规则
                             </a>
                         </li>
                         <li class="nav-item">
@@ -394,6 +394,59 @@
         const desktopMenu = document.getElementById('desktopSidebarContent');
         const mobileMenu = document.getElementById('mobileSidebarContent');
         if (desktopMenu && mobileMenu) mobileMenu.innerHTML = desktopMenu.innerHTML;
+
+        function initSidebarMenu(root) {
+            if (!root) return;
+            const toggles = root.querySelectorAll('.nav-section-toggle');
+            const menus = root.querySelectorAll('.nav-section-menu');
+            const closeAll = function(exceptMenu) {
+                menus.forEach(function(menu) {
+                    const shouldOpen = menu === exceptMenu;
+                    menu.classList.toggle('show', shouldOpen);
+                    const toggle = menu.previousElementSibling;
+                    toggle.setAttribute('aria-expanded', shouldOpen ? 'true' : 'false');
+                    const icon = toggle.querySelector('.nav-toggle-icon');
+                    icon.classList.toggle('bi-caret-right-fill', !shouldOpen);
+                    icon.classList.toggle('bi-caret-down-fill', shouldOpen);
+                });
+            };
+            toggles.forEach(function(toggle) {
+                toggle.setAttribute('aria-expanded', 'false');
+                toggle.addEventListener('click', function() {
+                    const menu = toggle.nextElementSibling;
+                    closeAll(menu.classList.contains('show') ? null : menu);
+                });
+            });
+
+            const currentPath = window.location.pathname.replace(/\/+$/, '') || '/';
+            let activeLink = null;
+            let bestLength = -1;
+            root.querySelectorAll('a.nav-link').forEach(function(link) {
+                link.classList.remove('active');
+                const linkPath = new URL(link.href, window.location.origin).pathname.replace(/\/+$/, '') || '/';
+                if ((currentPath === linkPath || (linkPath !== '/' && currentPath.startsWith(linkPath + '/'))) && linkPath.length > bestLength) {
+                    activeLink = link;
+                    bestLength = linkPath.length;
+                }
+            });
+            if (activeLink) {
+                activeLink.classList.add('active');
+                const activeMenu = activeLink.closest('.nav-section-menu');
+                closeAll(activeMenu);
+                activeLink.addEventListener('click', function() { closeAll(activeMenu); });
+                const sidebar = root.closest('.sidebar');
+                if (sidebar) requestAnimationFrame(function() {
+                    const sidebarRect = sidebar.getBoundingClientRect();
+                    const linkRect = activeLink.getBoundingClientRect();
+                    sidebar.scrollTop += linkRect.top - sidebarRect.top - (sidebar.clientHeight - linkRect.height) / 2;
+                });
+            } else {
+                closeAll(null);
+            }
+        }
+
+        initSidebarMenu(desktopMenu);
+        initSidebarMenu(mobileMenu);
     });
     </script>
     {% endif %}

@@ -17,7 +17,7 @@ def get_client_ip(request):
 
 
 def _build_grid(layout, assignments):
-    """将座位分配转换为网格字典 {row: {col: student_id}}"""
+    """将座位分配转换为网格字典 {row: {col: student}}"""
     grid = {}
     for r in range(layout.rows):
         grid[r] = {}
@@ -25,7 +25,7 @@ def _build_grid(layout, assignments):
             grid[r][c] = None
     for a in assignments:
         if a.row in grid and a.col in grid[a.row]:
-            grid[a.row][a.col] = a.student_id
+            grid[a.row][a.col] = a.student
     return grid
 
 

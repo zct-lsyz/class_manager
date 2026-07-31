@@ -66,6 +66,28 @@ def task_detail(request, pk):
         from django.db import transaction as db_tx
         with db_tx.atomic():
             saved = 0
+            batch_status = request.POST.get("batch_status", "")
+            batch_student_ids = request.POST.getlist("batch_students")
+            valid_statuses = {value for value, _label in HomeworkRecord.STATUS_CHOICES}
+            valid_statuses.update(
+                f"custom:{status.pk}" for status in HomeworkStatus.objects.filter(
+                    school_class=task.school_class, is_active=True,
+                )
+            )
+            if batch_status in valid_statuses:
+                batch_students = Student.objects.filter(
+                    pk__in=batch_student_ids, school_class=task.school_class, is_deleted=False,
+                )
+                for student in batch_students:
+                    HomeworkRecord.objects.update_or_create(
+                        task=task, student=student,
+                        defaults={
+                            "status": batch_status,
+                            "submission_date": timezone.localdate()
+                            if batch_status in ("submitted", "excellent") else None,
+                        },
+                    )
+                    saved += 1
             for key, value in request.POST.items():
                 if not key.startswith("record_"):
                     continue
@@ -73,6 +95,8 @@ def task_detail(request, pk):
                 if not student_id.isdigit() or not value:
                     continue
                 status = request.POST.get(f"status_{student_id}", value or "submitted")
+                if status not in valid_statuses:
+                    continue
                 HomeworkRecord.objects.update_or_create(
                     task=task, student_id=int(student_id),
                     defaults={
@@ -100,6 +124,9 @@ def task_detail(request, pk):
         "task": task,
         "records": records,
         "unrecorded": unrecorded,
+        "all_students": Student.objects.filter(
+            school_class=task.school_class, is_deleted=False,
+        ).order_by("student_id"),
         "status_options": status_options,
     }
     return render(request, "homework/task_detail.html", context)

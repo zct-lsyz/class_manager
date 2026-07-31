@@ -36,8 +36,12 @@ class CorePageSmokeTests(TestCase):
     def test_key_pages_render(self):
         urls = [
             reverse("students:detail", args=[self.student.pk]),
+            reverse("scores:exam_list"),
             reverse("scores:score_entry") + f"?exam_id={self.exam_subject.exam_id}&subject_id={self.exam_subject.pk}",
+            reverse("scores:analysis"),
+            reverse("scores:ai_settings"),
             reverse("scores:exam_analysis"),
+            reverse("activities:activities"),
             reverse("exports:export_center"),
             reverse("exports:full_export"),
         ]

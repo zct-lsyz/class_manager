@@ -4,7 +4,8 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.utils import timezone
 
 from apps.classes.models import (
-    SchoolClass, Semester, CommitteeRole, CommitteeMember, StudyGroup, CourseScheduleEntry,
+    SchoolClass, Semester, CommitteeRole, CommitteeMember, StudyGroup,
+    CourseScheduleEntry, CoursePeriod,
 )
 from apps.classes.forms import SchoolClassForm, SemesterForm
 from apps.classes.subjects import Subject
@@ -295,7 +296,18 @@ def study_group_delete(request, pk):
 def course_schedule(request):
     """课程表"""
     current_class = SchoolClass.objects.filter(is_current=True).first()
-    current_semester = Semester.objects.filter(is_current=True).first()
+    current_semester = Semester.objects.filter(
+        school_class=current_class, is_current=True,
+    ).first() if current_class else None
+
+    if request.method == "POST" and request.POST.get("action") == "add_subject":
+        subject_name = request.POST.get("new_subject", "").strip()
+        if subject_name:
+            subject = Subject.objects.filter(name__iexact=subject_name).first()
+            if not subject:
+                Subject.objects.create(name=subject_name)
+            messages.success(request, f"课程「{subject_name}」已添加。")
+        return redirect("classes:course_schedule")
 
     entries = CourseScheduleEntry.objects.filter(
         school_class=current_class, semester=current_semester
@@ -303,7 +315,11 @@ def course_schedule(request):
 
     # 构建网格: {weekday: {period: entry}}
     grid = {}
-    max_period = 8
+    period_rows = CoursePeriod.objects.filter(
+        school_class=current_class, semester=current_semester,
+    ) if current_class else []
+    period_settings = {row.period: row for row in period_rows}
+    max_period = max(period_settings.keys(), default=8)
     for d in range(1, 8):
         grid[d] = {}
     for e in entries:
@@ -314,8 +330,27 @@ def course_schedule(request):
     subjects = Subject.objects.filter(is_active=True)
 
     if request.method == "POST":
+        if not current_class:
+            messages.error(request, "请先设置当前班级。")
+            return redirect("classes:settings")
         from django.db import transaction as db_transaction
         with db_transaction.atomic():
+            try:
+                max_period = min(20, max(1, int(request.POST.get("period_count", max_period))))
+            except (TypeError, ValueError):
+                max_period = 8
+            CoursePeriod.objects.filter(
+                school_class=current_class, semester=current_semester,
+                period__gt=max_period,
+            ).delete()
+            for period in range(1, max_period + 1):
+                CoursePeriod.objects.update_or_create(
+                    school_class=current_class, semester=current_semester, period=period,
+                    defaults={
+                        "start_time": request.POST.get(f"start_time_{period}") or None,
+                        "end_time": request.POST.get(f"end_time_{period}") or None,
+                    },
+                )
             CourseScheduleEntry.objects.filter(
                 school_class=current_class, semester=current_semester
             ).delete()
@@ -325,6 +360,8 @@ def course_schedule(request):
                     try:
                         _, weekday, period = key.split("_")
                         weekday, period = int(weekday), int(period)
+                        if weekday not in range(1, 8) or period not in range(1, max_period + 1):
+                            continue
                         CourseScheduleEntry.objects.create(
                             school_class=current_class, semester=current_semester,
                             weekday=weekday, period=period,
@@ -340,6 +377,7 @@ def course_schedule(request):
 
     return render(request, "classes/course_schedule.html", {
         "grid": grid, "max_period": max_period, "subjects": subjects,
+        "period_settings": period_settings,
         "periods": range(1, max_period + 1),
         "weekdays": range(1, 8),
     })

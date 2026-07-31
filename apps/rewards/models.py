@@ -36,6 +36,10 @@ class RewardItem(BaseModel):
 
 class RewardRecord(BaseModel):
     """奖励与表扬记录"""
+    RECORD_TYPE_CHOICES = [
+        ("reward", "奖励/表扬"),
+        ("penalty", "违纪惩罚"),
+    ]
     school_class = models.ForeignKey(
         SchoolClass, on_delete=models.CASCADE,
         related_name="reward_records", verbose_name="班级",
@@ -49,6 +53,9 @@ class RewardRecord(BaseModel):
         related_name="reward_records", verbose_name="学生",
     )
     date = models.DateField("日期", db_index=True)
+    record_type = models.CharField(
+        "奖惩类型", max_length=20, choices=RECORD_TYPE_CHOICES, default="reward",
+    )
     item = models.ForeignKey(
         RewardItem, on_delete=models.SET_NULL,
         null=True, blank=True,
@@ -100,7 +107,7 @@ class PointRecord(BaseModel):
     source_type = models.CharField(
         "来源类型", max_length=50,
         choices=[
-            ("reward", "奖励加分"),
+            ("reward", "奖惩记录"),
             ("classroom_discipline", "课堂纪律扣分"),
             ("dorm_discipline", "宿舍纪律扣分"),
             ("hygiene", "卫生扣分/加分"),

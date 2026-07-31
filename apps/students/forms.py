@@ -10,7 +10,8 @@ class StudentForm(forms.ModelForm):
             "school_class", "student_id", "name", "gender",
             "birth_date", "height", "vision", "seat_requirement",
             "class_position", "dormitory", "bed_number",
-            "primary_contact", "primary_phone", "remarks", "sort_order",
+            "primary_contact", "primary_phone", "secondary_contact",
+            "secondary_phone", "remarks", "sort_order",
         ]
         widgets = {
             "school_class": forms.Select(attrs={"class": "form-select"}),
@@ -26,6 +27,8 @@ class StudentForm(forms.ModelForm):
             "bed_number": forms.TextInput(attrs={"class": "form-control"}),
             "primary_contact": forms.TextInput(attrs={"class": "form-control"}),
             "primary_phone": forms.TextInput(attrs={"class": "form-control", "placeholder": "13800138000"}),
+            "secondary_contact": forms.TextInput(attrs={"class": "form-control"}),
+            "secondary_phone": forms.TextInput(attrs={"class": "form-control", "placeholder": "备用联系电话"}),
             "remarks": forms.Textarea(attrs={"class": "form-control", "rows": 3}),
             "sort_order": forms.NumberInput(attrs={"class": "form-control"}),
         }
@@ -43,6 +46,8 @@ class StudentForm(forms.ModelForm):
             "bed_number": "床位",
             "primary_contact": "主要联系人",
             "primary_phone": "主要联系电话",
+            "secondary_contact": "备用联系人",
+            "secondary_phone": "备用联系电话",
             "remarks": "备注",
             "sort_order": "排序",
         }
@@ -57,11 +62,7 @@ class StudentForm(forms.ModelForm):
                 "primary_contact": self.instance.display_primary_contact,
                 "primary_phone": self.instance.display_primary_phone,
             })
-        for field_name in (
-            "class_position", "dormitory", "bed_number",
-            "primary_contact", "primary_phone",
-        ):
-            self.fields[field_name].disabled = True
+        self.fields["class_position"].disabled = True
 
 
 class GuardianForm(forms.ModelForm):

@@ -1,4 +1,4 @@
-{% extends "base.html" %}{% block title %}新增奖励{% endblock %}
+{% extends "base.html" %}{% block title %}{{ title|default:"新增奖惩" }}{% endblock %}
 {% block content %}<div class="row justify-content-center mt-3"><div class="col-md-6">
-  <div class="card"><div class="card-header">新增奖励</div><div class="card-body"><form method="post" enctype="multipart/form-data">{% csrf_token %}{% for f in form %}<div class="mb-3"><label class="form-label small">{{ f.label }}</label>{{ f }}</div>{% endfor %}<button class="btn btn-primary">保存</button></form></div></div>
+  <div class="card"><div class="card-header">{{ title|default:"新增奖惩" }}</div><div class="card-body"><form method="post" enctype="multipart/form-data">{% csrf_token %}{% for f in form %}<div class="mb-3"><label class="form-label small">{{ f.label }}</label>{{ f }}{% if f.errors %}<div class="text-danger small">{{ f.errors.0 }}</div>{% endif %}</div>{% endfor %}<button class="btn btn-primary">保存</button></form></div></div>
 </div></div>{% endblock %}

@@ -81,6 +81,18 @@ class HomeworkTask(BaseModel):
 
 class HomeworkRecord(BaseModel):
     """学生作业完成状态"""
+    STATUS_CHOICES = [
+        ("submitted", "已交"),
+        ("unsubmitted", "未交"),
+        ("late", "迟交"),
+        ("resubmitted", "补交"),
+        ("needs_correction", "需订正"),
+        ("corrected", "已订正"),
+        ("excellent", "优秀"),
+        ("poor", "差"),
+        ("exempted", "免交"),
+        ("other", "其他"),
+    ]
     task = models.ForeignKey(
         HomeworkTask, on_delete=models.CASCADE,
         related_name="records", verbose_name="作业任务",
@@ -91,17 +103,7 @@ class HomeworkRecord(BaseModel):
     )
     status = models.CharField(
         "完成状态", max_length=30,
-        choices=[
-            ("submitted", "已交"),
-            ("unsubmitted", "未交"),
-            ("late", "迟交"),
-            ("resubmitted", "补交"),
-            ("needs_correction", "需订正"),
-            ("corrected", "已订正"),
-            ("excellent", "优秀"),
-            ("exempted", "免交"),
-            ("other", "其他"),
-        ],
+        choices=STATUS_CHOICES,
         default="submitted",
     )
     submission_date = models.DateField("提交日期", null=True, blank=True)

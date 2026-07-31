@@ -27,6 +27,7 @@
                     {% elif r.status == 'unsubmitted' %}<span class="badge bg-danger">未交
                     {% elif r.status == 'late' %}<span class="badge bg-warning">迟交
                     {% elif r.status == 'excellent' %}<span class="badge bg-primary">优秀
+                    {% elif r.status == 'poor' %}<span class="badge bg-dark">差
                     {% else %}<span class="badge bg-secondary">{{ r.status_display }}{% endif %}
                 </td>
                 <td>{{ r.submission_date|default:"-" }}</td>
@@ -36,45 +37,30 @@
             </tbody>
         </table>
     </div>
-    {% if unrecorded %}
     <div class="card-footer">
-        <form method="post" class="row g-2" onsubmit="return confirm('确认登记所选学生的作业状态？')">
+        <form method="post" id="batchHomeworkForm" class="row g-2" onsubmit="return confirm('确认批量修改所选学生的作业状态？')">
             {% csrf_token %}
-            <div class="col-12"><strong class="small">未登记学生（{{ unrecorded|length }} 人）— 按住 Ctrl 多选</strong></div>
+            <div class="col-12"><strong class="small">多选学生后，一键标记完成情况（按住 Ctrl 可多选）</strong></div>
             <div class="col-md-7">
                 <select name="batch_students" class="form-select form-select-sm" size="6" multiple>
-                    {% for s in unrecorded %}<option value="{{ s.pk }}">{{ s.name }}（{{ s.student_id }}）</option>{% endfor %}
+                    {% for s in all_students %}<option value="{{ s.pk }}">{{ s.name }}（{{ s.student_id }}）</option>{% endfor %}
                 </select>
             </div>
-            <div class="col-md-3">
-                <label class="form-label small">状态</label>
-                <select name="batch_status" class="form-select form-select-sm">
-                    {% for value, label in status_options %}<option value="{{ value }}">{{ label }}</option>{% endfor %}
-                </select>
-            </div>
-            <div class="col-md-2 d-flex align-items-end">
-                <button class="btn btn-primary btn-sm w-100"><i class="bi bi-check-lg"></i> 批量登记</button>
+            <div class="col-md-5 d-flex align-items-end gap-2 flex-wrap">
+                <button name="batch_status" value="unsubmitted" class="btn btn-danger btn-sm">标记未交</button>
+                <button name="batch_status" value="excellent" class="btn btn-primary btn-sm">标记优秀</button>
+                <button name="batch_status" value="poor" class="btn btn-dark btn-sm">标记为差</button>
             </div>
         </form>
     </div>
-    {% endif %}
 </div>
 
 <script>
-// 处理批量登记表单提交（将 batch_students 展开为 record_ 字段）
-document.querySelector('form[onsubmit*="登记"]')?.addEventListener('submit', function(e) {
+document.getElementById('batchHomeworkForm')?.addEventListener('submit', function(e) {
     const sel = this.querySelector('select[name="batch_students"]');
     if (!sel) return;
     const selected = [...sel.selectedOptions].map(o => o.value);
     if (selected.length === 0) { e.preventDefault(); alert('请先选择学生'); return; }
-    const status = this.querySelector('select[name="batch_status"]').value;
-    selected.forEach(id => {
-        const input = document.createElement('input');
-        input.type = 'hidden';
-        input.name = 'record_' + id;
-        input.value = status;
-        this.appendChild(input);
-    });
 });
 </script>
 {% endblock %}

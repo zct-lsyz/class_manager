@@ -31,7 +31,7 @@ class DutyGroupForm(forms.ModelForm):
 
     class Meta:
         model = DutyGroup
-        fields = ["name", "leader", "week", "is_active"]
+        fields = ["name", "leader", "members", "tasks", "week", "is_active"]
         widgets = {
             "name": forms.TextInput(attrs={"class": "form-control"}),
             "leader": forms.Select(attrs={"class": "form-select"}),
@@ -39,9 +39,17 @@ class DutyGroupForm(forms.ModelForm):
             "is_active": forms.CheckboxInput(attrs={"class": "form-check-input"}),
         }
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, current_class=None, **kwargs):
         super().__init__(*args, **kwargs)
-        self.fields["leader"].queryset = Student.objects.filter(is_deleted=False)
+        current_class = current_class or getattr(self.instance, "school_class", None)
+        students = Student.objects.filter(is_deleted=False)
+        tasks = DutyTask.objects.filter(is_active=True)
+        if current_class:
+            students = students.filter(school_class=current_class)
+            tasks = tasks.filter(school_class=current_class)
+        self.fields["leader"].queryset = students
+        self.fields["members"].queryset = students
+        self.fields["tasks"].queryset = tasks
 
 
 class DutyRecordForm(forms.ModelForm):

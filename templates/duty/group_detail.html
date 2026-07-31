@@ -13,12 +13,13 @@
         <form method="post" class="table-responsive">
             {% csrf_token %}
             <table class="table table-bordered mb-0">
-                <thead><tr><th>学号</th><th>姓名</th><th>完成情况</th><th>备注</th></tr></thead>
+                <thead><tr><th>学号</th><th>姓名</th><th>值日任务</th><th>完成情况</th><th>备注</th></tr></thead>
                 <tbody>
                 {% for m in members %}
                 <tr>
                     <td>{{ m.student_id }}</td>
                     <td><strong>{{ m.name }}</strong></td>
+                    <td>{% with assigned=assignments|get_item:m.pk %}{{ assigned.task.name|default:"未分配" }}{% endwith %}</td>
                     <td>
                         {% with rec=today_map|get_item:m.pk %}
                         <select name="member_{{ m.pk }}" class="form-select form-select-sm">
@@ -34,7 +35,7 @@
                     <td><input type="text" name="remark_{{ m.pk }}" class="form-control form-control-sm"
                         value="{% with rec=today_map|get_item:m.pk %}{{ rec.remark|default:'' }}{% endwith %}"></td>
                 </tr>
-                {% empty %}<tr><td colspan="4" class="text-muted text-center">该小组暂无成员</td></tr>
+                {% empty %}<tr><td colspan="5" class="text-muted text-center">该小组暂无成员</td></tr>
                 {% endfor %}
                 </tbody>
             </table>

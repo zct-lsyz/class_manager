@@ -174,3 +174,24 @@ class CourseScheduleEntry(BaseModel):
 
     def __str__(self):
         return f"周{self.weekday} 第{self.period}节 {self.subject or '自习'}"
+
+
+class CoursePeriod(BaseModel):
+    """课程表节次时间设置"""
+    school_class = models.ForeignKey(
+        SchoolClass, on_delete=models.CASCADE,
+        related_name="course_periods", verbose_name="班级",
+    )
+    semester = models.ForeignKey(
+        Semester, on_delete=models.SET_NULL,
+        null=True, blank=True, verbose_name="学期",
+    )
+    period = models.IntegerField("节次")
+    start_time = models.TimeField("开始时间", null=True, blank=True)
+    end_time = models.TimeField("结束时间", null=True, blank=True)
+
+    class Meta:
+        verbose_name = "课程节次"
+        verbose_name_plural = "课程节次"
+        ordering = ["period"]
+        unique_together = ["school_class", "semester", "period"]

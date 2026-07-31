@@ -20,7 +20,7 @@ def index(request):
 
     records = AttendanceRecord.objects.filter(
         school_class=current_class
-    ).select_related("student") if current_class else AttendanceRecord.objects.none()
+    ).exclude(status="normal").select_related("student") if current_class else AttendanceRecord.objects.none()
 
     # 筛选
     date_from = request.GET.get("date_from", str(today))
@@ -69,7 +69,7 @@ def create(request):
     """录入考勤"""
     current_class = SchoolClass.objects.filter(is_current=True).first()
     if request.method == "POST":
-        form = AttendanceForm(request.POST, request.FILES)
+        form = AttendanceForm(request.POST, request.FILES, current_class=current_class)
         if form.is_valid():
             record = form.save(commit=False)
             record.school_class = current_class
@@ -79,8 +79,26 @@ def create(request):
     else:
         date = request.GET.get("date", str(timezone.localdate()))
         student_id = request.GET.get("student", "")
-        form = AttendanceForm(initial={"date": date})
+        form = AttendanceForm(initial={"date": date}, current_class=current_class)
         if student_id:
             form.fields["student"].initial = student_id
 
-    return render(request, "attendance/form.html", {"form": form, "title": "录入考勤"})
+    return render(request, "attendance/form.html", {"form": form, "title": "新增异常考勤"})
+
+
+@login_required
+def edit(request, pk):
+    """修改单个学生的异常考勤"""
+    current_class = SchoolClass.objects.filter(is_current=True).first()
+    record = get_object_or_404(AttendanceRecord, pk=pk, school_class=current_class)
+    if request.method == "POST":
+        form = AttendanceForm(
+            request.POST, request.FILES, instance=record, current_class=current_class,
+        )
+        if form.is_valid():
+            form.save()
+            messages.success(request, "异常考勤已更新。")
+            return redirect("attendance:index")
+    else:
+        form = AttendanceForm(instance=record, current_class=current_class)
+    return render(request, "attendance/form.html", {"form": form, "title": "修改异常考勤"})

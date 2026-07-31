@@ -34,7 +34,7 @@
     <div class="card">
         <div class="card-header d-flex justify-content-between align-items-center">
             <span><i class="bi bi-grid me-2"></i>教室座位图</span>
-            <span class="small text-muted">点击空位选择学生，点击已占座位可更换</span>
+            <span class="small text-muted">拖动学生块到空座；目标已有学生时，原学生自动回到未分配区</span>
         </div>
         <div class="card-body">
             <div class="table-responsive">
@@ -42,16 +42,12 @@
                     {% for row_num, row in grid.items %}
                     <tr>
                         <td class="align-middle small text-muted" style="width:30px;">{{ row_num|add:1 }}</td>
-                        {% for col_num, student_id in row.items %}
-                        <td class="p-1" style="min-width:70px;" data-row="{{ row_num }}" data-col="{{ col_num }}">
-                            <select class="form-select form-select-sm seat-select" name="seat_{{ row_num }}_{{ col_num }}">
-                                <option value="">— 空座 —</option>
-                                {% for s in unassigned %}
-                                <option value="{{ s.pk }}" {% if student_id == s.pk %}selected{% endif %}>{{ s.name }}（{{ s.student_id }}）</option>
-                                {% endfor %}
-                                {% for s in unassigned %}
-                                {% endfor %}
-                            </select>
+                        {% for col_num, student in row.items %}
+                        <td class="p-1" style="min-width:92px;" data-row="{{ row_num }}" data-col="{{ col_num }}">
+                            <div class="seat-slot border rounded d-flex align-items-center justify-content-center" style="min-height:58px; background:#f8f9fa">
+                                <input type="hidden" name="seat_{{ row_num }}_{{ col_num }}" value="{% if student %}{{ student.pk }}{% endif %}">
+                                {% if student %}<div class="student-block badge bg-primary p-2 w-100" draggable="true" data-student-id="{{ student.pk }}">{{ student.name }}<br><small>{{ student.student_id }}</small></div>{% else %}<span class="seat-placeholder text-muted small">空座</span>{% endif %}
+                            </div>
                         </td>
                         {% endfor %}
                         <td class="align-middle small text-muted" style="width:30px;">{{ row_num|add:1 }}</td>
@@ -69,17 +65,15 @@
     </div>
 </form>
 
-<!-- 未分配学生 -->
-{% if unassigned %}
 <div class="card mt-3">
     <div class="card-header"><i class="bi bi-people me-2"></i>未分配学生（{{ unassigned|length }} 人）</div>
-    <div class="card-body">
+    <div class="card-body d-flex flex-wrap gap-2" id="unassignedStudents" style="min-height:64px">
         {% for s in unassigned %}
-        <span class="badge bg-light text-dark border me-1 mb-1 p-2">{{ s.name }}</span>
+        <div class="student-block badge {% if s.seat_requirement %}bg-danger text-white{% else %}bg-light text-dark border{% endif %} p-2" draggable="true" data-student-id="{{ s.pk }}"{% if s.seat_requirement %} data-seat-requirement="特殊座位要求：{{ s.seat_requirement }}" data-bs-toggle="tooltip" data-bs-title="特殊座位要求：{{ s.seat_requirement }}"{% endif %}>{{ s.name }}<br><small>{{ s.student_id }}</small></div>
+        {% empty %}<span class="unassigned-empty text-muted small">暂无未分配学生</span>
         {% endfor %}
     </div>
 </div>
-{% endif %}
 
 <!-- 历史方案 -->
 {% if plans %}
@@ -102,26 +96,44 @@
 {% endif %}
 
 <script>
-// 座位选择联动：选中某学生后，将其从其他下拉框中移除选项（防止重复）
 document.addEventListener('DOMContentLoaded', function() {
-    const selects = document.querySelectorAll('.seat-select');
-    selects.forEach(function(select) {
-        select.addEventListener('change', function() {
-            const value = this.value;
-            if (!value) return;
-            selects.forEach(function(other) {
-                if (other !== select) {
-                    const opt = other.querySelector('option[value="' + value + '"]');
-                    if (opt) { opt.disabled = true; }
-                }
-            });
-            // 重新启用当前选中值在其他选项中的可用性
-            selects.forEach(function(other) {
-                if (other !== select && other.value === value) {
-                    other.value = '';
-                }
-            });
+    let dragged = null;
+    const unassigned = document.getElementById('unassignedStudents');
+    const syncSeats = () => document.querySelectorAll('.seat-slot').forEach(slot => {
+        const block = slot.querySelector('.student-block');
+        slot.querySelector('input[type="hidden"]').value = block ? block.dataset.studentId : '';
+        let placeholder = slot.querySelector('.seat-placeholder');
+        if (!block && !placeholder) {
+            placeholder = document.createElement('span');
+            placeholder.className = 'seat-placeholder text-muted small';
+            placeholder.textContent = '空座';
+            slot.appendChild(placeholder);
+        }
+        if (block && placeholder) placeholder.remove();
+    });
+    const bindBlock = block => block.addEventListener('dragstart', () => { dragged = block; });
+    document.querySelectorAll('.student-block').forEach(bindBlock);
+    if (window.bootstrap) document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(element => {
+        new bootstrap.Tooltip(element, {delay: {show: 300, hide: 100}, container: 'body'});
+    });
+    document.querySelectorAll('.seat-slot').forEach(slot => {
+        slot.addEventListener('dragover', event => event.preventDefault());
+        slot.addEventListener('drop', event => {
+            event.preventDefault();
+            if (!dragged || dragged.parentElement === slot) return;
+            const origin = dragged.parentElement;
+            const occupied = slot.querySelector('.student-block');
+            if (occupied) unassigned.appendChild(occupied);
+            slot.appendChild(dragged);
+            if (origin.classList.contains('seat-slot')) syncSeats();
+            unassigned.querySelector('.unassigned-empty')?.remove();
+            syncSeats();
         });
+    });
+    unassigned.addEventListener('dragover', event => event.preventDefault());
+    unassigned.addEventListener('drop', event => {
+        event.preventDefault();
+        if (dragged) { unassigned.appendChild(dragged); syncSeats(); }
     });
 });
 </script>

@@ -88,8 +88,6 @@
                     <input type="hidden" name="action" value="save">
                     <div class="accordion" id="promptAccordion">
                         {% for subject in subjects %}
-                        {% with prompt_info=merged_prompts|dictsort:"" %}
-                        {% endwith %}
                         <div class="accordion-item">
                             <h2 class="accordion-header">
                                 <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapse{{ forloop.counter }}">

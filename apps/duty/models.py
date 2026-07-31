@@ -97,3 +97,24 @@ class DutyRecord(BaseModel):
         verbose_name = "值日记录"
         verbose_name_plural = "值日记录"
         unique_together = ["group", "date", "student"]
+
+
+class DutyMemberTask(BaseModel):
+    """值日小组内每位成员的具体任务"""
+    group = models.ForeignKey(
+        DutyGroup, on_delete=models.CASCADE,
+        related_name="member_task_assignments", verbose_name="值日小组",
+    )
+    student = models.ForeignKey(
+        Student, on_delete=models.CASCADE,
+        related_name="duty_task_assignments", verbose_name="学生",
+    )
+    task = models.ForeignKey(
+        DutyTask, on_delete=models.CASCADE,
+        related_name="member_assignments", verbose_name="值日任务",
+    )
+
+    class Meta:
+        verbose_name = "成员值日任务"
+        verbose_name_plural = "成员值日任务"
+        unique_together = ["group", "student"]

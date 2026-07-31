@@ -1,7 +1,11 @@
-{% extends "base.html" %}
+{% extends "base.html" %}{% load custom_filters %}
 {% block title %}{{ title }}{% endblock %}
 {% block content %}
 <div class="row justify-content-center mt-3"><div class="col-md-8">
   <div class="card"><div class="card-header">{{ title }}</div>
-    <div class="card-body"><form method="post">{% csrf_token %}{% for f in form %}<div class="mb-3"><label class="form-label small">{{ f.label }}</label>{{ f }}</div>{% endfor %}<button class="btn btn-primary">保存</button></form></div></div>
+    <div class="card-body"><form method="post">{% csrf_token %}{% for f in form %}<div class="mb-3"><label class="form-label small">{{ f.label }}</label>{{ f }}</div>{% endfor %}
+      {% if group %}<hr><h6>成员任务分配</h6><div class="table-responsive"><table class="table table-sm"><thead><tr><th>学生</th><th>值日任务</th></tr></thead><tbody>
+      {% for member in members_for_tasks %}<tr><td>{{ member.name }}</td><td><select name="task_{{ member.pk }}" class="form-select form-select-sm"><option value="">未分配</option>{% with assigned=assignments|get_item:member.pk %}{% for task in tasks_for_assignment %}<option value="{{ task.pk }}" {% if assigned.task_id == task.pk %}selected{% endif %}>{{ task.name }}{% if task.area %}（{{ task.area }}）{% endif %}</option>{% endfor %}{% endwith %}</select></td></tr>{% endfor %}
+      </tbody></table></div><div class="form-text mb-3">如需增减成员或任务，请先保存小组，再次进入修改即可分配。</div>{% endif %}
+      <button class="btn btn-primary">保存</button></form></div></div>
 </div></div>{% endblock %}
