@@ -63,15 +63,14 @@ class DormHygieneItemForm(forms.ModelForm):
 class DormHygieneCheckForm(forms.ModelForm):
     class Meta:
         model = DormHygieneCheck
-        fields = ["room", "date", "check_time", "inspector", "total_score", "grade", "rectification", "rectification_deadline", "remarks"]
+        fields = ["room", "date", "check_time", "inspector", "rectification", "rectification_deadline", "photo", "remarks"]
         widgets = {
             "room": forms.Select(attrs={"class": "form-select"}),
             "date": forms.DateInput(attrs={"class": "form-control", "type": "date"}),
             "check_time": forms.TimeInput(attrs={"class": "form-control", "type": "time"}),
             "inspector": forms.TextInput(attrs={"class": "form-control"}),
-            "total_score": forms.NumberInput(attrs={"class": "form-control"}),
-            "grade": forms.Select(attrs={"class": "form-select"}),
             "rectification": forms.Textarea(attrs={"class": "form-control", "rows": 2}),
             "rectification_deadline": forms.DateInput(attrs={"class": "form-control", "type": "date"}),
+            "photo": forms.FileInput(attrs={"class": "form-control", "accept": "image/*"}),
             "remarks": forms.Textarea(attrs={"class": "form-control", "rows": 2}),
         }

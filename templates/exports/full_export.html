@@ -2,12 +2,21 @@
 {% block title %}全量数据导出{% endblock %}
 {% block content %}
 <h4 class="mt-3 mb-4"><i class="bi bi-archive me-2 text-primary"></i>全量数据导出</h4>
-<div class="card"><div class="card-body text-center py-5">
+<div class="card"><div class="card-body py-5">
     <i class="bi bi-archive fs-1 text-primary"></i>
-    <p class="mt-3">一键导出所有模块的全部数据（ZIP 打包，含清单文件）</p>
-    <p class="text-muted small">包含：学生、家长、考勤、纪律、奖励、积分、成绩、评语、谈话、活动、宿舍、作业、座位、值日共 14 个模块</p>
-    <a href="{% url 'exports:full_export' %}" class="btn btn-primary mt-2" onclick="return confirm('确认导出所有模块的全部数据？')">
-        <i class="bi bi-archive me-1"></i>执行全量导出
-    </a>
+    <p class="mt-3">一次导出 {{ module_count }} 个模块的全部数据，ZIP 内含文件清单、版本、班级、学期及逐文件 SHA-256 校验值。</p>
+    <div class="alert alert-warning">导出包包含学生姓名、成绩、纪律、谈话和家校沟通等敏感信息，请保存到受保护的位置。</div>
+    <form method="post">
+        {% csrf_token %}
+        <div class="form-check mb-3">
+            <input class="form-check-input" type="checkbox" name="include_attachments" value="1" id="includeAttachments">
+            <label class="form-check-label" for="includeAttachments">同时包含照片、证明、班会材料及 AI 分析原始附件（文件可能较大）</label>
+        </div>
+        <div class="form-check mb-3">
+            <input class="form-check-input" type="checkbox" name="confirm" value="1" id="confirmExport" required>
+            <label class="form-check-label" for="confirmExport">我确认导出全部敏感数据并会妥善保管</label>
+        </div>
+        <button type="submit" class="btn btn-primary"><i class="bi bi-archive me-1"></i>执行全量导出</button>
+    </form>
 </div></div>
 {% endblock %}

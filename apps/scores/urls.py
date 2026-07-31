@@ -2,6 +2,7 @@ from django.urls import path
 from apps.scores import views
 from apps.scores import support_views
 from apps.scores import ai_views
+from apps.scores import exam_analysis_views
 
 app_name = "scores"
 
@@ -9,9 +10,11 @@ urlpatterns = [
     path("exams/", views.exam_list, name="exam_list"),
     path("exams/create/", views.exam_create, name="exam_create"),
     path("exams/<int:pk>/", views.exam_detail, name="exam_detail"),
+    path("exams/<int:pk>/delete/", views.exam_delete, name="exam_delete"),
     path("exams/<int:pk>/subject/create/", views.exam_subject_create, name="exam_subject_create"),
     path("exams/subject/<int:pk>/delete/", views.exam_subject_delete, name="exam_subject_delete"),
     path("entry/", views.score_entry, name="score_entry"),
+    path("entry/score/<int:pk>/delete/", views.score_delete, name="score_delete"),
     path("entry/import/", views.score_import, name="score_import"),
     path("entry/template/", views.score_import_template, name="score_import_template"),
     path("analysis/", views.analysis, name="analysis"),
@@ -27,4 +30,7 @@ urlpatterns = [
     path("ai/generate/", ai_views.ai_generate, name="ai_generate"),
     path("ai/records/", ai_views.ai_records, name="ai_records"),
     path("ai/records/<int:pk>/", ai_views.ai_record_detail, name="ai_record_detail"),
+    path("ai/exam-analysis/", exam_analysis_views.exam_analysis, name="exam_analysis"),
+    path("ai/exam-analysis/template/", exam_analysis_views.score_template, name="exam_analysis_template"),
+    path("ai/exam-analysis/<int:pk>/", exam_analysis_views.exam_analysis_detail, name="exam_analysis_detail"),
 ]

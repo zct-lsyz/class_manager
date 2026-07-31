@@ -140,11 +140,64 @@ def student_delete(request, pk):
 @login_required
 def student_detail(request, pk):
     """学生详情/综合档案"""
-    student = get_object_or_404(Student, pk=pk)
-    guardian = Guardian.objects.filter(student=student).first()
+    student = get_object_or_404(Student, pk=pk, is_deleted=False)
+    guardian = Guardian.objects.filter(student=student, is_deleted=False).first()
+    from apps.attendance.models import AttendanceRecord
+    from apps.comments.models import StudentComment
+    from apps.communications.models import StudentConversation
+    from apps.discipline.models import ClassroomDisciplineRecord, DormDisciplineRecord
+    from apps.rewards.models import RewardRecord
+    from apps.scores.models import Score
+
+    scores = Score.objects.filter(
+        student=student, is_deleted=False, exam__is_deleted=False,
+    ).select_related("exam", "exam_subject__subject").order_by("-exam__date")[:50]
+    attendance_records = AttendanceRecord.objects.filter(
+        student=student,
+    ).order_by("-date")[:50]
+    classroom_records = ClassroomDisciplineRecord.objects.filter(
+        student=student, is_deleted=False,
+    ).select_related("item").order_by("-date")[:50]
+    dorm_records = DormDisciplineRecord.objects.filter(
+        student=student, is_deleted=False,
+    ).select_related("item").order_by("-date")[:50]
+    reward_records = RewardRecord.objects.filter(
+        student=student, is_deleted=False,
+    ).select_related("item").order_by("-date")[:50]
+    comments = StudentComment.objects.filter(
+        student=student, is_deleted=False,
+    ).order_by("-created_at")[:50]
+    conversations = StudentConversation.objects.filter(
+        student=student, is_deleted=False,
+    ).order_by("-date")[:50]
+
+    timeline = []
+    for item in scores:
+        timeline.append({"date": item.exam.date, "type": "成绩", "title": f"{item.exam.name} · {item.exam_subject.subject.name}", "detail": str(item.score) if item.score is not None else item.get_status_display()})
+    for item in attendance_records:
+        timeline.append({"date": item.date, "type": "考勤", "title": item.get_status_display(), "detail": item.reason})
+    for item in classroom_records:
+        timeline.append({"date": item.date, "type": "课堂纪律", "title": item.item.name if item.item else item.custom_content, "detail": item.description})
+    for item in dorm_records:
+        timeline.append({"date": item.date, "type": "宿舍纪律", "title": item.item.name if item.item else item.custom_content, "detail": item.description})
+    for item in reward_records:
+        timeline.append({"date": item.date, "type": "奖励", "title": item.item.name if item.item else item.custom_name, "detail": item.description})
+    for item in comments:
+        timeline.append({"date": item.created_at.date(), "type": "评语", "title": item.get_comment_type_display(), "detail": item.content})
+    for item in conversations:
+        timeline.append({"date": item.date, "type": "谈话", "title": item.reason or "学生谈话", "detail": item.main_content})
+    timeline.sort(key=lambda item: item["date"], reverse=True)
     return render(request, "students/student_detail.html", {
         "student": student,
         "guardian": guardian,
+        "scores": scores,
+        "attendance_records": attendance_records,
+        "classroom_records": classroom_records,
+        "dorm_records": dorm_records,
+        "reward_records": reward_records,
+        "comments": comments,
+        "conversations": conversations,
+        "timeline": timeline[:100],
     })
 
 
@@ -180,6 +233,7 @@ def guardian_edit(request, pk):
         form = GuardianForm(request.POST, instance=guardian)
         if form.is_valid():
             guardian = form.save()
+            _sync_student_contact(guardian)
             messages.success(request, f"{guardian.student.name} 的家长信息已更新。")
             return redirect("students:guardian_list")
     else:
@@ -199,6 +253,7 @@ def guardian_create(request, student_pk):
             guardian = form.save(commit=False)
             guardian.student = student
             guardian.save()
+            _sync_student_contact(guardian)
             messages.success(request, f"{student.name} 的家长信息已添加。")
             return redirect("students:detail", pk=student.pk)
     else:
@@ -206,3 +261,10 @@ def guardian_create(request, student_pk):
     return render(request, "students/guardian_form.html", {
         "form": form, "student": student,
     })
+
+
+def _sync_student_contact(guardian):
+    student = guardian.student
+    student.primary_contact = student.display_primary_contact
+    student.primary_phone = student.display_primary_phone
+    student.save(update_fields=["primary_contact", "primary_phone", "updated_at"])

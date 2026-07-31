@@ -27,7 +27,7 @@
                     {% elif r.status == 'unsubmitted' %}<span class="badge bg-danger">未交
                     {% elif r.status == 'late' %}<span class="badge bg-warning">迟交
                     {% elif r.status == 'excellent' %}<span class="badge bg-primary">优秀
-                    {% else %}<span class="badge bg-secondary">{{ r.get_status_display }}{% endif %}
+                    {% else %}<span class="badge bg-secondary">{{ r.status_display }}{% endif %}
                 </td>
                 <td>{{ r.submission_date|default:"-" }}</td>
             </tr>
@@ -49,12 +49,7 @@
             <div class="col-md-3">
                 <label class="form-label small">状态</label>
                 <select name="batch_status" class="form-select form-select-sm">
-                    <option value="submitted">已交</option>
-                    <option value="unsubmitted">未交</option>
-                    <option value="late">迟交</option>
-                    <option value="excellent">优秀</option>
-                    <option value="resubmitted">补交</option>
-                    <option value="exempted">免交</option>
+                    {% for value, label in status_options %}<option value="{{ value }}">{{ label }}</option>{% endfor %}
                 </select>
             </div>
             <div class="col-md-2 d-flex align-items-end">

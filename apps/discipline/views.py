@@ -7,6 +7,7 @@ from django.utils import timezone
 from apps.discipline.models import ConfigurableItem, ClassroomDisciplineRecord, DormDisciplineRecord
 from apps.discipline.forms import ConfigurableItemForm, ClassroomDisciplineForm, DormDisciplineForm
 from apps.classes.models import SchoolClass, Semester
+from apps.audit.services import soft_delete
 
 
 def get_client_ip(request):
@@ -99,8 +100,12 @@ def classroom_delete(request, pk):
     """删除课堂纪律事件（软删除）"""
     record = get_object_or_404(ClassroomDisciplineRecord, pk=pk)
     if request.method == "POST":
-        record.is_deleted = True
-        record.save(update_fields=["is_deleted"])
+        soft_delete(
+            record,
+            user=request.user,
+            module="discipline",
+            model_name="classroomdiscipline",
+        )
         messages.info(request, "课堂纪律记录已删除。")
     return redirect("discipline:classroom_list")
 
@@ -200,8 +205,12 @@ def dorm_delete(request, pk):
     """删除宿舍纪律"""
     record = get_object_or_404(DormDisciplineRecord, pk=pk)
     if request.method == "POST":
-        record.is_deleted = True
-        record.save(update_fields=["is_deleted"])
+        soft_delete(
+            record,
+            user=request.user,
+            module="dormitory",
+            model_name="dormdiscipline",
+        )
         messages.info(request, "宿舍纪律记录已删除。")
     return redirect("discipline:dorm_list")
 
@@ -219,16 +228,58 @@ def dorm_follow_up(request, pk):
     return redirect("discipline:dorm_list")
 
 
-# ====== 条目删除 ======
+# ====== 条目编辑与删除 ======
+
+@login_required
+def item_edit(request, pk):
+    """编辑课堂或宿舍纪律条目。"""
+    current_class = SchoolClass.objects.filter(is_current=True).first()
+    item = get_object_or_404(
+        ConfigurableItem, pk=pk, school_class=current_class
+    )
+    if request.method == "POST":
+        form = ConfigurableItemForm(request.POST, instance=item)
+        if form.is_valid():
+            updated = form.save(commit=False)
+            updated.module = item.module
+            updated.school_class = current_class
+            updated.save()
+            messages.success(request, f"条目「{updated.name}」已更新。")
+            target = (
+                "discipline:classroom_items"
+                if item.module == "classroom_discipline"
+                else "discipline:dorm_items"
+            )
+            return redirect(target)
+    else:
+        form = ConfigurableItemForm(instance=item)
+    return render(
+        request,
+        "discipline/item_form.html",
+        {"form": form, "item": item},
+    )
 
 @login_required
 def item_delete(request, pk):
     """删除可配置条目"""
-    item = get_object_or_404(ConfigurableItem, pk=pk)
+    current_class = SchoolClass.objects.filter(is_current=True).first()
+    item = get_object_or_404(ConfigurableItem, pk=pk, school_class=current_class)
     module = item.module
     if request.method == "POST":
-        item.delete()
-        messages.info(request, f"条目「{item.name}」已删除。")
+        used = (
+            item.classroom_discipline_records.exists()
+            or item.dorm_discipline_records.exists()
+        )
+        if used:
+            item.is_active = False
+            item.save(update_fields=["is_active", "updated_at"])
+            messages.info(
+                request,
+                f"条目「{item.name}」已有历史记录，已改为停用。",
+            )
+        else:
+            item.delete()
+            messages.info(request, f"条目「{item.name}」已删除。")
     if module == "classroom_discipline":
         return redirect("discipline:classroom_items")
     return redirect("discipline:dorm_items")

@@ -20,4 +20,5 @@ urlpatterns = [
     path("dorm/items/", views.dorm_items, name="dorm_items"),
     # 条目删除
     path("item/<int:pk>/delete/", views.item_delete, name="item_delete"),
+    path("item/<int:pk>/edit/", views.item_edit, name="item_edit"),
 ]

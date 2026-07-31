@@ -22,7 +22,7 @@
         <td>{{ i.name }}</td><td>{{ i.full_score }}</td><td>{{ i.default_deduction }}</td>
         <td>{% if i.is_active %}<span class="text-success">启用{% else %}<span class="text-danger">停用{% endif %}</td>
         <td>{{ i.sort_order }}</td>
-        <td><form method="post" action="{% url 'dormitory:hygiene_item_delete' i.pk %}" class="d-inline" onsubmit="return confirm('确认删除项目「{{ i.name }}」？')">{% csrf_token %}<button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button></form></td>
+        <td><a href="{% url 'dormitory:hygiene_item_edit' i.pk %}" class="btn btn-sm btn-outline-primary"><i class="bi bi-pencil"></i></a> <form method="post" action="{% url 'dormitory:hygiene_item_delete' i.pk %}" class="d-inline" onsubmit="return confirm('确认删除或停用项目「{{ i.name }}」？')">{% csrf_token %}<button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button></form></td>
     </tr>
     {% empty %}<tr><td colspan="6" class="text-muted text-center">暂无卫生项目</td></tr>
     {% endfor %}

@@ -108,7 +108,12 @@ def support_candidates(request):
             total = 0
             count = 0
             for es in es_list:
-                sc = Score.objects.filter(exam_subject=es, student=s, status="normal").first()
+                sc = Score.objects.filter(
+                    exam_subject=es,
+                    student=s,
+                    status="normal",
+                    is_deleted=False,
+                ).first()
                 if sc and sc.score is not None:
                     total += float(sc.score)
                     count += 1
@@ -132,7 +137,7 @@ def support_candidates(request):
                 candidates = [c for c in candidates if c["ratio"] < 60]
         candidates.sort(key=lambda c: c["ratio"], reverse=(plan_type == "excellent"))
 
-    exams = Exam.objects.filter(school_class=current_class).order_by("-date") if current_class else []
+    exams = Exam.objects.filter(school_class=current_class, is_deleted=False).order_by("-date") if current_class else []
 
     return render(request, "scores/support_candidates.html", {
         "exams": exams, "exam": exam, "plan_type": plan_type,

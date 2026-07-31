@@ -6,6 +6,7 @@ from django.utils import timezone
 from datetime import timedelta
 
 from apps.audit.models import OperationLog, SoftDeleteRecord
+from apps.audit.services import restore, permanently_delete
 
 
 def get_client_ip(request):
@@ -102,34 +103,7 @@ def trash_restore(request, pk):
 
 def _restore_object(record):
     """根据模型名恢复对象"""
-    from apps.students.models import Student
-    from apps.scores.models import Exam
-    from apps.discipline.models import ClassroomDisciplineRecord
-    from apps.rewards.models import RewardRecord
-    from apps.comments.models import StudentComment
-    from apps.communications.models import StudentConversation
-    from apps.activities.models import Activity
-    from apps.dormitory.models import DormHygieneCheck
-
-    model_map = {
-        "student": Student,
-        "exam": Exam,
-        "classroomdiscipline": ClassroomDisciplineRecord,
-        "reward": RewardRecord,
-        "comment": StudentComment,
-        "conversation": StudentConversation,
-        "activity": Activity,
-        "hygienecheck": DormHygieneCheck,
-    }
-    model_cls = model_map.get(record.model_name)
-    if not model_cls:
-        return False
-
-    obj = model_cls.objects.filter(pk=record.object_id, is_deleted=True).first()
-    if not obj:
-        return False
-    obj.restore()
-    return True
+    return restore(record)
 
 
 @login_required
@@ -144,27 +118,13 @@ def trash_delete(request, pk):
 
         # 物理删除原对象
         try:
-            from apps.students.models import Student
-            from apps.scores.models import Exam
-            from apps.discipline.models import ClassroomDisciplineRecord
-            from apps.rewards.models import RewardRecord
-            from apps.comments.models import StudentComment
-            from apps.communications.models import StudentConversation
-            from apps.activities.models import Activity
-            from apps.dormitory.models import DormHygieneCheck
-
-            model_map = {
-                "student": Student, "exam": Exam,
-                "classroomdiscipline": ClassroomDisciplineRecord,
-                "reward": RewardRecord, "comment": StudentComment,
-                "conversation": StudentConversation, "activity": Activity,
-                "hygienecheck": DormHygieneCheck,
-            }
-            model_cls = model_map.get(record.model_name)
-            if model_cls:
-                model_cls.objects.filter(pk=record.object_id).delete()
-        except Exception:
-            pass
+            deleted = permanently_delete(record)
+            if not deleted:
+                messages.error(request, "永久删除失败：原对象不存在、未处于回收站状态或类型不受支持。")
+                return redirect("audit:trash_list")
+        except Exception as exc:
+            messages.error(request, f"永久删除失败：{exc}")
+            return redirect("audit:trash_list")
 
         OperationLog.objects.create(
             user=request.user, action="delete", module=record.module,

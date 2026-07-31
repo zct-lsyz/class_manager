@@ -10,6 +10,7 @@ from apps.exports.import_services import (
     parse_uploaded_file, validate_students, import_students,
 )
 from apps.exports.services import build_excel_bytes, fmt
+from apps.exports.module_data import MODULE_EXPORTS, collect_module_data
 
 
 class ImportServiceTests(TestCase):
@@ -96,3 +97,12 @@ class ExportServiceTests(TestCase):
         ws = wb.active
         self.assertEqual(ws.cell(1, 1).value, "学号")
         self.assertEqual(ws.cell(2, 2).value, "张三")
+
+    def test_every_registered_module_can_be_collected(self):
+        school_class = SchoolClass.objects.create(name="导出测试班", is_current=True)
+        for key, _name, _path in MODULE_EXPORTS:
+            rows, headers, sheet_name, filename = collect_module_data(key, school_class)
+            self.assertIsInstance(rows, list)
+            self.assertTrue(headers)
+            self.assertTrue(sheet_name)
+            self.assertTrue(filename.endswith(".xlsx"))

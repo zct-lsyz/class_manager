@@ -115,4 +115,14 @@ class HomeworkRecord(BaseModel):
         unique_together = ["task", "student"]
 
     def __str__(self):
-        return f"{self.student.name} - {self.task.title} - {self.get_status_display()}"
+        return f"{self.student.name} - {self.task.title} - {self.status_display}"
+
+    @property
+    def status_display(self):
+        if self.status.startswith("custom:"):
+            status_id = self.status.partition(":")[2]
+            custom_status = HomeworkStatus.objects.filter(
+                pk=status_id, school_class=self.task.school_class
+            ).first()
+            return custom_status.name if custom_status else "已停用的自定义状态"
+        return dict(self._meta.get_field("status").choices).get(self.status, self.status)

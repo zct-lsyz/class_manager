@@ -3,6 +3,7 @@ from django.contrib.auth.decorators import login_required
 from django.shortcuts import render, redirect, get_object_or_404
 from django.core.paginator import Paginator
 from django.db import transaction
+from django.db.models import Q
 
 from apps.dormitory.models import (
     DormBuilding, DormRoom, DormBed, DormAssignment,
@@ -15,6 +16,7 @@ from apps.dormitory.forms import (
 from apps.classes.models import SchoolClass, Semester
 from apps.students.models import Student
 from apps.audit.models import OperationLog
+from apps.audit.services import soft_delete
 
 
 def get_client_ip(request):
@@ -91,7 +93,10 @@ def _generate_beds(room):
 @login_required
 def room_detail(request, pk):
     """宿舍详情：床位列表 + 分配状态"""
-    room = get_object_or_404(DormRoom, pk=pk)
+    current_class = SchoolClass.objects.filter(is_current=True).first()
+    room = get_object_or_404(
+        DormRoom, pk=pk, building__school_class=current_class,
+    )
     beds = DormBed.objects.filter(room=room)
     assignments = DormAssignment.objects.filter(
         room=room, is_current=True
@@ -99,7 +104,9 @@ def room_detail(request, pk):
 
     # 已分配床位映射
     assigned_map = {a.bed_id: a.student for a in assignments if a.bed_id}
-    unassigned = Student.objects.filter(is_deleted=False).exclude(
+    unassigned = Student.objects.filter(
+        school_class=current_class, is_deleted=False,
+    ).exclude(
         id__in=assignments.values_list("student_id", flat=True)
     )
 
@@ -112,24 +119,44 @@ def room_detail(request, pk):
 @transaction.atomic
 def bed_assign(request, pk):
     """分配床位"""
-    bed = get_object_or_404(DormBed, pk=pk)
+    current_class = SchoolClass.objects.filter(is_current=True).first()
+    bed = get_object_or_404(
+        DormBed, pk=pk, room__building__school_class=current_class,
+    )
     if request.method == "POST":
         student_id = request.POST.get("student_id", "")
+        previous_students = list(Student.objects.filter(
+            dorm_assignments__is_current=True,
+        ).filter(
+            Q(dorm_assignments__bed=bed) | Q(pk=student_id or None)
+        ).distinct())
         if student_id:
-            student = get_object_or_404(Student, pk=student_id)
+            student = get_object_or_404(
+                Student, pk=student_id, school_class=current_class, is_deleted=False,
+            )
             # 先取消该学生其他分配
             DormAssignment.objects.filter(student=student, is_current=True).update(is_current=False)
             # 如果床位已有学生，取消其分配
             DormAssignment.objects.filter(bed=bed, is_current=True).update(is_current=False)
             DormAssignment.objects.create(
                 student=student, room=bed.room, bed=bed, is_current=True,
-                semester=Semester.objects.filter(is_current=True).first(),
+                semester=Semester.objects.filter(
+                    school_class=current_class, is_current=True,
+                ).first(),
             )
+            student.dormitory = str(bed.room)
+            student.bed_number = bed.bed_number
+            student.save(update_fields=["dormitory", "bed_number", "updated_at"])
             messages.success(request, f"{student.name} 已分配至 {bed.room.room_number} - {bed.bed_number} 号床。")
         else:
             # 清空床位
             DormAssignment.objects.filter(bed=bed, is_current=True).update(is_current=False)
             messages.info(request, "床位已清空。")
+        for previous_student in previous_students:
+            if not previous_student.dorm_assignments.filter(is_current=True).exists():
+                previous_student.dormitory = ""
+                previous_student.bed_number = ""
+                previous_student.save(update_fields=["dormitory", "bed_number", "updated_at"])
         return redirect("dormitory:room_detail", pk=bed.room.pk)
     return redirect("dormitory:index")
 
@@ -139,7 +166,7 @@ def hygiene(request):
     """宿舍卫生检查列表"""
     current_class = SchoolClass.objects.filter(is_current=True).first()
     checks = DormHygieneCheck.objects.filter(
-        school_class=current_class
+        school_class=current_class, is_deleted=False
     ).select_related("room__building").order_by("-date") if current_class else []
 
     paginator = Paginator(checks, 20)
@@ -182,9 +209,38 @@ def hygiene_item_delete(request, pk):
     """删除卫生项目"""
     item = get_object_or_404(DormHygieneItem, pk=pk)
     if request.method == "POST":
-        item.delete()
-        messages.info(request, f"卫生项目「{item.name}」已删除。")
+        if item.dormhygieneitemscore_set.exists():
+            item.is_active = False
+            item.save(update_fields=["is_active", "updated_at"])
+            messages.info(
+                request,
+                f"卫生项目「{item.name}」已有历史记录，已改为停用。",
+            )
+        else:
+            item.delete()
+            messages.info(request, f"卫生项目「{item.name}」已删除。")
     return redirect("dormitory:hygiene_items")
+
+
+@login_required
+def hygiene_item_edit(request, pk):
+    current_class = SchoolClass.objects.filter(is_current=True).first()
+    item = get_object_or_404(
+        DormHygieneItem, pk=pk, school_class=current_class
+    )
+    if request.method == "POST":
+        form = DormHygieneItemForm(request.POST, instance=item)
+        if form.is_valid():
+            form.save()
+            messages.success(request, f"卫生项目「{item.name}」已更新。")
+            return redirect("dormitory:hygiene_items")
+    else:
+        form = DormHygieneItemForm(instance=item)
+    return render(
+        request,
+        "dormitory/hygiene_item_form.html",
+        {"form": form, "item": item},
+    )
 
 
 @login_required
@@ -195,41 +251,43 @@ def hygiene_create(request):
     items = DormHygieneItem.objects.filter(school_class=current_class, is_active=True) if current_class else []
 
     if request.method == "POST":
-        form = DormHygieneCheckForm(request.POST)
+        form = DormHygieneCheckForm(request.POST, request.FILES)
         if form.is_valid():
-            check = form.save(commit=False)
-            check.school_class = current_class
-            check.semester = current_semester
+            with transaction.atomic():
+                check = form.save(commit=False)
+                check.school_class = current_class
+                check.semester = current_semester
+                check.save()
 
-            # 汇总项目得分
-            total = 0
-            for item in items:
-                score_val = request.POST.get(f"item_{item.pk}", "")
-                if score_val == "":
-                    continue
-                try:
-                    s = int(score_val)
-                except (ValueError, TypeError):
-                    s = 0
-                total += s
-                DormHygieneItemScore.objects.create(
-                    check_record=check, item=item, score=s,
-                )
-            check.total_score = total
-            # 自动评定等级
-            if items:
-                full = sum(i.full_score for i in items)
-                if full > 0:
-                    ratio = total / full
-                    if ratio >= 0.9:
-                        check.grade = "excellent"
-                    elif ratio >= 0.8:
-                        check.grade = "good"
-                    elif ratio >= 0.6:
-                        check.grade = "fair"
-                    else:
-                        check.grade = "poor"
-            check.save()
+                # 保存父记录后再写项目得分
+                total = 0
+                for item in items:
+                    score_val = request.POST.get(f"item_{item.pk}", "")
+                    if score_val == "":
+                        continue
+                    try:
+                        score = int(score_val)
+                    except (ValueError, TypeError):
+                        score = 0
+                    score = max(0, min(score, item.full_score))
+                    total += score
+                    DormHygieneItemScore.objects.create(
+                        check_record=check, item=item, score=score,
+                    )
+                check.total_score = total
+                if items:
+                    full = sum(item.full_score for item in items)
+                    if full > 0:
+                        ratio = total / full
+                        if ratio >= 0.9:
+                            check.grade = "excellent"
+                        elif ratio >= 0.8:
+                            check.grade = "good"
+                        elif ratio >= 0.6:
+                            check.grade = "fair"
+                        else:
+                            check.grade = "poor"
+                check.save(update_fields=["total_score", "grade", "updated_at"])
             messages.success(request, f"卫生检查已保存（总分 {total} 分）。")
             return redirect("dormitory:hygiene")
     else:
@@ -246,11 +304,30 @@ def hygiene_create(request):
 @login_required
 def hygiene_detail(request, pk):
     """卫生检查详情（含项目得分）"""
+    current_class = SchoolClass.objects.filter(is_current=True).first()
     check = get_object_or_404(
-        DormHygieneCheck.objects.select_related("room__building"), pk=pk,
+        DormHygieneCheck.objects.select_related("room__building"),
+        pk=pk, school_class=current_class, is_deleted=False,
     )
     scores = DormHygieneItemScore.objects.filter(check_record=check).select_related("item")
     return render(request, "dormitory/hygiene_detail.html", {"check": check, "scores": scores})
+
+
+@login_required
+def hygiene_delete(request, pk):
+    current_class = SchoolClass.objects.filter(is_current=True).first()
+    check = get_object_or_404(
+        DormHygieneCheck, pk=pk, school_class=current_class, is_deleted=False,
+    )
+    if request.method == "POST":
+        soft_delete(
+            check,
+            user=request.user,
+            module="dormitory",
+            model_name="hygienecheck",
+        )
+        messages.info(request, "卫生检查已移入回收站。")
+    return redirect("dormitory:hygiene")
 
 
 @login_required

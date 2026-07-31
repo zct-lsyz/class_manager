@@ -72,7 +72,7 @@ def task_detail(request, pk):
                 student_id = key.replace("record_", "")
                 if not student_id.isdigit() or not value:
                     continue
-                status = request.POST.get(f"status_{student_id}", "submitted")
+                status = request.POST.get(f"status_{student_id}", value or "submitted")
                 HomeworkRecord.objects.update_or_create(
                     task=task, student_id=int(student_id),
                     defaults={
@@ -90,7 +90,18 @@ def task_detail(request, pk):
         messages.success(request, f"已登记 {saved} 名学生的作业状态。")
         return redirect("homework:task_detail", pk=task.pk)
 
-    context = {"task": task, "records": records, "unrecorded": unrecorded}
+    custom_statuses = HomeworkStatus.objects.filter(
+        school_class=task.school_class, is_active=True
+    ).order_by("sort_order", "name")
+    status_options = list(HomeworkRecord.STATUS_CHOICES) + [
+        (f"custom:{status.pk}", status.name) for status in custom_statuses
+    ]
+    context = {
+        "task": task,
+        "records": records,
+        "unrecorded": unrecorded,
+        "status_options": status_options,
+    }
     return render(request, "homework/task_detail.html", context)
 
 

@@ -47,6 +47,22 @@ class StudentForm(forms.ModelForm):
             "sort_order": "排序",
         }
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.instance and self.instance.pk:
+            self.initial.update({
+                "class_position": self.instance.display_class_position,
+                "dormitory": self.instance.display_dormitory,
+                "bed_number": self.instance.display_bed_number,
+                "primary_contact": self.instance.display_primary_contact,
+                "primary_phone": self.instance.display_primary_phone,
+            })
+        for field_name in (
+            "class_position", "dormitory", "bed_number",
+            "primary_contact", "primary_phone",
+        ):
+            self.fields[field_name].disabled = True
+
 
 class GuardianForm(forms.ModelForm):
     """家长联系方式表单"""

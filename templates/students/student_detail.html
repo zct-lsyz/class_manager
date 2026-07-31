@@ -37,13 +37,13 @@
     <div class="col-md-3 col-6">
         <div class="card text-center p-3 h-100">
             <small class="text-muted">宿舍</small>
-            <span class="fs-5 fw-bold">{{ student.dormitory|default:"-" }}</span>
+            <span class="fs-5 fw-bold">{{ student.display_dormitory|default:"-" }}</span>
         </div>
     </div>
     <div class="col-md-3 col-6">
         <div class="card text-center p-3 h-100">
             <small class="text-muted">职务</small>
-            <span class="fs-5 fw-bold">{{ student.class_position|default:"-" }}</span>
+            <span class="fs-5 fw-bold">{{ student.display_class_position|default:"-" }}</span>
         </div>
     </div>
 </div>
@@ -54,11 +54,11 @@
         <ul class="nav nav-tabs card-header-tabs mx-2 mt-2" id="studentTabs" role="tablist">
             <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#basic" type="button">基本信息</button></li>
             <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#guardian" type="button">家长</button></li>
-            <li class="nav-item"><button class="nav-link disabled" type="button">成绩</button></li>
-            <li class="nav-item"><button class="nav-link disabled" type="button">考勤</button></li>
-            <li class="nav-item"><button class="nav-link disabled" type="button">纪律</button></li>
-            <li class="nav-item"><button class="nav-link disabled" type="button">评语</button></li>
-            <li class="nav-item"><button class="nav-link disabled" type="button">成长时间线</button></li>
+            <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#scores" type="button">成绩</button></li>
+            <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#attendance" type="button">考勤</button></li>
+            <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#discipline" type="button">奖惩</button></li>
+            <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#comments" type="button">评语/谈话</button></li>
+            <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#timeline" type="button">成长时间线</button></li>
         </ul>
     </div>
     <div class="card-body">
@@ -73,10 +73,10 @@
                     <tr><td class="text-muted">身高</td><td>{{ student.height|default:"未填写" }}{% if student.height %} cm{% endif %}</td></tr>
                     <tr><td class="text-muted">视力情况</td><td>{{ student.vision|default:"未填写" }}</td></tr>
                     <tr><td class="text-muted">特殊座位需求</td><td>{{ student.seat_requirement|default:"无" }}</td></tr>
-                    <tr><td class="text-muted">班级职务</td><td>{{ student.class_position|default:"无" }}</td></tr>
-                    <tr><td class="text-muted">宿舍 / 床位</td><td>{{ student.dormitory|default:"未分配" }} {% if student.bed_number %}/ {{ student.bed_number }}{% endif %}</td></tr>
-                    <tr><td class="text-muted">主要联系人</td><td>{{ student.primary_contact|default:"未填写" }}</td></tr>
-                    <tr><td class="text-muted">联系电话</td><td>{{ student.primary_phone|default:"未填写" }}</td></tr>
+                    <tr><td class="text-muted">班级职务</td><td>{{ student.display_class_position|default:"无" }}</td></tr>
+                    <tr><td class="text-muted">宿舍 / 床位</td><td>{{ student.display_dormitory|default:"未分配" }} {% if student.display_bed_number %}/ {{ student.display_bed_number }}{% endif %}</td></tr>
+                    <tr><td class="text-muted">主要联系人</td><td>{{ student.display_primary_contact|default:"未填写" }}</td></tr>
+                    <tr><td class="text-muted">联系电话</td><td>{{ student.display_primary_phone|default:"未填写" }}</td></tr>
                     <tr><td class="text-muted">备注</td><td>{{ student.remarks|linebreaks|default:"无" }}</td></tr>
                 </table>
             </div>
@@ -103,6 +103,38 @@
                     </a>
                 </div>
                 {% endif %}
+            </div>
+
+            <div class="tab-pane fade" id="scores">
+                <div class="table-responsive"><table class="table table-sm"><thead><tr><th>日期</th><th>考试</th><th>科目</th><th>成绩</th><th>名次</th></tr></thead><tbody>
+                    {% for item in scores %}<tr><td>{{ item.exam.date }}</td><td>{{ item.exam.name }}</td><td>{{ item.exam_subject.subject.name }}</td><td>{{ item.score|default_if_none:item.get_status_display }}</td><td>{{ item.rank|default:"-" }}</td></tr>{% empty %}<tr><td colspan="5" class="text-muted text-center">暂无成绩记录</td></tr>{% endfor %}
+                </tbody></table></div>
+            </div>
+
+            <div class="tab-pane fade" id="attendance">
+                <div class="table-responsive"><table class="table table-sm"><thead><tr><th>日期</th><th>时段</th><th>状态</th><th>原因</th></tr></thead><tbody>
+                    {% for item in attendance_records %}<tr><td>{{ item.date }}</td><td>{{ item.get_period_display }}</td><td>{{ item.get_status_display }}</td><td>{{ item.reason|default:"-" }}</td></tr>{% empty %}<tr><td colspan="4" class="text-muted text-center">暂无考勤记录</td></tr>{% endfor %}
+                </tbody></table></div>
+            </div>
+
+            <div class="tab-pane fade" id="discipline">
+                <h6>奖励与表扬</h6>
+                <ul class="list-group list-group-flush mb-3">{% for item in reward_records %}<li class="list-group-item px-0"><span class="text-muted me-2">{{ item.date }}</span>{{ item.item.name|default:item.custom_name }} <span class="badge bg-success">+{{ item.points }}</span></li>{% empty %}<li class="list-group-item text-muted px-0">暂无奖励记录</li>{% endfor %}</ul>
+                <h6>课堂纪律</h6>
+                <ul class="list-group list-group-flush mb-3">{% for item in classroom_records %}<li class="list-group-item px-0"><span class="text-muted me-2">{{ item.date }}</span>{{ item.item.name|default:item.custom_content }}{% if item.points_deducted %} <span class="badge bg-danger">-{{ item.points_deducted }}</span>{% endif %}</li>{% empty %}<li class="list-group-item text-muted px-0">暂无课堂纪律记录</li>{% endfor %}</ul>
+                <h6>宿舍纪律</h6>
+                <ul class="list-group list-group-flush">{% for item in dorm_records %}<li class="list-group-item px-0"><span class="text-muted me-2">{{ item.date }}</span>{{ item.item.name|default:item.custom_content }}{% if item.points_deducted %} <span class="badge bg-danger">-{{ item.points_deducted }}</span>{% endif %}</li>{% empty %}<li class="list-group-item text-muted px-0">暂无宿舍纪律记录</li>{% endfor %}</ul>
+            </div>
+
+            <div class="tab-pane fade" id="comments">
+                <h6>评语</h6>
+                <ul class="list-group list-group-flush mb-3">{% for item in comments %}<li class="list-group-item px-0"><span class="text-muted me-2">{{ item.created_at|date:"Y-m-d" }}</span><strong>{{ item.get_comment_type_display }}</strong><div>{{ item.content|linebreaksbr }}</div></li>{% empty %}<li class="list-group-item text-muted px-0">暂无评语</li>{% endfor %}</ul>
+                <h6>谈话记录</h6>
+                <ul class="list-group list-group-flush">{% for item in conversations %}<li class="list-group-item px-0"><span class="text-muted me-2">{{ item.date }}</span><strong>{{ item.reason|default:"学生谈话" }}</strong><div>{{ item.main_content|linebreaksbr }}</div></li>{% empty %}<li class="list-group-item text-muted px-0">暂无谈话记录</li>{% endfor %}</ul>
+            </div>
+
+            <div class="tab-pane fade" id="timeline">
+                <div class="list-group list-group-flush">{% for item in timeline %}<div class="list-group-item px-0"><div class="d-flex justify-content-between"><strong>{{ item.type }} · {{ item.title }}</strong><span class="text-muted small">{{ item.date }}</span></div>{% if item.detail %}<div class="text-muted small mt-1">{{ item.detail|truncatechars:180 }}</div>{% endif %}</div>{% empty %}<div class="text-muted text-center py-3">暂无成长记录</div>{% endfor %}</div>
             </div>
         </div>
     </div>

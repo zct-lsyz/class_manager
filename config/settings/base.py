@@ -120,7 +120,7 @@ STATICFILES_DIRS = [BASE_DIR / "static"]
 STATIC_ROOT = BASE_DIR / "staticfiles"
 
 # 媒体文件
-MEDIA_URL = "media/"
+MEDIA_URL = "/protected-media/"
 MEDIA_ROOT = BASE_DIR / "media"
 
 # 默认主键类型
@@ -141,8 +141,12 @@ LOGIN_ATTEMPT_LIMIT = 5
 LOGIN_ATTEMPT_TIMEOUT = 300  # 5 分钟
 
 # 上传文件限制
-FILE_UPLOAD_MAX_MEMORY_SIZE = 10 * 1024 * 1024  # 10 MB
-DATA_UPLOAD_MAX_MEMORY_SIZE = 10 * 1024 * 1024  # 10 MB
+FILE_UPLOAD_MAX_MEMORY_SIZE = 5 * 1024 * 1024  # 超过 5 MB 时落盘，避免挤占 2 GB 内存
+DATA_UPLOAD_MAX_MEMORY_SIZE = 30 * 1024 * 1024  # 单次原卷 + 小分表上限
+AI_EXAM_MAX_FILE_SIZE = int(os.environ.get("AI_EXAM_MAX_FILE_SIZE", 20 * 1024 * 1024))
+AI_EXAM_MAX_PAGES = int(os.environ.get("AI_EXAM_MAX_PAGES", 30))
+AI_EXAM_MAX_TEXT_CHARS = int(os.environ.get("AI_EXAM_MAX_TEXT_CHARS", 60000))
+AI_EXAM_OCR_LANG = os.environ.get("AI_EXAM_OCR_LANG", "chi_sim+eng")
 
 # 文件类型白名单
 ALLOWED_UPLOAD_EXTENSIONS = [

@@ -6,7 +6,7 @@
 from django.core.management.base import BaseCommand
 
 from apps.classes.models import SchoolClass, Semester
-from apps.homework.models import Subject
+from apps.classes.subjects import Subject
 from apps.discipline.models import ConfigurableItem
 from apps.rewards.models import RewardItem
 from apps.dormitory.models import DormHygieneItem

@@ -5,7 +5,9 @@
 import io
 import zipfile
 from datetime import datetime
+from pathlib import Path
 
+from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.shortcuts import render, redirect
@@ -21,6 +23,7 @@ from apps.exports.services import (
     fmt,
 )
 from apps.audit.models import OperationLog
+from apps.exports.module_data import MODULE_EXPORTS, collect_module_data
 
 
 def get_client_ip(request):
@@ -34,22 +37,7 @@ def export_center(request):
     current_class = SchoolClass.objects.filter(is_current=True).first()
     tasks = ExportTask.objects.filter(school_class=current_class).order_by("-created_at")[:20] if current_class else []
 
-    modules = [
-        ("students", "学生花名册"),
-        ("guardians", "家长联系方式"),
-        ("seating", "座位表"),
-        ("duty", "值日表"),
-        ("attendance", "考勤"),
-        ("homework", "作业"),
-        ("discipline", "课堂纪律"),
-        ("dormitory", "宿舍管理"),
-        ("rewards", "奖励与表扬"),
-        ("points", "奖惩积分"),
-        ("scores", "成绩"),
-        ("comments", "评语"),
-        ("conversations", "谈话记录"),
-        ("activities", "活动"),
-    ]
+    modules = [(key, name) for key, name, _path in MODULE_EXPORTS]
 
     return render(request, "exports/center.html", {"modules": modules, "tasks": tasks})
 
@@ -59,6 +47,10 @@ def export_module(request, module):
     """导出指定模块数据（Excel）"""
     current_class = SchoolClass.objects.filter(is_current=True).first()
     from apps.audit.models import OperationLog as Log
+
+    if not current_class:
+        messages.error(request, "请先设置当前班级。")
+        return redirect("exports:export_center")
 
     try:
         rows, headers, sheet_name, filename = _collect_module_data(module, current_class)
@@ -90,6 +82,10 @@ def export_module(request, module):
 
 def _collect_module_data(module, current_class):
     """收集模块数据，返回 (rows, headers, sheet_name, filename)"""
+    try:
+        return collect_module_data(module, current_class)
+    except KeyError:
+        pass
     # 学生花名册
     if module == "students":
         from apps.students.models import Student
@@ -284,28 +280,57 @@ def full_export(request):
     """一键全量导出所有模块（ZIP）"""
     current_class = SchoolClass.objects.filter(is_current=True).first()
 
-    module_files = []
-    modules_to_export = [
-        "students", "guardians", "attendance", "discipline",
-        "rewards", "points", "scores", "comments", "conversations",
-        "activities", "dormitory", "homework", "seating", "duty",
-    ]
+    if not current_class:
+        messages.error(request, "请先设置当前班级。")
+        return redirect("exports:export_center")
+    if request.method != "POST":
+        return render(request, "exports/full_export.html", {"module_count": len(MODULE_EXPORTS)})
+    if request.POST.get("confirm") != "1":
+        messages.error(request, "请确认导出范围和敏感数据风险。")
+        return redirect("exports:full_export")
 
-    for m in modules_to_export:
-        try:
-            rows, headers, sheet_name, filename = _collect_module_data(m, current_class)
+    module_files = []
+    include_attachments = request.POST.get("include_attachments") == "1"
+    try:
+        for module, _name, zip_path in MODULE_EXPORTS:
+            rows, headers, sheet_name, filename = _collect_module_data(module, current_class)
             content = build_excel_bytes(rows, headers, sheet_name)
-            module_files.append((f"{m}/{filename}", content, len(rows)))
-        except Exception:
-            continue
+            module_files.append((zip_path, content, len(rows)))
+        if include_attachments:
+            media_root = Path(settings.MEDIA_ROOT)
+            if media_root.exists():
+                for attachment in sorted(path for path in media_root.rglob("*") if path.is_file()):
+                    relative_path = attachment.relative_to(media_root).as_posix()
+                    module_files.append((f"attachments/{relative_path}", attachment.read_bytes(), 1))
+    except Exception as exc:
+        ExportTask.objects.create(
+            user=request.user, school_class=current_class, module="全部模块",
+            export_format="zip", status="failed", is_full_export=True,
+            include_sensitive=True, include_attachments=include_attachments,
+            error_message=str(exc),
+        )
+        OperationLog.objects.create(
+            user=request.user, action="full_export", module="exports",
+            object_repr="全量导出失败", detail=f"全量导出失败: {exc}",
+            ip_address=get_client_ip(request), success=False,
+        )
+        messages.error(request, f"全量导出失败，未生成不完整的数据包：{exc}")
+        return redirect("exports:export_center")
+
+    ExportTask.objects.create(
+        user=request.user, school_class=current_class, module="全部模块",
+        export_format="zip", status="completed", is_full_export=True,
+        include_sensitive=True, include_attachments=include_attachments,
+        record_count=sum(record_count for _path, _content, record_count in module_files),
+    )
 
     OperationLog.objects.create(
         user=request.user, action="full_export", module="exports",
-        object_repr=f"全量导出 {len(module_files)} 个模块",
-        detail=f"一键全量导出，共 {len(module_files)} 个模块",
+        object_repr=f"全量导出 {len(MODULE_EXPORTS)} 个模块",
+        detail=f"一键全量导出，共 {len(MODULE_EXPORTS)} 个模块，包含附件：{'是' if include_attachments else '否'}",
         ip_address=get_client_ip(request), success=True,
     )
-    return make_full_export_zip(module_files, "class_platform_full_export")
+    return make_full_export_zip(module_files, "class_platform_full_export", current_class=current_class)
 
 
 @login_required

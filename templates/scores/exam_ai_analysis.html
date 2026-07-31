@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% block title %}原卷与小分表 AI 分析{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mt-3 mb-4">
+    <h4 class="mb-0"><i class="bi bi-file-earmark-bar-graph me-2 text-primary"></i>原卷与小分表 AI 分析</h4>
+    <a href="{% url 'scores:exam_analysis_template' %}" class="btn btn-outline-primary btn-sm"><i class="bi bi-download me-1"></i>下载小分表模板</a>
+</div>
+
+{% if not current_class %}
+<div class="alert alert-warning">请先在系统设置中创建并设置当前班级。</div>
+{% elif not ai_ready %}
+<div class="alert alert-warning">AI 尚不可用。请先<a href="{% url 'scores:ai_settings' %}" class="alert-link">启用 AI 分析</a>，并在服务器环境变量中配置 DEEPSEEK_API_KEY。</div>
+{% endif %}
+
+<div class="card mb-4">
+    <div class="card-header">新建分析</div>
+    <div class="card-body">
+        <form method="post" enctype="multipart/form-data">
+            {% csrf_token %}
+            <div class="row g-3">
+                <div class="col-md-4">
+                    <label class="form-label">考试科目</label>
+                    <select name="exam_subject" class="form-select" required>
+                        <option value="">请选择</option>
+                        {% for item in exam_subjects %}
+                        <option value="{{ item.pk }}">{{ item.exam.name }} - {{ item.subject.name }}（满分 {{ item.full_score }}）</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">试卷原卷</label>
+                    <input type="file" name="paper_file" class="form-control" accept=".pdf,.docx,.txt,.jpg,.jpeg,.png" required>
+                    <div class="form-text">支持可复制或扫描 PDF、DOCX、TXT、JPG、PNG，扫描件在服务器本地 OCR。</div>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">对应小分表</label>
+                    <input type="file" name="score_file" class="form-control" accept=".xlsx" required>
+                    <div class="form-text">仅支持 XLSX；题目列推荐写为“题号|满分”，例如“1|5”。</div>
+                </div>
+                <div class="col-12">
+                    <div class="alert alert-info mb-2">
+                        原卷和小分表先在本服务器解析。发送给外部 AI 的内容仅包括试题文字与逐题匿名汇总（均分、得分率、零分率、满分率），不包含姓名、学号和个人逐题成绩。
+                    </div>
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" name="privacy_confirm" value="1" id="privacyConfirm" required>
+                        <label class="form-check-label" for="privacyConfirm">我确认上述外部 AI 数据范围</label>
+                    </div>
+                </div>
+            </div>
+            <button type="submit" class="btn btn-primary mt-3" {% if not ai_ready %}disabled{% endif %}>
+                <i class="bi bi-stars me-1"></i>开始分析
+            </button>
+        </form>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header">分析记录</div>
+    <div class="card-body p-0 table-responsive">
+        <table class="table mb-0 align-middle">
+            <thead><tr><th>时间</th><th>考试</th><th>科目</th><th>文件</th><th>状态</th><th>操作</th></tr></thead>
+            <tbody>
+            {% for source in sources %}
+            <tr>
+                <td>{{ source.created_at|date:"Y-m-d H:i" }}</td>
+                <td>{{ source.exam_subject.exam.name }}</td>
+                <td>{{ source.exam_subject.subject.name }}</td>
+                <td class="small">{{ source.paper_file.name|default:"-" }}<br>{{ source.score_file.name|default:"-" }}</td>
+                <td>{% if source.status == "completed" %}<span class="badge bg-success">已完成</span>{% elif source.status == "failed" %}<span class="badge bg-danger">失败</span>{% else %}<span class="badge bg-warning text-dark">{{ source.get_status_display }}</span>{% endif %}</td>
+                <td><a href="{% url 'scores:exam_analysis_detail' source.pk %}" class="btn btn-sm btn-outline-primary">查看</a></td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="6" class="text-muted text-center py-4">暂无分析记录。</td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

@@ -6,6 +6,7 @@ from django.core.paginator import Paginator
 from apps.comments.models import StudentComment, CommentTemplate
 from apps.comments.forms import StudentCommentForm, CommentTemplateForm
 from apps.classes.models import SchoolClass, Semester
+from apps.audit.services import soft_delete
 
 
 @login_required
@@ -75,8 +76,12 @@ def delete(request, pk):
     """删除评语（软删除）"""
     comment = get_object_or_404(StudentComment, pk=pk)
     if request.method == "POST":
-        comment.is_deleted = True
-        comment.save(update_fields=["is_deleted"])
+        soft_delete(
+            comment,
+            user=request.user,
+            module="comments",
+            model_name="comment",
+        )
         messages.info(request, "评语已删除。")
     return redirect("comments:list")
 

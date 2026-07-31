@@ -1,7 +1,7 @@
 from django import forms
 from apps.scores.models import Exam, ExamSubject, Score, SupportPlan, SupportFollowUp
 from apps.students.models import Student
-from apps.homework.models import Subject
+from apps.classes.subjects import Subject
 
 
 class ExamForm(forms.ModelForm):

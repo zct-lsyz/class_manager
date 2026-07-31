@@ -9,6 +9,7 @@ from apps.rewards.models import RewardItem, RewardRecord, PointRecord
 from apps.rewards.forms import RewardItemForm, RewardRecordForm, PointRecordForm
 from apps.classes.models import SchoolClass, Semester
 from apps.students.models import Student
+from apps.audit.services import soft_delete
 
 
 @login_required
@@ -67,8 +68,12 @@ def reward_delete(request, pk):
     """删除奖励记录（软删除）"""
     record = get_object_or_404(RewardRecord, pk=pk)
     if request.method == "POST":
-        record.is_deleted = True
-        record.save(update_fields=["is_deleted"])
+        soft_delete(
+            record,
+            user=request.user,
+            module="rewards",
+            model_name="reward",
+        )
         messages.info(request, "奖励记录已删除。")
     return redirect("rewards:index")
 

@@ -1,10 +1,15 @@
 import logging
 
 from django.contrib.auth.decorators import login_required
+import logging
+
 from django.shortcuts import render
 from django.utils import timezone
 
 from apps.classes.models import SchoolClass, Semester
+
+
+logger = logging.getLogger(__name__)
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +37,7 @@ def index(request):
         male_count = qs.filter(gender="male").count()
         female_count = qs.filter(gender="female").count()
     except Exception:
+        logger.exception("工作台学生统计加载失败")
         pass
 
     # 今日缺勤（依赖 attendance 模块）
@@ -42,6 +48,7 @@ def index(request):
             date=today, status__in=["absent", "late"]
         ).count()
     except Exception:
+        logger.exception("工作台考勤统计加载失败")
         pass
 
     # 本周未交作业（依赖 homework 模块）
@@ -54,6 +61,7 @@ def index(request):
             status__in=["unsubmitted", "late"],
         ).count()
     except Exception:
+        logger.exception("工作台作业统计加载失败")
         pass
 
     # 本周课堂纪律（依赖 discipline 模块）
@@ -64,6 +72,7 @@ def index(request):
             date__gte=week_start
         ).count()
     except Exception:
+        logger.exception("工作台课堂纪律统计加载失败")
         pass
 
     # 本周宿舍纪律（依赖 discipline 模块）
@@ -74,6 +83,7 @@ def index(request):
             date__gte=week_start
         ).count()
     except Exception:
+        logger.exception("工作台宿舍纪律统计加载失败")
         pass
 
     # 本月奖励（依赖 rewards 模块）
@@ -84,6 +94,7 @@ def index(request):
             date__month=today.month, date__year=today.year
         ).count()
     except Exception:
+        logger.exception("工作台奖励统计加载失败")
         pass
 
     # 最近考试均分（依赖 scores 模块）
@@ -93,15 +104,16 @@ def index(request):
         from apps.scores.models import Exam, Score
         if current_semester:
             latest_exam = Exam.objects.filter(
-                semester=current_semester
+                semester=current_semester, is_deleted=False
             ).order_by("-date").first()
             if latest_exam:
                 from django.db.models import Avg
                 result = Score.objects.filter(
-                    exam=latest_exam, status="normal"
+                    exam=latest_exam, status="normal", is_deleted=False
                 ).aggregate(avg=Avg("score"))
                 exam_avg_score = result["avg"]
     except Exception:
+        logger.exception("工作台成绩统计加载失败")
         pass
 
     # 待完成评语（依赖 comments 模块）
@@ -114,6 +126,7 @@ def index(request):
                 status__in=["draft", "pending"],
             ).count()
     except Exception:
+        logger.exception("工作台评语统计加载失败")
         pass
 
     # 出勤率
@@ -134,6 +147,7 @@ def index(request):
                     / total_possible * 100, 1
                 )
     except Exception:
+        logger.exception("工作台提醒加载失败")
         pass
 
     # ----- 提醒事项 -----
@@ -151,6 +165,7 @@ def index(request):
                 "text": "最近一次自动备份失败，请检查备份配置。",
             })
     except Exception:
+        logger.exception("工作台近期事件加载失败")
         pass
 
     # 长时间未下载备份提醒
@@ -168,6 +183,7 @@ def index(request):
                     "text": f"已 {days_since} 天未下载异地备份，建议定期下载到本地。",
                 })
     except Exception:
+        logger.exception("工作台趋势统计加载失败")
         pass
 
     context = {

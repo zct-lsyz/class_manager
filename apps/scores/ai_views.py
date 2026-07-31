@@ -37,11 +37,6 @@ def ai_settings(request):
         action = request.POST.get("action", "save")
 
         if action == "save":
-            # 保存 API Key（留空则保持原值）
-            api_key = request.POST.get("api_key", "").strip()
-            if api_key:
-                config.set_api_key(api_key)
-
             config.model_name = request.POST.get("model_name", "deepseek-chat").strip()
             config.base_url = request.POST.get("base_url", "https://api.deepseek.com").strip()
             try:
@@ -122,7 +117,12 @@ def _build_subject_data_context(exam, subject_name):
     if not es:
         return None
 
-    scores_qs = Score.objects.filter(exam_subject=es, status="normal", score__isnull=False)
+    scores_qs = Score.objects.filter(
+        exam_subject=es,
+        status="normal",
+        score__isnull=False,
+        is_deleted=False,
+    )
     scores = list(scores_qs.select_related("student"))
     if not scores:
         return None
@@ -135,8 +135,14 @@ def _build_subject_data_context(exam, subject_name):
 
     # 前10名和后10名
     scores_sorted = sorted(scores, key=lambda s: float(s.score), reverse=True)
-    top10 = [{"name": s.student.name, "score": float(s.score)} for s in scores_sorted[:10]]
-    bottom10 = [{"name": s.student.name, "score": float(s.score)} for s in scores_sorted[-10:]]
+    top10 = [
+        {"匿名序号": index, "分数": float(score.score)}
+        for index, score in enumerate(scores_sorted[:10], 1)
+    ]
+    bottom10 = [
+        {"匿名序号": index, "分数": float(score.score)}
+        for index, score in enumerate(scores_sorted[-10:], 1)
+    ]
 
     return {
         "考试": exam.name,
@@ -148,12 +154,12 @@ def _build_subject_data_context(exam, subject_name):
         "最低分": min(values),
         "及格率": f"{round(pass_count / len(scores) * 100, 1)}%",
         "优秀率": f"{round(excellent_count / len(scores) * 100, 1)}%",
-        "分数段": {
-            "0-59": sum(1 for v in values if v < 60),
-            "60-69": sum(1 for v in values if 60 <= v < 70),
-            "70-79": sum(1 for v in values if 70 <= v < 80),
-            "80-89": sum(1 for v in values if 80 <= v < 90),
-            "90-100": sum(1 for v in values if v >= 90),
+        "得分率分段": {
+            "0-59%": sum(1 for v in values if v / full < 0.6),
+            "60-69%": sum(1 for v in values if 0.6 <= v / full < 0.7),
+            "70-79%": sum(1 for v in values if 0.7 <= v / full < 0.8),
+            "80-89%": sum(1 for v in values if 0.8 <= v / full < 0.9),
+            "90-100%": sum(1 for v in values if v / full >= 0.9),
         },
         "前10名": top10,
         "后10名": bottom10,
@@ -182,7 +188,9 @@ def ai_generate(request):
 
     exam = None
     if exam_id:
-        exam = Exam.objects.filter(pk=exam_id).first()
+        exam = Exam.objects.filter(
+            pk=exam_id, school_class=current_class, is_deleted=False
+        ).first()
     if not exam:
         messages.error(request, "请先选择考试。")
         return redirect("scores:analysis")
@@ -229,20 +237,25 @@ def ai_generate(request):
             record.student = student
             # 学生历次总分
             exams_qs = Exam.objects.filter(
-                school_class=current_class, is_published=True,
+                school_class=current_class, is_published=True, is_deleted=False,
             ).order_by("date")
             trend = []
             for e in exams_qs:
                 total = 0
                 count = 0
                 for es in ExamSubject.objects.filter(exam=e):
-                    s = Score.objects.filter(exam_subject=es, student=student, status="normal").first()
+                    s = Score.objects.filter(
+                        exam_subject=es,
+                        student=student,
+                        status="normal",
+                        is_deleted=False,
+                    ).first()
                     if s and s.score is not None:
                         total += float(s.score)
                         count += 1
                 if count > 0:
                     trend.append({"考试": e.name, "日期": str(e.date), "总分": round(total, 1)})
-            data_context = {"学生": student.name, "学号": student.student_id, "历次考试": trend}
+            data_context = {"学生": "匿名学生", "历次考试": trend}
             result, duration, prompt = ai_services.generate_student_analysis(config, data_context)
             record.subject_name = student.name
             record.input_summary = json.dumps(data_context, ensure_ascii=False)[:500]
@@ -288,7 +301,9 @@ def ai_records(request):
 @login_required
 def ai_record_detail(request, pk):
     """AI 分析记录详情"""
+    current_class = SchoolClass.objects.filter(is_current=True).first()
     record = get_object_or_404(
-        AIAnalysisRecord.objects.select_related("exam", "student"), pk=pk,
+        AIAnalysisRecord.objects.select_related("exam", "student"),
+        pk=pk, school_class=current_class,
     )
     return render(request, "scores/ai_record_detail.html", {"record": record})

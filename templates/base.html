@@ -59,7 +59,7 @@
         <div class="row">
             <!-- 左侧固定导航 -->
             <nav class="col-md-2 d-none d-md-block sidebar">
-                <div class="sidebar-sticky pt-3">
+                <div class="sidebar-sticky pt-3" id="desktopSidebarContent">
                     <!-- 工作台 -->
                     <div class="nav-section-title">工作台</div>
                     <ul class="nav flex-column">
@@ -176,6 +176,11 @@
                         <li class="nav-item">
                             <a class="nav-link" href="{% url 'scores:ai_settings' %}">
                                 <i class="bi bi-stars me-2"></i>AI 分析设置
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="{% url 'scores:exam_analysis' %}">
+                                <i class="bi bi-file-earmark-bar-graph me-2"></i>原卷小分分析
                             </a>
                         </li>
                     </ul>
@@ -373,8 +378,7 @@
             <button type="button" class="btn-close" data-bs-dismiss="offcanvas"></button>
         </div>
         <div class="offcanvas-body">
-            <!-- 侧滑菜单内容与左侧导航一致（通过JS动态加载或直接复制） -->
-            <p class="text-muted small">完整菜单请在桌面端查看</p>
+            <div id="mobileSidebarContent"></div>
         </div>
     </div>
     {% else %}
@@ -384,6 +388,15 @@
 
     <!-- Bootstrap JS -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    {% if user.is_authenticated %}
+    <script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const desktopMenu = document.getElementById('desktopSidebarContent');
+        const mobileMenu = document.getElementById('mobileSidebarContent');
+        if (desktopMenu && mobileMenu) mobileMenu.innerHTML = desktopMenu.innerHTML;
+    });
+    </script>
+    {% endif %}
     {% block extra_js %}{% endblock %}
 </body>
 </html>

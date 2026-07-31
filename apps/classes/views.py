@@ -7,7 +7,7 @@ from apps.classes.models import (
     SchoolClass, Semester, CommitteeRole, CommitteeMember, StudyGroup, CourseScheduleEntry,
 )
 from apps.classes.forms import SchoolClassForm, SemesterForm
-from apps.homework.models import Subject
+from apps.classes.subjects import Subject
 from apps.students.models import Student
 from apps.audit.models import OperationLog
 
@@ -184,17 +184,25 @@ def committee_role_create(request):
 def committee_member_create(request):
     """任命班委"""
     current_class = SchoolClass.objects.filter(is_current=True).first()
-    current_semester = Semester.objects.filter(is_current=True).first()
+    current_semester = Semester.objects.filter(
+        school_class=current_class, is_current=True,
+    ).first()
     if request.method == "POST":
         role_id = request.POST.get("role", "")
         student_id = request.POST.get("student", "")
         if role_id and student_id:
             from apps.students.models import Student
-            role = get_object_or_404(CommitteeRole, pk=role_id)
-            student = get_object_or_404(Student, pk=student_id)
-            CommitteeMember.objects.create(
-                role=role, student=student, semester=current_semester, is_active=True,
+            role = get_object_or_404(
+                CommitteeRole, pk=role_id, school_class=current_class,
             )
+            student = get_object_or_404(
+                Student, pk=student_id, school_class=current_class, is_deleted=False,
+            )
+            CommitteeMember.objects.update_or_create(
+                role=role, student=student, semester=current_semester,
+                defaults={"is_active": True},
+            )
+            _sync_student_positions(student)
             messages.success(request, f"{student.name} 已任命为「{role.name}」。")
         else:
             messages.error(request, "请选择职务和学生。")
@@ -204,12 +212,25 @@ def committee_member_create(request):
 @login_required
 def committee_member_remove(request, pk):
     """卸任班委"""
-    member = get_object_or_404(CommitteeMember, pk=pk)
+    current_class = SchoolClass.objects.filter(is_current=True).first()
+    member = get_object_or_404(
+        CommitteeMember, pk=pk, role__school_class=current_class,
+    )
     if request.method == "POST":
         member.is_active = False
         member.save()
+        _sync_student_positions(member.student)
         messages.info(request, f"{member.student.name} 已卸任「{member.role.name}」。")
     return redirect("classes:committee_list")
+
+
+def _sync_student_positions(student):
+    student.class_position = "、".join(
+        student.committee_memberships.filter(
+            is_active=True, role__is_active=True,
+        ).select_related("role").values_list("role__name", flat=True)
+    )
+    student.save(update_fields=["class_position", "updated_at"])
 
 
 # ====== 学习小组 ======
@@ -289,7 +310,7 @@ def course_schedule(request):
         grid[e.weekday][e.period] = e
         max_period = max(max_period, e.period)
 
-    # 可选课程（来自 homework 的 Subject）
+    # 可选课程（统一科目主数据入口）
     subjects = Subject.objects.filter(is_active=True)
 
     if request.method == "POST":

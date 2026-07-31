@@ -8,7 +8,7 @@
         <div class="card">
             <div class="card-body text-center py-3">
                 <i class="bi bi-shield-plus fs-2 text-primary"></i>
-                <p class="mb-2 small">手动创建完整备份<br><small class="text-muted">数据库 + 配置 + 校验值</small></p>
+                <p class="mb-2 small">手动创建完整备份<br><small class="text-muted">数据库 + 全部附件 + 迁移清单 + 校验值</small></p>
                 <form method="post" action="{% url 'backups:create_backup' %}" onsubmit="return confirm('确认创建完整备份？')">
                     {% csrf_token %}
                     <button class="btn btn-sm btn-primary"><i class="bi bi-database-check me-1"></i>立即创建</button>

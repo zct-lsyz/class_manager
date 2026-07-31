@@ -24,7 +24,7 @@
                 </td>
                 <td>{{ c.inspector|default:"-" }}</td>
                 <td>{% if c.rectification %}<span class="text-warning"><i class="bi bi-tools"></i> 待整改{% else %}<span class="text-muted">-{% endif %}</td>
-                <td><a href="{% url 'dormitory:hygiene_detail' c.pk %}" class="btn btn-sm btn-outline-primary">详情</a></td>
+                <td><a href="{% url 'dormitory:hygiene_detail' c.pk %}" class="btn btn-sm btn-outline-primary">详情</a> <form method="post" action="{% url 'dormitory:hygiene_delete' c.pk %}" class="d-inline" onsubmit="return confirm('确认移入回收站？')">{% csrf_token %}<button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button></form></td>
             </tr>
             {% empty %}<tr><td colspan="7" class="text-muted text-center py-4">暂无检查记录</td></tr>
             {% endfor %}

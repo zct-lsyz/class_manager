@@ -1,9 +1,11 @@
 from django.db import models
+from django.core.exceptions import ValidationError
+from django.core.validators import MinValueValidator
 from django.utils import timezone
 
 from apps.classes.models import SchoolClass, Semester
 from apps.students.models import Student
-from apps.homework.models import Subject
+from apps.classes.subjects import Subject
 
 
 class BaseModel(models.Model):
@@ -40,6 +42,7 @@ class Exam(BaseModel):
     date = models.DateField("考试日期")
     total_score = models.IntegerField("总分", null=True, blank=True)
     is_published = models.BooleanField("已发布", default=False)
+    is_deleted = models.BooleanField("已删除", default=False)
     remarks = models.TextField("备注", blank=True, default="")
 
     class Meta:
@@ -61,7 +64,7 @@ class ExamSubject(BaseModel):
         Subject, on_delete=models.CASCADE,
         related_name="exam_subjects", verbose_name="科目",
     )
-    full_score = models.IntegerField("满分", default=100)
+    full_score = models.IntegerField("满分", default=100, validators=[MinValueValidator(1)])
     sort_order = models.IntegerField("排序", default=0)
 
     class Meta:
@@ -104,6 +107,7 @@ class Score(BaseModel):
     )
     rank = models.IntegerField("班级名次", null=True, blank=True)
     remarks = models.TextField("备注", blank=True, default="")
+    is_deleted = models.BooleanField("已删除", default=False)
 
     class Meta:
         verbose_name = "成绩"
@@ -112,9 +116,35 @@ class Score(BaseModel):
         indexes = [
             models.Index(fields=["exam", "student"]),
         ]
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(score__gte=0) | models.Q(score__isnull=True),
+                name="score_non_negative_or_null",
+            ),
+        ]
 
     def __str__(self):
-        return f"{self.student.name} - {self.exam_subject.subject.name}: {self.score or self.get_status_display()}"
+        value = self.score if self.score is not None else self.get_status_display()
+        return f"{self.student.name} - {self.exam_subject.subject.name}: {value}"
+
+    def clean(self):
+        errors = {}
+        if self.exam_subject_id and self.exam_id:
+            if self.exam_subject.exam_id != self.exam_id:
+                errors["exam"] = "考试必须与考试科目所属考试一致。"
+        if self.score is not None and self.exam_subject_id:
+            if self.score < 0:
+                errors["score"] = "成绩不能小于 0。"
+            elif self.score > self.exam_subject.full_score:
+                errors["score"] = (
+                    f"成绩不能超过该科目满分 {self.exam_subject.full_score}。"
+                )
+        if errors:
+            raise ValidationError(errors)
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        return super().save(*args, **kwargs)
 
 
 class SupportPlan(BaseModel):
@@ -173,5 +203,5 @@ class SupportFollowUp(BaseModel):
         return f"{self.plan.student.name} - {self.date}"
 
 # ====== AI 成绩分析模型 ======
-from apps.scores.ai_models import AIAnalysisConfig, AIAnalysisRecord
+from apps.scores.ai_models import AIAnalysisConfig, AIAnalysisRecord, AIExamAnalysisSource, AIQuestionWeakness
 

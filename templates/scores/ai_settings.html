@@ -9,8 +9,8 @@
 
 <div class="alert alert-info">
     <i class="bi bi-info-circle me-1"></i>
-    配置 API Key 后，可在成绩分析页生成 AI 文字分析。API Key 使用服务器密钥加密存储，可随时修改或留空保留原值。
-    支持任何 OpenAI 兼容接口（默认 DeepSeek）。
+    API Key 只从服务器环境变量 <code>DEEPSEEK_API_KEY</code> 读取，不写入数据库、日志或备份。
+    发送给模型的成绩数据会移除姓名、学号、电话和地址。支持 OpenAI 兼容接口（默认 DeepSeek）。
 </div>
 
 <div class="row g-4">
@@ -22,11 +22,7 @@
                 <form method="post">
                     {% csrf_token %}
                     <input type="hidden" name="action" value="save">
-                    <div class="mb-3">
-                        <label class="form-label small">API Key {% if has_key %}<span class="badge bg-success">已配置</span>{% else %}<span class="badge bg-warning">未配置</span>{% endif %}</label>
-                        <input type="password" name="api_key" class="form-control" placeholder="{% if has_key %}已配置（输入新值可覆盖）{% else %}sk-...{% endif %}">
-                        <div class="form-text">也可通过服务器环境变量 DEEPSEEK_API_KEY 配置（优先）。</div>
-                    </div>
+                    <div class="mb-3"><label class="form-label small">API Key</label><div>{% if has_key %}<span class="badge bg-success">服务器环境变量已配置</span>{% else %}<span class="badge bg-warning">未配置 DEEPSEEK_API_KEY</span>{% endif %}</div></div>
                     <div class="mb-3">
                         <label class="form-label small">模型名称</label>
                         <input type="text" name="model_name" class="form-control" value="{{ config.model_name }}" placeholder="deepseek-chat">

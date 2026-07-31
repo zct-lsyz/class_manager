@@ -4,18 +4,26 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.core.paginator import Paginator
 from django.db.models import Avg, Max, Min, Count, Q
 from django.utils import timezone
+from django.db import transaction
 
 from apps.scores.models import Exam, ExamSubject, Score, SupportPlan, SupportFollowUp
 from apps.scores.forms import ExamForm, ExamSubjectForm, ScoreForm, SupportPlanForm
-from apps.homework.models import Subject
+from apps.classes.subjects import Subject
 from apps.classes.models import SchoolClass, Semester
+from apps.audit.services import soft_delete
+from apps.students.models import Student
+
+
+def get_client_ip(request):
+    forwarded = request.META.get("HTTP_X_FORWARDED_FOR", "")
+    return forwarded.split(",")[0].strip() if forwarded else request.META.get("REMOTE_ADDR", "")
 
 
 @login_required
 def exam_list(request):
     """考试管理"""
     current_class = SchoolClass.objects.filter(is_current=True).first()
-    exams = Exam.objects.filter(school_class=current_class).order_by("-date") if current_class else []
+    exams = Exam.objects.filter(school_class=current_class, is_deleted=False).order_by("-date") if current_class else []
 
     paginator = Paginator(exams, 20)
     page = request.GET.get("page", 1)
@@ -48,14 +56,16 @@ def exam_create(request):
 @login_required
 def exam_detail(request, pk):
     """考试详情：科目管理 + 发布状态"""
+    current_class = SchoolClass.objects.filter(is_current=True).first()
     exam = get_object_or_404(
-        Exam.objects.select_related("semester"), pk=pk,
+        Exam.objects.select_related("semester"),
+        pk=pk, school_class=current_class, is_deleted=False,
     )
     exam_subjects = ExamSubject.objects.filter(exam=exam).select_related("subject")
 
     # 统计各科已录入成绩数
     for es in exam_subjects:
-        es.score_count = Score.objects.filter(exam_subject=es).count()
+        es.score_count = Score.objects.filter(exam_subject=es, is_deleted=False).count()
 
     # 未加入考试的科目
     added_subject_ids = exam_subjects.values_list("subject_id", flat=True)
@@ -76,9 +86,29 @@ def exam_detail(request, pk):
 
 
 @login_required
+def exam_delete(request, pk):
+    current_class = SchoolClass.objects.filter(is_current=True).first()
+    exam = get_object_or_404(
+        Exam, pk=pk, school_class=current_class, is_deleted=False,
+    )
+    if request.method == "POST":
+        soft_delete(
+            exam,
+            user=request.user,
+            module="scores",
+            model_name="exam",
+        )
+        messages.info(request, "考试已移入回收站。")
+    return redirect("scores:exam_list")
+
+
+@login_required
 def exam_subject_create(request, pk):
     """为考试添加科目"""
-    exam = get_object_or_404(Exam, pk=pk)
+    current_class = SchoolClass.objects.filter(is_current=True).first()
+    exam = get_object_or_404(
+        Exam, pk=pk, school_class=current_class, is_deleted=False,
+    )
     if request.method == "POST":
         subject_id = request.POST.get("subject", "")
         full_score = request.POST.get("full_score", "100")
@@ -87,6 +117,9 @@ def exam_subject_create(request, pk):
                 full_score = int(full_score)
             except (ValueError, TypeError):
                 full_score = 100
+            if full_score <= 0:
+                messages.error(request, "满分必须大于 0。")
+                return redirect("scores:exam_detail", pk=exam.pk)
             subject = get_object_or_404(Subject, pk=subject_id)
             if ExamSubject.objects.filter(exam=exam, subject=subject).exists():
                 messages.warning(request, f"科目「{subject.name}」已添加。")
@@ -106,7 +139,7 @@ def exam_subject_delete(request, pk):
     es = get_object_or_404(ExamSubject, pk=pk)
     exam_pk = es.exam.pk
     if request.method == "POST":
-        has_scores = Score.objects.filter(exam_subject=es).exists()
+        has_scores = Score.objects.filter(exam_subject=es, is_deleted=False).exists()
         if has_scores:
             messages.error(request, f"科目「{es.subject.name}」已有成绩记录，不能删除。可先删除对应成绩。")
         else:
@@ -127,63 +160,90 @@ def score_entry(request):
     scores = []
 
     if exam_id and subject_id:
-        exam = get_object_or_404(Exam, pk=exam_id)
-        exam_subject = get_object_or_404(ExamSubject, pk=subject_id)
-        scores = Score.objects.filter(
-            exam_subject=exam_subject
-        ).select_related("student").order_by("student__student_id")
+        exam = get_object_or_404(Exam, pk=exam_id, school_class=current_class, is_deleted=False)
+        exam_subject = get_object_or_404(ExamSubject, pk=subject_id, exam=exam)
+        existing_scores = {
+            item.student_id: item for item in Score.objects.filter(
+            exam_subject=exam_subject, is_deleted=False
+            ).select_related("student")
+        }
+        scores = [
+            existing_scores.get(student.pk) or Score(
+                exam=exam, exam_subject=exam_subject, student=student, status="normal",
+            )
+            for student in Student.objects.filter(
+                school_class=current_class, is_deleted=False,
+            ).order_by("student_id")
+        ]
 
     # 批量保存成绩（POST 提交 score_{student_id} 字段）
     if request.method == "POST" and exam_id and subject_id:
-        exam = get_object_or_404(Exam, pk=exam_id)
-        exam_subject = get_object_or_404(ExamSubject, pk=subject_id)
-        current_semester = Semester.objects.filter(is_current=True).first()
+        exam = get_object_or_404(Exam, pk=exam_id, school_class=current_class, is_deleted=False)
+        exam_subject = get_object_or_404(ExamSubject, pk=subject_id, exam=exam)
 
         saved_count = 0
         cleared_count = 0
+        submissions = []
+        errors = []
+        valid_statuses = {key for key, _label in Score.STATUS_CHOICES}
+        student_ids = set(Student.objects.filter(
+            school_class=current_class, is_deleted=False,
+        ).values_list("pk", flat=True))
         for key, value in request.POST.items():
             if not key.startswith("score_"):
                 continue
             student_id = key.replace("score_", "")
             if not student_id.isdigit():
                 continue
+            student_pk = int(student_id)
+            if student_pk not in student_ids:
+                errors.append(f"学生记录 {student_id} 不属于当前班级。")
+                continue
 
             # 状态字段
             status = request.POST.get(f"status_{student_id}", "normal")
+            if status not in valid_statuses:
+                errors.append(f"学生记录 {student_id} 的成绩状态无效。")
+                continue
             score_val = value.strip() if value else ""
-
-            # 更新或创建
-            score_obj, created = Score.objects.get_or_create(
-                exam_subject=exam_subject, student_id=int(student_id),
-                defaults={"exam": exam, "status": "normal"},
-            )
-
             if score_val == "":
-                # 清空成绩
-                if score_obj.score is not None:
-                    score_obj.score = None
-                    score_obj.save()
-                    cleared_count += 1
+                submissions.append((student_pk, None, status))
                 continue
 
             try:
                 score_num = float(score_val)
             except (ValueError, TypeError):
+                errors.append(f"学生记录 {student_id} 的成绩格式无效。")
                 continue
 
-            # 校验不超过满分
-            if score_num > exam_subject.full_score:
-                messages.error(request, f"学号 {student_id} 的成绩 {score_num} 超过满分 {exam_subject.full_score}，未保存。")
+            if score_num < 0 or score_num > exam_subject.full_score:
+                errors.append(f"学生记录 {student_id} 的成绩须在 0 至 {exam_subject.full_score} 之间。")
                 continue
+            submissions.append((student_pk, score_num, status))
 
-            score_obj.score = score_num
-            score_obj.status = status
-            score_obj.exam = exam
-            score_obj.save()
-            saved_count += 1
+        if errors:
+            messages.error(request, "本次未保存：" + "；".join(errors[:10]))
+            return redirect(f"{request.path}?exam_id={exam_id}&subject_id={subject_id}")
 
-        # 重新计算名次
-        _update_ranks(exam_subject)
+        with transaction.atomic():
+            for student_pk, score_num, status in submissions:
+                score_obj, created = Score.objects.get_or_create(
+                    exam_subject=exam_subject, student_id=student_pk,
+                    defaults={"exam": exam, "status": status, "score": score_num, "is_deleted": False},
+                )
+                was_scored = score_obj.score is not None
+                score_obj.is_deleted = False
+                score_obj.score = score_num
+                score_obj.status = status
+                score_obj.exam = exam
+                score_obj.save()
+                if score_num is None and was_scored:
+                    cleared_count += 1
+                elif score_num is not None:
+                    saved_count += 1
+
+            # 重新计算名次
+            _update_ranks(exam_subject)
 
         from apps.audit.models import OperationLog
         OperationLog.objects.create(
@@ -196,8 +256,8 @@ def score_entry(request):
         messages.success(request, f"成绩已保存：录入 {saved_count} 条，清空 {cleared_count} 条。")
         return redirect(f"{request.path}?exam_id={exam_id}&subject_id={subject_id}")
 
-    exams = Exam.objects.filter(school_class=current_class).order_by("-date") if current_class else []
-    subjects = ExamSubject.objects.filter(exam_id=exam_id).select_related("subject") if exam_id else []
+    exams = Exam.objects.filter(school_class=current_class, is_deleted=False).order_by("-date") if current_class else []
+    subjects = ExamSubject.objects.filter(exam_id=exam_id, exam__school_class=current_class, exam__is_deleted=False).select_related("subject") if exam_id else []
 
     context = {
         "exams": exams,
@@ -214,6 +274,7 @@ def _update_ranks(exam_subject):
     """按成绩重新计算班级名次（缺考不计名次）"""
     scores = list(Score.objects.filter(
         exam_subject=exam_subject, status="normal", score__isnull=False,
+        is_deleted=False,
     ).order_by("-score"))
     rank = 0
     prev = None
@@ -226,43 +287,60 @@ def _update_ranks(exam_subject):
 
 
 @login_required
+def score_delete(request, pk):
+    current_class = SchoolClass.objects.filter(is_current=True).first()
+    score = get_object_or_404(
+        Score.objects.select_related("exam", "exam_subject__subject", "student"),
+        pk=pk, exam__school_class=current_class, is_deleted=False,
+    )
+    if request.method == "POST":
+        soft_delete(score, user=request.user, module="scores", model_name="score")
+        _update_ranks(score.exam_subject)
+        messages.info(request, "成绩记录已移入回收站。")
+    return redirect(f"/scores/entry/?exam_id={score.exam_id}&subject_id={score.exam_subject_id}")
+
+
+@login_required
 def analysis(request):
     """成绩分析"""
     current_class = SchoolClass.objects.filter(is_current=True).first()
     current_semester = Semester.objects.filter(is_current=True).first()
 
-    exams = Exam.objects.filter(school_class=current_class, is_published=True).order_by("-date") if current_class else []
+    exams = Exam.objects.filter(school_class=current_class, is_published=True, is_deleted=False).order_by("-date") if current_class else []
     exam_id = request.GET.get("exam_id", "")
-    exam = get_object_or_404(Exam, pk=exam_id) if exam_id else None
+    exam = get_object_or_404(
+        Exam, pk=exam_id, school_class=current_class, is_deleted=False,
+    ) if exam_id else None
 
     analysis_data = {}
     if exam:
         for es in ExamSubject.objects.filter(exam=exam).select_related("subject"):
-            scores_qs = Score.objects.filter(exam_subject=es)
-            normal_scores = scores_qs.filter(status="normal")
+            scores_qs = Score.objects.filter(exam_subject=es, is_deleted=False)
+            normal_scores = scores_qs.filter(status="normal", score__isnull=False)
             stats = normal_scores.aggregate(
                 avg=Avg("score"), max=Max("score"), min=Min("score"), count=Count("id")
             )
-            total_students = scores_qs.count()
+            total_students = normal_scores.count()
             pass_count = normal_scores.filter(score__gte=es.full_score * 0.6).count()
             excellent_count = normal_scores.filter(score__gte=es.full_score * 0.85).count()
 
             # 分数段分布
-            bands = {"0-59": 0, "60-69": 0, "70-79": 0, "80-89": 0, "90-100": 0}
+            bands = {"0-59%": 0, "60-69%": 0, "70-79%": 0, "80-89%": 0, "90-100%": 0}
             for s in normal_scores:
                 v = float(s.score) if s.score is not None else None
                 if v is None:
                     continue
-                if v < 60:
-                    bands["0-59"] += 1
-                elif v < 70:
-                    bands["60-69"] += 1
-                elif v < 80:
-                    bands["70-79"] += 1
-                elif v < 90:
-                    bands["80-89"] += 1
+                ratio = v / es.full_score if es.full_score else 0
+                if ratio < 0.6:
+                    bands["0-59%"] += 1
+                elif ratio < 0.7:
+                    bands["60-69%"] += 1
+                elif ratio < 0.8:
+                    bands["70-79%"] += 1
+                elif ratio < 0.9:
+                    bands["80-89%"] += 1
                 else:
-                    bands["90-100"] += 1
+                    bands["90-100%"] += 1
 
             analysis_data[es.subject.name] = {
                 "full_score": es.full_score,
@@ -282,14 +360,19 @@ def analysis(request):
         student = Student.objects.filter(pk=student_id).first()
         if student:
             exams_qs = Exam.objects.filter(
-                school_class=current_class, is_published=True
+                school_class=current_class, is_published=True, is_deleted=False
             ).order_by("date")
             trend = []
             for e in exams_qs:
                 total = 0
                 count = 0
                 for es in ExamSubject.objects.filter(exam=e):
-                    s = Score.objects.filter(exam_subject=es, student=student, status="normal").first()
+                    s = Score.objects.filter(
+                        exam_subject=es,
+                        student=student,
+                        status="normal",
+                        is_deleted=False,
+                    ).first()
                     if s and s.score is not None:
                         total += float(s.score)
                         count += 1
@@ -376,8 +459,10 @@ def score_import(request):
             messages.error(request, "请选择考试、科目并上传文件。")
             return redirect(f"{request.path}?exam_id={exam_id}&subject_id={subject_id}")
 
-        exam = get_object_or_404(Exam, pk=exam_id)
-        exam_subject = get_object_or_404(ExamSubject, pk=subject_id)
+        exam = get_object_or_404(Exam, pk=exam_id, is_deleted=False)
+        exam_subject = get_object_or_404(
+            ExamSubject, pk=subject_id, exam=exam
+        )
 
         from openpyxl import load_workbook
         try:
@@ -402,50 +487,61 @@ def score_import(request):
             messages.error(request, "Excel 表头必须包含「学号」和「成绩」列。")
             return redirect("scores:score_entry")
 
-        student_map = {s.student_id: s for s in Student.objects.all()}
+        student_map = {
+            student.student_id: student
+            for student in Student.objects.filter(
+                school_class=exam.school_class, is_deleted=False
+            )
+        }
         status_map = dict(Score.STATUS_CHOICES)
         imported = 0
         skipped = []
 
-        for idx, row in enumerate(rows[1:], start=2):
-            student_id = str(row[header_map["学号"]]).strip() if row[header_map["学号"]] is not None else ""
-            raw_score = row[header_map["成绩"]]
+        with transaction.atomic():
+            for idx, row in enumerate(rows[1:], start=2):
+                student_id = str(row[header_map["学号"]]).strip() if row[header_map["学号"]] is not None else ""
+                raw_score = row[header_map["成绩"]]
 
-            if not student_id:
-                skipped.append((idx, "", "学号为空"))
-                continue
-            student = student_map.get(student_id)
-            if not student:
-                skipped.append((idx, student_id, f"学号不存在"))
-                continue
-            if raw_score is None or str(raw_score).strip() == "":
-                skipped.append((idx, student_id, "成绩为空"))
-                continue
+                if not student_id:
+                    skipped.append((idx, "", "学号为空"))
+                    continue
+                student = student_map.get(student_id)
+                if not student:
+                    skipped.append((idx, student_id, "学号不存在"))
+                    continue
+                if raw_score is None or str(raw_score).strip() == "":
+                    skipped.append((idx, student_id, "成绩为空"))
+                    continue
 
-            try:
-                score_val = float(raw_score)
-            except (ValueError, TypeError):
-                skipped.append((idx, student_id, f"成绩格式错误({raw_score})"))
-                continue
+                try:
+                    score_val = float(raw_score)
+                except (ValueError, TypeError):
+                    skipped.append((idx, student_id, f"成绩格式错误({raw_score})"))
+                    continue
 
-            if score_val > exam_subject.full_score:
-                skipped.append((idx, student_id, f"超过满分{exam_subject.full_score}"))
-                continue
+                if score_val < 0 or score_val > exam_subject.full_score:
+                    skipped.append((idx, student_id, f"成绩须在0至{exam_subject.full_score}之间"))
+                    continue
 
-            # 状态（可选列）
-            status = "normal"
-            if "状态" in header_map:
-                raw_status = str(row[header_map["状态"]] or "").strip()
-                for key, label in Score.STATUS_CHOICES:
-                    if raw_status == label:
-                        status = key
-                        break
+                # 状态（可选列）
+                status = "normal"
+                if "状态" in header_map:
+                    raw_status = str(row[header_map["状态"]] or "").strip()
+                    for key, label in Score.STATUS_CHOICES:
+                        if raw_status == label:
+                            status = key
+                            break
 
-            Score.objects.update_or_create(
-                exam_subject=exam_subject, student=student,
-                defaults={"exam": exam, "score": score_val, "status": status},
-            )
-            imported += 1
+                Score.objects.update_or_create(
+                    exam_subject=exam_subject, student=student,
+                    defaults={
+                        "exam": exam,
+                        "score": score_val,
+                        "status": status,
+                        "is_deleted": False,
+                    },
+                )
+                imported += 1
 
         _update_ranks(exam_subject)
 

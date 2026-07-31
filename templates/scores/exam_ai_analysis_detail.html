@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block title %}原卷小分分析详情{% endblock %}
+{% block content %}
+<div class="mt-3 mb-3"><a href="{% url 'scores:exam_analysis' %}">&larr; 返回分析记录</a></div>
+<div class="d-flex justify-content-between align-items-start mb-3">
+    <div>
+        <h4>{{ source.exam_subject.exam.name }} - {{ source.exam_subject.subject.name }}</h4>
+        <div class="text-muted small">{{ source.created_at|date:"Y-m-d H:i" }} | 模型：{{ source.model_name|default:"-" }} | 耗时：{{ source.duration_ms|default:"-" }}ms</div>
+    </div>
+    {% if source.status == "completed" %}<span class="badge bg-success">已完成</span>{% elif source.status == "failed" %}<span class="badge bg-danger">失败</span>{% else %}<span class="badge bg-warning text-dark">{{ source.get_status_display }}</span>{% endif %}
+</div>
+
+<div class="card mb-3">
+    <div class="card-header">源文件</div>
+    <div class="card-body">
+        <a href="{{ source.paper_file.url }}?download=1" class="btn btn-sm btn-outline-secondary me-2"><i class="bi bi-download"></i> 下载试卷原卷</a>
+        <a href="{{ source.score_file.url }}?download=1" class="btn btn-sm btn-outline-secondary"><i class="bi bi-download"></i> 下载小分表</a>
+    </div>
+</div>
+
+{% if source.error_message %}<div class="alert alert-danger">{{ source.error_message }}</div>{% endif %}
+{% if source.warnings %}
+<div class="alert alert-warning"><strong>解析提示：</strong><ul class="mb-0">{% for warning in source.warnings %}<li>{{ warning }}</li>{% endfor %}</ul></div>
+{% endif %}
+{% if source.overall_summary %}
+<div class="card mb-3"><div class="card-header">总体薄弱情况</div><div class="card-body" style="white-space: pre-wrap;">{{ source.overall_summary }}</div></div>
+{% endif %}
+
+{% if source.weaknesses.all %}
+<div class="card">
+    <div class="card-header">逐题知识点诊断</div>
+    <div class="card-body p-0 table-responsive">
+        <table class="table mb-0 align-middle">
+            <thead><tr><th>题号</th><th>题型/知识点</th><th>满分</th><th>均分</th><th>得分率</th><th>等级</th><th style="min-width:240px">分析与建议</th></tr></thead>
+            <tbody>
+            {% for item in source.weaknesses.all %}
+            <tr>
+                <td class="fw-bold">{{ item.question_label }}</td>
+                <td>{{ item.question_type|default:"未识别" }}<br><span class="text-muted small">{{ item.knowledge_points|join:"、"|default:"未识别" }}</span></td>
+                <td>{{ item.full_score|floatformat:1 }}</td>
+                <td>{{ item.average_score|floatformat:1 }}</td>
+                <td>{% widthratio item.score_rate 1 100 %}%<br><span class="text-muted small">零分 {% widthratio item.zero_rate 1 100 %}% / 满分 {% widthratio item.full_rate 1 100 %}%</span></td>
+                <td>{% if item.weakness_level == "high" %}<span class="badge bg-danger">重点薄弱</span>{% elif item.weakness_level == "medium" %}<span class="badge bg-warning text-dark">一般薄弱</span>{% else %}<span class="badge bg-success">掌握较好</span>{% endif %}</td>
+                <td><div>{{ item.analysis|default:"-" }}</div>{% if item.recommendation %}<div class="text-primary small mt-1">建议：{{ item.recommendation }}</div>{% endif %}</td>
+            </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% elif source.question_summary %}
+<div class="alert alert-info">小分表已经在本地解析，但 AI 未成功生成结构化知识点诊断。</div>
+{% endif %}
+{% endblock %}

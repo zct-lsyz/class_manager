@@ -26,7 +26,7 @@
 <div class="alert alert-info">
     <i class="bi bi-info-circle me-1"></i>请先选择科目进行成绩录入。
     {% if exam.exam_subjects.count == 0 %}
-    <a href="#" class="alert-link" onclick="alert('请先在考试详情中添加考试科目（该功能开发中）');return false;">添加考试科目</a>
+    <a href="{% url 'scores:exam_detail' exam.pk %}" class="alert-link">添加考试科目</a>
     {% endif %}
 </div>
 {% endif %}
@@ -43,7 +43,7 @@
             <input type="hidden" name="exam_id" value="{{ exam.pk }}">
             <input type="hidden" name="subject_id" value="{{ exam_subject.pk }}">
             <table class="table mb-0">
-                <thead><tr><th>学号</th><th>姓名</th><th>成绩</th><th>状态</th><th>名次</th></tr></thead>
+                <thead><tr><th>学号</th><th>姓名</th><th>成绩</th><th>状态</th><th>名次</th><th>操作</th></tr></thead>
                 <tbody>
                 {% for s in scores %}
                 <tr>
@@ -62,9 +62,10 @@
                         </select>
                     </td>
                     <td>{% if s.rank %}{{ s.rank }}{% else %}-{% endif %}</td>
+                    <td>{% if s.pk %}<button type="submit" formaction="{% url 'scores:score_delete' s.pk %}" class="btn btn-sm btn-outline-danger" onclick="return confirm('确认将这条成绩移入回收站？')"><i class="bi bi-trash"></i></button>{% else %}-{% endif %}</td>
                 </tr>
                 {% empty %}
-                <tr><td colspan="5" class="text-muted text-center py-4">暂无学生成绩数据</td></tr>
+                <tr><td colspan="6" class="text-muted text-center py-4">当前班级暂无学生</td></tr>
                 {% endfor %}
                 </tbody>
             </table>

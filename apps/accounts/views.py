@@ -13,6 +13,7 @@ from django.contrib.auth.decorators import login_required
 from django.contrib.auth.models import User
 from django.shortcuts import render, redirect
 from django.utils import timezone
+from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
 
 from apps.accounts.forms import (
@@ -42,9 +43,33 @@ def login_view(request):
     ip = get_client_ip(request)
     lockout_key = f"login_lockout_{ip}"
     attempt_key = f"login_attempts_{ip}"
+    limit = getattr(settings, "LOGIN_ATTEMPT_LIMIT", 5)
+    timeout = getattr(settings, "LOGIN_ATTEMPT_TIMEOUT", 300)
+    window_start = timezone.now() - datetime.timedelta(seconds=timeout)
+    last_success = OperationLog.objects.filter(
+        action="login", ip_address=ip, success=True,
+    ).order_by("-created_at").first()
+    if last_success and last_success.created_at > window_start:
+        window_start = last_success.created_at
+    recent_failures = OperationLog.objects.filter(
+        action="login_failed", ip_address=ip, success=False,
+        created_at__gte=window_start,
+    )
+    if recent_failures.count() >= limit:
+        latest_failure = recent_failures.order_by("-created_at").first()
+        lockout_until = latest_failure.created_at + datetime.timedelta(seconds=timeout)
+        remaining = max(1, int((lockout_until - timezone.now()).total_seconds()))
+        messages.error(request, f"登录失败次数过多，请等待 {remaining} 秒后重试。")
+        return render(request, "accounts/login.html", {"form": LoginForm()})
 
     if request.session.get(lockout_key):
-        lockout_until = request.session.get(f"{lockout_key}_until")
+        lockout_until_value = request.session.get(f"{lockout_key}_until")
+        lockout_until = (
+            datetime.datetime.fromtimestamp(
+                lockout_until_value, tz=datetime.timezone.utc,
+            )
+            if isinstance(lockout_until_value, (int, float)) else None
+        )
         if lockout_until and timezone.now() < lockout_until:
             remaining = int((lockout_until - timezone.now()).total_seconds())
             messages.error(
@@ -83,13 +108,16 @@ def login_view(request):
                 user.last_login = timezone.now()
                 user.save(update_fields=["last_login"])
                 messages.success(request, f"欢迎回来，{user.username}！")
-                next_url = request.GET.get("next", "dashboard:index")
+                next_url = request.GET.get("next", "")
+                if not url_has_allowed_host_and_scheme(
+                    next_url, allowed_hosts={request.get_host()},
+                    require_https=request.is_secure(),
+                ):
+                    next_url = "dashboard:index"
                 return redirect(next_url)
         # 登录失败
-        attempts = request.session.get(attempt_key, 0) + 1
+        attempts = recent_failures.count() + 1
         request.session[attempt_key] = attempts
-        limit = getattr(settings, "LOGIN_ATTEMPT_LIMIT", 5)
-        timeout = getattr(settings, "LOGIN_ATTEMPT_TIMEOUT", 300)
         remaining = max(0, limit - attempts)
         if remaining > 0:
             messages.warning(request, f"用户名或密码错误，还剩 {remaining} 次尝试机会。")
@@ -98,7 +126,7 @@ def login_view(request):
             request.session[lockout_key] = True
             request.session[f"{lockout_key}_until"] = (
                 timezone.now() + datetime.timedelta(seconds=timeout)
-            )
+            ).timestamp()
             messages.error(request, f"登录失败次数过多，请等待 {timeout // 60} 分钟后重试。")
         # 记录失败日志
         OperationLog.objects.create(

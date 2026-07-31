@@ -3,6 +3,7 @@
 支持：Excel(.xlsx)、CSV、JSON、ZIP打包导出
 """
 import csv
+import hashlib
 import io
 import json
 import os
@@ -96,30 +97,40 @@ def export_to_json(data, filename):
     return response
 
 
-def make_full_export_zip(module_files, filename_prefix):
+def make_full_export_zip(module_files, filename_prefix, current_class=None):
     """
     全量导出打包 ZIP
     module_files: [(zip内路径, file内容bytes, 记录数), ...]
     """
-    from apps.classes.models import SchoolClass
+    from apps.classes.models import SchoolClass, Semester
+
+    current_class = current_class or SchoolClass.objects.filter(is_current=True).first()
+    current_semester = Semester.objects.filter(school_class=current_class, is_current=True).first() if current_class else None
 
     buf = io.BytesIO()
     manifest = {
         "export_time": timezone.now().strftime("%Y-%m-%d %H:%M:%S"),
-        "class_name": SchoolClass.objects.filter(is_current=True).first().name if SchoolClass.objects.filter(is_current=True).first() else "",
+        "version": os.environ.get("APP_VERSION", "1.0.0"),
+        "class_name": current_class.name if current_class else "",
+        "semester": current_semester.get_display_name() if current_semester else "",
         "files": {},
     }
 
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
         for path, content, record_count in module_files:
             zf.writestr(path, content)
-            manifest["files"][path] = record_count
+            manifest["files"][path] = {
+                "record_count": record_count,
+                "size": len(content),
+                "sha256": hashlib.sha256(content).hexdigest(),
+            }
 
         # README
         readme = (
             "班级教学管理平台 - 全量数据导出\n"
             f"导出时间：{manifest['export_time']}\n"
             f"班级：{manifest['class_name']}\n"
+            f"学期：{manifest['semester']}\n"
             "说明：本包为可阅读的数据包，不等同于系统备份。\n"
         )
         zf.writestr("README.txt", readme)

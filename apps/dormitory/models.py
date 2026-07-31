@@ -176,6 +176,7 @@ class DormHygieneCheck(BaseModel):
     rectification_result = models.TextField("整改结果", blank=True, default="")
     photo = models.FileField("照片", upload_to="hygiene/", blank=True)
     remarks = models.TextField("备注", blank=True, default="")
+    is_deleted = models.BooleanField("已删除", default=False)
 
     class Meta:
         verbose_name = "卫生检查"

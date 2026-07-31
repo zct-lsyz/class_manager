@@ -12,8 +12,10 @@ urlpatterns = [
     path("hygiene/", views.hygiene, name="hygiene"),
     path("hygiene/items/", views.hygiene_items, name="hygiene_items"),
     path("hygiene/items/<int:pk>/delete/", views.hygiene_item_delete, name="hygiene_item_delete"),
+    path("hygiene/items/<int:pk>/edit/", views.hygiene_item_edit, name="hygiene_item_edit"),
     path("hygiene/create/", views.hygiene_create, name="hygiene_create"),
     path("hygiene/<int:pk>/", views.hygiene_detail, name="hygiene_detail"),
+    path("hygiene/<int:pk>/delete/", views.hygiene_delete, name="hygiene_delete"),
     path("discipline/", views.discipline, name="discipline"),
     path("discipline/create/", views.discipline_create, name="discipline_create"),
 ]

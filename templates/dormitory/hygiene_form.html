@@ -3,7 +3,7 @@
 {% block content %}
 <h4 class="mt-3 mb-4"><i class="bi bi-clipboard-check me-2 text-primary"></i>录入卫生检查</h4>
 
-<form method="post" class="card">
+<form method="post" enctype="multipart/form-data" class="card">
     {% csrf_token %}
     <div class="card-header">检查信息</div>
     <div class="card-body">
@@ -14,6 +14,7 @@
             <div class="col-md-4"><label class="form-label small">检查人</label>{{ form.inspector }}</div>
             <div class="col-md-4"><label class="form-label small">整改要求</label>{{ form.rectification }}</div>
             <div class="col-md-4"><label class="form-label small">整改期限</label>{{ form.rectification_deadline }}</div>
+            <div class="col-md-4"><label class="form-label small">现场照片</label>{{ form.photo }}</div>
             <div class="col-12"><label class="form-label small">备注</label>{{ form.remarks }}</div>
         </div>
     </div>

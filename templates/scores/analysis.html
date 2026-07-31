@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load custom_filters %}
 {% block title %}成绩分析{% endblock %}
 {% block content %}
 <h4 class="mt-3 mb-4"><i class="bi bi-bar-chart-fill me-2 text-primary"></i>成绩分析</h4>
@@ -166,8 +167,8 @@ new Chart(document.getElementById('subjectAvgChart'), {
 
 // 分数段分布
 {% for name, d in analysis_data.items %}{% if forloop.first %}
-const bandLabels = ['0-59', '60-69', '70-79', '80-89', '90-100'];
-const bandData = [{{ d.bands['0-59'] }}, {{ d.bands['60-69'] }}, {{ d.bands['70-79'] }}, {{ d.bands['80-89'] }}, {{ d.bands['90-100'] }}];
+const bandLabels = ['0-59%', '60-69%', '70-79%', '80-89%', '90-100%'];
+const bandData = [{{ d.bands|get_item:'0-59%' }}, {{ d.bands|get_item:'60-69%' }}, {{ d.bands|get_item:'70-79%' }}, {{ d.bands|get_item:'80-89%' }}, {{ d.bands|get_item:'90-100%' }}];
 new Chart(document.getElementById('bandChart'), {
     type: 'bar',
     data: {

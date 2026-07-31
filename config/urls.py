@@ -6,6 +6,7 @@ from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
 from django.shortcuts import redirect
+from apps.accounts.media_views import protected_media
 
 
 def root_redirect(request):
@@ -56,9 +57,10 @@ urlpatterns = [
     path("backups/", include("apps.backups.urls")),
     # 操作日志
     path("audit/", include("apps.audit.urls")),
+    # 登录保护的上传附件
+    path("protected-media/<path:path>", protected_media, name="protected_media"),
 ]
 
 # 开发环境提供静态文件和媒体文件服务
 if settings.DEBUG:
     urlpatterns += static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)
-    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

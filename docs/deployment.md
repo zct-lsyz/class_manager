@@ -28,6 +28,7 @@ git clone git@github.com:your-username/classroom-manager.git app
 # 配置环境变量
 cp app/.env.example app/.env
 # 编辑 .env，设置 DJANGO_SECRET_KEY 等
+# 若仅通过 Tailscale/ZeroTier 私网访问，可保持 DJANGO_SECURE_SSL_REDIRECT=false
 
 # 构建并启动
 cd app
@@ -70,25 +71,33 @@ docker compose logs web --tail=20
 # 手动创建备份
 docker compose exec web python manage.py create_backup
 
-# 查看备份列表
-docker compose exec web python manage.py list_backups
-
 # 从页面下载备份
 # 浏览器访问 /backups/
 ```
 
+`backup-scheduler` 容器会按 `.env` 中的 `BACKUP_DAILY_TIME`、`BACKUP_WEEKLY_TIME` 和 `BACKUP_MONTHLY_TIME` 自动备份。完整备份包含 SQLite 一致性快照、上传附件和逐文件校验值。
+
+## AI 原卷与小分表分析
+
+在 `.env` 中配置：
+
+```env
+DEEPSEEK_API_KEY=你的密钥
+AI_EXAM_MAX_FILE_SIZE=20971520
+AI_EXAM_MAX_PAGES=30
+AI_EXAM_MAX_TEXT_CHARS=60000
+AI_EXAM_OCR_LANG=chi_sim+eng
+```
+
+密钥只从容器环境变量读取，不会保存到数据库或备份。试卷 OCR 在服务器本地完成，对外仅发送试题文字和匿名逐题汇总。
+
+## 公网 HTTPS
+
+当前 Nginx 配置默认提供 HTTP，适合只通过 Tailscale/ZeroTier 私网访问。若直接暴露到公网，应在前置代理或云负载均衡上配置有效 TLS 证书，再将 `.env` 中的 `DJANGO_SECURE_SSL_REDIRECT` 改为 `true`，并只开放必要端口。
+
 ## 回滚
 
 ```bash
-# 恢复之前的备份
-# 通过页面备份管理恢复，或手动操作：
-
-# 1. 停止服务
-docker compose down
-
-# 2. 还原数据库文件
-cp /path/to/backup/db.sqlite3 /opt/classroom-manager/app/data/
-
-# 3. 重启服务
-docker compose up -d
+# 在“备份管理”页面选择已校验的完整备份并恢复。
+# 系统会在恢复前自动创建安全备份，恢复失败时回滚数据库和附件。
 ```

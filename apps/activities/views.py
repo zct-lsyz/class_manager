@@ -1,11 +1,12 @@
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
-from django.shortcuts import render, redirect
+from django.shortcuts import render, redirect, get_object_or_404
 from django.core.paginator import Paginator
 
 from apps.activities.models import ClassMeeting, Activity, ClassCultureTask
 from apps.activities.forms import ClassMeetingForm, ActivityForm, ClassCultureTaskForm
 from apps.classes.models import SchoolClass, Semester
+from apps.audit.services import soft_delete
 
 
 @login_required
@@ -43,7 +44,7 @@ def class_meeting_create(request):
 def activities(request):
     """文体活动列表"""
     current_class = SchoolClass.objects.filter(is_current=True).first()
-    acts = Activity.objects.filter(school_class=current_class).order_by("-date") if current_class else []
+    acts = Activity.objects.filter(school_class=current_class, is_deleted=False).order_by("-date") if current_class else []
     paginator = Paginator(acts, 20)
     page = request.GET.get("page", 1)
     page_obj = paginator.get_page(page)
@@ -68,6 +69,20 @@ def activity_create(request):
     else:
         form = ActivityForm()
     return render(request, "activities/activity_form.html", {"form": form})
+
+
+@login_required
+def activity_delete(request, pk):
+    activity = get_object_or_404(Activity, pk=pk, is_deleted=False)
+    if request.method == "POST":
+        soft_delete(
+            activity,
+            user=request.user,
+            module="activities",
+            model_name="activity",
+        )
+        messages.info(request, "活动记录已移入回收站。")
+    return redirect("activities:activities")
 
 
 @login_required

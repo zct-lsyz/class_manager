@@ -81,6 +81,7 @@ class Activity(BaseModel):
     photo = models.FileField(
         "照片", upload_to="activities/", blank=True,
     )
+    is_deleted = models.BooleanField("已删除", default=False)
 
     class Meta:
         verbose_name = "文体活动"

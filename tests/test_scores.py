@@ -59,12 +59,11 @@ class ScoreCalculationTests(TestCase):
         """成绩不得超过科目满分"""
         from django.core.exceptions import ValidationError
 
-        # Score 模型没有自定义校验，这里验证数值边界
-        s = Score.objects.create(
-            exam=self.exam, exam_subject=self.exam_subject,
-            student=self.students[0], score=150, status="normal",
-        )
-        self.assertEqual(s.score, 150)  # 未超限校验，后续可加模型级校验
+        with self.assertRaises(ValidationError):
+            Score.objects.create(
+                exam=self.exam, exam_subject=self.exam_subject,
+                student=self.students[0], score=150, status="normal",
+            )
 
 
 class PointCalculationTests(TestCase):

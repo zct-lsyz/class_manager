@@ -6,6 +6,7 @@ from django.core.paginator import Paginator
 from apps.communications.models import StudentConversation, HomeSchoolContact, ConcernRecord
 from apps.communications.forms import ConversationForm, HomeSchoolContactForm, ConcernRecordForm
 from apps.classes.models import SchoolClass, Semester
+from apps.audit.services import soft_delete
 
 
 @login_required
@@ -42,6 +43,20 @@ def conversation_create(request):
         form = ConversationForm()
 
     return render(request, "communications/conversation_form.html", {"form": form})
+
+
+@login_required
+def conversation_delete(request, pk):
+    record = get_object_or_404(StudentConversation, pk=pk, is_deleted=False)
+    if request.method == "POST":
+        soft_delete(
+            record,
+            user=request.user,
+            module="communications",
+            model_name="conversation",
+        )
+        messages.info(request, "谈话记录已移入回收站。")
+    return redirect("communications:conversations")
 
 
 @login_required

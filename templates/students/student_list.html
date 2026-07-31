@@ -83,16 +83,16 @@
                             {% endif %}
                         </td>
                         <td>{{ student.school_class.name|default:"-" }}</td>
-                        <td>{{ student.class_position|default:"-" }}</td>
+                        <td>{{ student.display_class_position|default:"-" }}</td>
                         <td>
-                            {% if student.dormitory %}
-                            {{ student.dormitory }}{% if student.bed_number %} / {{ student.bed_number }}{% endif %}
+                            {% if student.display_dormitory %}
+                            {{ student.display_dormitory }}{% if student.display_bed_number %} / {{ student.display_bed_number }}{% endif %}
                             {% else %}
                             -
                             {% endif %}
                         </td>
-                        <td>{{ student.primary_contact|default:"-" }}</td>
-                        <td>{{ student.primary_phone|default:"-" }}</td>
+                        <td>{{ student.display_primary_contact|default:"-" }}</td>
+                        <td>{{ student.display_primary_phone|default:"-" }}</td>
                         <td>
                             <a href="{% url 'students:edit' student.pk %}" class="btn btn-sm btn-outline-primary" title="编辑">
                                 <i class="bi bi-pencil"></i>

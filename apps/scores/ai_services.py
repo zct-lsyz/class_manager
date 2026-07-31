@@ -18,11 +18,8 @@ class AIAnalysisError(Exception):
 
 
 def get_effective_api_key(config):
-    """获取有效的 API Key（环境变量优先，其次数据库配置）"""
-    env_key = os.environ.get("DEEPSEEK_API_KEY", "").strip()
-    if env_key:
-        return env_key
-    return config.get_api_key() if config else ""
+    """API Key 只允许从服务器环境变量读取。"""
+    return os.environ.get("DEEPSEEK_API_KEY", "").strip()
 
 
 def call_chat_completion(base_url, api_key, model, messages, temperature=0.5, timeout=120):

@@ -68,6 +68,60 @@ class Student(BaseModel):
     def __str__(self):
         return f"{self.name} ({self.student_id})"
 
+    @property
+    def display_class_position(self):
+        if not self.pk:
+            return self.class_position
+        roles = self.committee_memberships.filter(
+            is_active=True, role__is_active=True,
+        ).select_related("role").values_list("role__name", flat=True)
+        return "、".join(roles) or self.class_position
+
+    @property
+    def current_dorm_assignment(self):
+        if not self.pk:
+            return None
+        return self.dorm_assignments.filter(is_current=True).select_related(
+            "room__building", "bed",
+        ).first()
+
+    @property
+    def display_dormitory(self):
+        assignment = self.current_dorm_assignment
+        return str(assignment.room) if assignment else self.dormitory
+
+    @property
+    def display_bed_number(self):
+        assignment = self.current_dorm_assignment
+        return assignment.bed.bed_number if assignment and assignment.bed else self.bed_number
+
+    @property
+    def display_primary_contact(self):
+        if not self.pk:
+            return self.primary_contact
+        guardian = Guardian.objects.filter(student=self, is_deleted=False).first()
+        if not guardian:
+            return self.primary_contact
+        names = {
+            "father": guardian.father_name or "父亲",
+            "mother": guardian.mother_name or "母亲",
+            "other": guardian.other_guardian or "其他监护人",
+        }
+        return names.get(guardian.primary_contact, self.primary_contact)
+
+    @property
+    def display_primary_phone(self):
+        if not self.pk:
+            return self.primary_phone
+        guardian = Guardian.objects.filter(student=self, is_deleted=False).first()
+        if not guardian:
+            return self.primary_phone
+        phones = {
+            "father": guardian.father_phone,
+            "mother": guardian.mother_phone,
+        }
+        return phones.get(guardian.primary_contact, "") or self.primary_phone
+
 
 class Guardian(BaseModel):
     """家长/监护人联系方式"""
@@ -94,3 +148,10 @@ class Guardian(BaseModel):
 
     def __str__(self):
         return f"{self.student.name} 的家长信息"
+
+    def get_primary_contact_display(self):
+        return {
+            "father": "父亲",
+            "mother": "母亲",
+            "other": "其他监护人",
+        }.get(self.primary_contact, "未设置")
