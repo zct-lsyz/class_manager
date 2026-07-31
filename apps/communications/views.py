@@ -6,6 +6,7 @@ from django.core.paginator import Paginator
 from apps.communications.models import StudentConversation, HomeSchoolContact, ConcernRecord
 from apps.communications.forms import ConversationForm, HomeSchoolContactForm, ConcernRecordForm
 from apps.classes.models import SchoolClass, Semester
+from apps.classes.decorators import require_current_class
 from apps.audit.services import soft_delete
 
 
@@ -25,10 +26,13 @@ def conversations(request):
 
 
 @login_required
+@require_current_class
 def conversation_create(request):
     """新建谈话记录"""
     current_class = SchoolClass.objects.filter(is_current=True).first()
-    current_semester = Semester.objects.filter(is_current=True).first()
+    current_semester = Semester.objects.filter(
+        school_class=current_class, is_current=True,
+    ).first()
 
     if request.method == "POST":
         form = ConversationForm(request.POST)
@@ -75,10 +79,13 @@ def home_school(request):
 
 
 @login_required
+@require_current_class
 def home_school_create(request):
     """新建家校沟通"""
     current_class = SchoolClass.objects.filter(is_current=True).first()
-    current_semester = Semester.objects.filter(is_current=True).first()
+    current_semester = Semester.objects.filter(
+        school_class=current_class, is_current=True,
+    ).first()
 
     if request.method == "POST":
         form = HomeSchoolContactForm(request.POST)
@@ -119,10 +126,13 @@ def concerns(request):
 
 
 @login_required
+@require_current_class
 def concern_create(request):
     """新建重点关注"""
     current_class = SchoolClass.objects.filter(is_current=True).first()
-    current_semester = Semester.objects.filter(is_current=True).first()
+    current_semester = Semester.objects.filter(
+        school_class=current_class, is_current=True,
+    ).first()
     if request.method == "POST":
         form = ConcernRecordForm(request.POST)
         if form.is_valid():

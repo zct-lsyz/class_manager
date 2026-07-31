@@ -7,6 +7,7 @@ from django.utils import timezone
 from apps.homework.models import HomeworkTask, HomeworkRecord, Subject, HomeworkStatus
 from apps.homework.forms import HomeworkTaskForm, HomeworkRecordForm
 from apps.classes.models import SchoolClass, Semester
+from apps.classes.decorators import require_current_class
 from apps.students.models import Student
 
 
@@ -14,7 +15,9 @@ from apps.students.models import Student
 def index(request):
     """作业检查首页"""
     current_class = SchoolClass.objects.filter(is_current=True).first()
-    current_semester = Semester.objects.filter(is_current=True).first()
+    current_semester = Semester.objects.filter(
+        school_class=current_class, is_current=True,
+    ).first() if current_class else None
 
     tasks = HomeworkTask.objects.filter(
         school_class=current_class
@@ -29,10 +32,13 @@ def index(request):
 
 
 @login_required
+@require_current_class
 def task_create(request):
     """新建作业任务"""
     current_class = SchoolClass.objects.filter(is_current=True).first()
-    current_semester = Semester.objects.filter(is_current=True).first()
+    current_semester = Semester.objects.filter(
+        school_class=current_class, is_current=True,
+    ).first()
 
     if request.method == "POST":
         form = HomeworkTaskForm(request.POST)
@@ -133,6 +139,7 @@ def task_detail(request, pk):
 
 
 @login_required
+@require_current_class
 def status_settings(request):
     """作业状态设置"""
     current_class = SchoolClass.objects.filter(is_current=True).first()

@@ -8,6 +8,7 @@ from django.contrib import messages
 from django.utils import timezone
 
 from apps.classes.models import SchoolClass, Semester
+from apps.classes.decorators import require_current_class
 
 
 logger = logging.getLogger(__name__)
@@ -30,7 +31,9 @@ def index(request):
 
     # 当前班级和学期
     current_class = SchoolClass.objects.filter(is_current=True).first()
-    current_semester = Semester.objects.filter(is_current=True).first()
+    current_semester = Semester.objects.filter(
+        school_class=current_class, is_current=True,
+    ).first() if current_class else None
 
     # ----- 统计数据 -----
     # 学生统计（依赖 students 模块，后续完善）
@@ -219,6 +222,7 @@ def index(request):
 
 
 @login_required
+@require_current_class
 def warnings(request):
     from apps.attendance.models import WarningRule
     from apps.students.models import Student

@@ -50,7 +50,16 @@ def exam_list(request):
 def exam_create(request):
     """新建考试"""
     current_class = SchoolClass.objects.filter(is_current=True).first()
-    current_semester = Semester.objects.filter(is_current=True).first()
+    current_semester = Semester.objects.filter(
+        school_class=current_class, is_current=True,
+    ).first() if current_class else None
+
+    if not current_class:
+        messages.error(request, "请先在班级与学期设置中指定当前班级。")
+        return redirect("classes:settings")
+    if not current_semester:
+        messages.error(request, "请先为当前班级指定当前学期。")
+        return redirect("classes:settings")
 
     if request.method == "POST":
         form = ExamForm(request.POST)
@@ -321,7 +330,9 @@ def score_delete(request, pk):
 def analysis(request):
     """成绩分析"""
     current_class = SchoolClass.objects.filter(is_current=True).first()
-    current_semester = Semester.objects.filter(is_current=True).first()
+    current_semester = Semester.objects.filter(
+        school_class=current_class, is_current=True,
+    ).first() if current_class else None
 
     exams = Exam.objects.filter(school_class=current_class, is_deleted=False).order_by("-date") if current_class else []
     exam_id = request.GET.get("exam_id", "")

@@ -10,6 +10,7 @@ from django.utils import timezone
 from apps.rewards.models import RewardItem, RewardRecord, PointRecord
 from apps.rewards.forms import RewardItemForm, RewardRecordForm, PointRecordForm, BatchRewardRecordForm
 from apps.classes.models import SchoolClass, Semester
+from apps.classes.decorators import require_current_class
 from apps.students.models import Student
 from apps.audit.services import soft_delete
 
@@ -30,6 +31,7 @@ def index(request):
 
 
 @login_required
+@require_current_class
 @transaction.atomic
 def reward_create(request):
     """新增奖励"""
@@ -157,6 +159,7 @@ def points(request):
 
 
 @login_required
+@require_current_class
 def rules(request):
     """奖励与积分规则设置"""
     current_class = SchoolClass.objects.filter(is_current=True).first()

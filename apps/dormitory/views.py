@@ -14,6 +14,7 @@ from apps.dormitory.forms import (
     DormHygieneItemForm, DormHygieneCheckForm,
 )
 from apps.classes.models import SchoolClass, Semester
+from apps.classes.decorators import require_current_class
 from apps.students.models import Student
 from apps.audit.models import OperationLog
 from apps.audit.services import soft_delete
@@ -48,6 +49,7 @@ def index(request):
 
 
 @login_required
+@require_current_class
 def building_create(request):
     """新建宿舍楼"""
     current_class = SchoolClass.objects.filter(is_current=True).first()
@@ -65,6 +67,7 @@ def building_create(request):
 
 
 @login_required
+@require_current_class
 def room_create(request):
     """新建宿舍（并自动生成床位）"""
     current_class = SchoolClass.objects.filter(is_current=True).first()
@@ -178,6 +181,7 @@ def hygiene(request):
 
 
 @login_required
+@require_current_class
 def hygiene_items(request):
     """卫生检查项目配置"""
     current_class = SchoolClass.objects.filter(is_current=True).first()
@@ -245,10 +249,13 @@ def hygiene_item_edit(request, pk):
 
 
 @login_required
+@require_current_class
 def hygiene_create(request):
     """录入卫生检查（含项目得分）"""
     current_class = SchoolClass.objects.filter(is_current=True).first()
-    current_semester = Semester.objects.filter(is_current=True).first()
+    current_semester = Semester.objects.filter(
+        school_class=current_class, is_current=True,
+    ).first()
     items = DormHygieneItem.objects.filter(school_class=current_class, is_active=True) if current_class else []
 
     if request.method == "POST":
@@ -359,12 +366,15 @@ def discipline(request):
 
 
 @login_required
+@require_current_class
 def discipline_create(request):
     """登记宿舍纪律"""
     from apps.discipline.models import DormDisciplineRecord
     from apps.discipline.forms import DormDisciplineForm
     current_class = SchoolClass.objects.filter(is_current=True).first()
-    current_semester = Semester.objects.filter(is_current=True).first()
+    current_semester = Semester.objects.filter(
+        school_class=current_class, is_current=True,
+    ).first()
 
     if request.method == "POST":
         form = DormDisciplineForm(request.POST)

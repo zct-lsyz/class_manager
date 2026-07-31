@@ -6,6 +6,7 @@ from django.core.paginator import Paginator
 from apps.activities.models import ClassMeeting, Activity, ClassCultureTask
 from apps.activities.forms import ClassMeetingForm, ActivityForm, ClassCultureTaskForm
 from apps.classes.models import SchoolClass, Semester
+from apps.classes.decorators import require_current_class
 from apps.audit.services import soft_delete
 
 
@@ -21,10 +22,13 @@ def class_meetings(request):
 
 
 @login_required
+@require_current_class
 def class_meeting_create(request):
     """新建主题班会"""
     current_class = SchoolClass.objects.filter(is_current=True).first()
-    current_semester = Semester.objects.filter(is_current=True).first()
+    current_semester = Semester.objects.filter(
+        school_class=current_class, is_current=True,
+    ).first()
     if request.method == "POST":
         form = ClassMeetingForm(request.POST, request.FILES)
         if form.is_valid():
@@ -52,10 +56,13 @@ def activities(request):
 
 
 @login_required
+@require_current_class
 def activity_create(request):
     """新建文体活动"""
     current_class = SchoolClass.objects.filter(is_current=True).first()
-    current_semester = Semester.objects.filter(is_current=True).first()
+    current_semester = Semester.objects.filter(
+        school_class=current_class, is_current=True,
+    ).first()
     if request.method == "POST":
         form = ActivityForm(request.POST, request.FILES)
         if form.is_valid():
@@ -97,10 +104,13 @@ def culture(request):
 
 
 @login_required
+@require_current_class
 def culture_create(request):
     """新建文化任务"""
     current_class = SchoolClass.objects.filter(is_current=True).first()
-    current_semester = Semester.objects.filter(is_current=True).first()
+    current_semester = Semester.objects.filter(
+        school_class=current_class, is_current=True,
+    ).first()
     if request.method == "POST":
         form = ClassCultureTaskForm(request.POST)
         if form.is_valid():

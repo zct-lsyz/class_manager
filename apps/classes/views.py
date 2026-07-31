@@ -10,6 +10,7 @@ from apps.classes.models import (
 )
 from apps.classes.forms import SchoolClassForm, SemesterForm
 from apps.classes.subjects import Subject
+from apps.classes.decorators import require_current_class
 from apps.students.models import Student
 from apps.audit.models import OperationLog
 
@@ -170,6 +171,7 @@ def committee_list(request):
 
 
 @login_required
+@require_current_class
 def committee_role_create(request):
     """新增班委职务"""
     current_class = SchoolClass.objects.filter(is_current=True).first()
@@ -187,6 +189,7 @@ def committee_role_create(request):
 
 
 @login_required
+@require_current_class
 def committee_member_create(request):
     """任命班委"""
     current_class = SchoolClass.objects.filter(is_current=True).first()
@@ -266,10 +269,13 @@ def study_groups(request):
 
 
 @login_required
+@require_current_class
 def study_group_create(request):
     """创建学习小组"""
     current_class = SchoolClass.objects.filter(is_current=True).first()
-    current_semester = Semester.objects.filter(is_current=True).first()
+    current_semester = Semester.objects.filter(
+        school_class=current_class, is_current=True,
+    ).first()
     if request.method == "POST":
         name = request.POST.get("name", "").strip()
         leader_id = request.POST.get("leader", "")
@@ -302,6 +308,7 @@ def study_group_delete(request, pk):
 # ====== 课程表 ======
 
 @login_required
+@require_current_class
 def course_schedule(request):
     """课程表"""
     current_class = SchoolClass.objects.filter(is_current=True).first()

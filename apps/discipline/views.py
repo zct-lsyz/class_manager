@@ -7,6 +7,7 @@ from django.utils import timezone
 from apps.discipline.models import ConfigurableItem, ClassroomDisciplineRecord, DormDisciplineRecord
 from apps.discipline.forms import ConfigurableItemForm, ClassroomDisciplineForm, DormDisciplineForm
 from apps.classes.models import SchoolClass, Semester
+from apps.classes.decorators import require_current_class
 from apps.audit.services import soft_delete
 
 
@@ -18,6 +19,7 @@ def get_client_ip(request):
 # ====== 课堂纪律条目 ======
 
 @login_required
+@require_current_class
 def classroom_items(request):
     """课堂纪律条目配置"""
     current_class = SchoolClass.objects.filter(is_current=True).first()
@@ -60,10 +62,13 @@ def classroom_list(request):
 
 
 @login_required
+@require_current_class
 def classroom_create(request):
     """登记课堂纪律"""
     current_class = SchoolClass.objects.filter(is_current=True).first()
-    current_semester = Semester.objects.filter(is_current=True).first()
+    current_semester = Semester.objects.filter(
+        school_class=current_class, is_current=True,
+    ).first()
 
     if request.method == "POST":
         form = ClassroomDisciplineForm(request.POST)
@@ -126,6 +131,7 @@ def classroom_follow_up(request, pk):
 # ====== 宿舍纪律条目 ======
 
 @login_required
+@require_current_class
 def dorm_items(request):
     """宿舍纪律条目配置"""
     current_class = SchoolClass.objects.filter(is_current=True).first()
@@ -167,10 +173,13 @@ def dorm_list(request):
 
 
 @login_required
+@require_current_class
 def dorm_create(request):
     """登记宿舍纪律"""
     current_class = SchoolClass.objects.filter(is_current=True).first()
-    current_semester = Semester.objects.filter(is_current=True).first()
+    current_semester = Semester.objects.filter(
+        school_class=current_class, is_current=True,
+    ).first()
     if request.method == "POST":
         form = DormDisciplineForm(request.POST)
         if form.is_valid():

@@ -6,6 +6,7 @@ from django.core.paginator import Paginator
 from apps.comments.models import StudentComment, CommentTemplate
 from apps.comments.forms import StudentCommentForm, CommentTemplateForm
 from apps.classes.models import SchoolClass, Semester
+from apps.classes.decorators import require_current_class, require_current_semester
 from apps.audit.services import soft_delete
 
 
@@ -13,7 +14,9 @@ from apps.audit.services import soft_delete
 def list(request):
     """评语列表"""
     current_class = SchoolClass.objects.filter(is_current=True).first()
-    current_semester = Semester.objects.filter(is_current=True).first()
+    current_semester = Semester.objects.filter(
+        school_class=current_class, is_current=True,
+    ).first() if current_class else None
 
     comments = StudentComment.objects.filter(
         school_class=current_class, is_deleted=False
@@ -27,10 +30,13 @@ def list(request):
 
 
 @login_required
+@require_current_semester
 def create(request):
     """撰写评语"""
     current_class = SchoolClass.objects.filter(is_current=True).first()
-    current_semester = Semester.objects.filter(is_current=True).first()
+    current_semester = Semester.objects.filter(
+        school_class=current_class, is_current=True,
+    ).first()
 
     if request.method == "POST":
         form = StudentCommentForm(request.POST)
@@ -87,6 +93,7 @@ def delete(request, pk):
 
 
 @login_required
+@require_current_class
 def templates(request):
     """评语模板管理"""
     current_class = SchoolClass.objects.filter(is_current=True).first()

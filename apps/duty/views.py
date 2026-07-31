@@ -6,6 +6,7 @@ from django.core.paginator import Paginator
 from apps.duty.models import DutyTask, DutyGroup, DutyRecord, DutyMemberTask
 from apps.duty.forms import DutyTaskForm, DutyGroupForm, DutyRecordForm
 from apps.classes.models import SchoolClass
+from apps.classes.decorators import require_current_class
 from django.utils import timezone
 
 
@@ -26,6 +27,7 @@ def index(request):
 
 
 @login_required
+@require_current_class
 def task_list(request):
     """值日任务配置"""
     current_class = SchoolClass.objects.filter(is_current=True).first()
@@ -62,6 +64,7 @@ def task_delete(request, pk):
 
 
 @login_required
+@require_current_class
 def group_create(request):
     """创建值日小组"""
     current_class = SchoolClass.objects.filter(is_current=True).first()

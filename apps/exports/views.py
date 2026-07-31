@@ -16,6 +16,7 @@ from django.core.paginator import Paginator
 
 from apps.exports.models import ExportTask
 from apps.classes.models import SchoolClass
+from apps.classes.decorators import require_current_class
 from apps.exports.services import (
     export_to_excel,
     build_excel_bytes,
@@ -53,6 +54,7 @@ def option_template(request, category):
 
 
 @login_required
+@require_current_class
 def option_import(request, category):
     redirects = {
         "classroom_discipline": "discipline:classroom_items", "dorm_discipline": "discipline:dorm_items",
@@ -381,6 +383,7 @@ def template_download(request, template_type):
 
 
 @login_required
+@require_current_class
 def import_data(request):
     """数据导入：上传 → 预览 → 确认 → 正式导入"""
     current_class = SchoolClass.objects.filter(is_current=True).first()

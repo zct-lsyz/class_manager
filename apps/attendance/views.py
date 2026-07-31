@@ -8,6 +8,7 @@ from django.utils import timezone
 from apps.attendance.models import AttendanceRecord, AttendanceReason
 from apps.attendance.forms import AttendanceForm
 from apps.classes.models import SchoolClass, Semester
+from apps.classes.decorators import require_current_class
 from apps.students.models import Student
 
 
@@ -15,7 +16,9 @@ from apps.students.models import Student
 def index(request):
     """考勤管理首页"""
     current_class = SchoolClass.objects.filter(is_current=True).first()
-    current_semester = Semester.objects.filter(is_current=True).first()
+    current_semester = Semester.objects.filter(
+        school_class=current_class, is_current=True,
+    ).first() if current_class else None
     today = timezone.localdate()
 
     records = AttendanceRecord.objects.filter(
@@ -65,6 +68,7 @@ def index(request):
 
 
 @login_required
+@require_current_class
 def create(request):
     """录入考勤"""
     current_class = SchoolClass.objects.filter(is_current=True).first()
@@ -107,6 +111,7 @@ def edit(request, pk):
 
 
 @login_required
+@require_current_class
 def reasons(request):
     current_class = SchoolClass.objects.filter(is_current=True).first()
     if request.method == "POST":

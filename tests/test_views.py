@@ -49,3 +49,48 @@ class CorePageSmokeTests(TestCase):
             with self.subTest(url=url):
                 response = self.client.get(url)
                 self.assertEqual(response.status_code, 200)
+
+
+class ExamCreateGuardTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user("exam-guard", password="strong-test-password")
+        self.client.force_login(self.user)
+
+    def test_exam_create_requires_current_class(self):
+        response = self.client.get(reverse("scores:exam_create"))
+        self.assertRedirects(response, reverse("classes:settings"))
+
+    def test_exam_create_requires_current_semester_for_current_class(self):
+        SchoolClass.objects.create(name="高一(1)班", is_current=True)
+        response = self.client.post(reverse("scores:exam_create"), {
+            "name": "月考", "exam_type": "regular", "date": "2026-09-01",
+        })
+        self.assertRedirects(response, reverse("classes:settings"))
+        self.assertFalse(Exam.objects.exists())
+
+
+class CurrentClassGuardTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user("class-guard", password="strong-test-password")
+        self.client.force_login(self.user)
+
+    def test_class_bound_create_pages_require_current_class(self):
+        urls = [
+            reverse("attendance:create"),
+            reverse("activities:activity_create"),
+            reverse("comments:create"),
+            reverse("communications:conversation_create"),
+            reverse("classes:committee_role_create"),
+            reverse("discipline:classroom_create"),
+            reverse("dormitory:building_create"),
+            reverse("duty:group_create"),
+            reverse("homework:task_create"),
+            reverse("rewards:reward_create"),
+            reverse("dashboard:warnings"),
+            reverse("exports:import_data"),
+            reverse("exports:option_import", args=["attendance_reason"]),
+        ]
+        for url in urls:
+            with self.subTest(url=url):
+                response = self.client.get(url)
+                self.assertRedirects(response, reverse("classes:settings"))
