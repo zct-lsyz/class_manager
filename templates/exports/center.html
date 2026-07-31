@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}模块数据导出{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mt-3 mb-4">
+    <h4 class="mb-0"><i class="bi bi-download me-2 text-primary"></i>模块数据导出</h4>
+    <a href="{% url 'exports:full_export' %}" class="btn btn-primary btn-sm" onclick="return confirm('确认导出所有模块的全部数据？')">
+        <i class="bi bi-archive me-1"></i>一键全量导出
+    </a>
+</div>
+
+<div class="row g-2">
+    {% for key, name in modules %}
+    <div class="col-md-3">
+        <div class="card h-100">
+            <div class="card-body text-center py-3">
+                <i class="bi bi-file-earmark-arrow-down fs-2 text-primary"></i>
+                <p class="mb-2 small fw-bold">{{ name }}</p>
+                <a href="{% url 'exports:export_module' key %}" class="btn btn-sm btn-outline-primary">
+                    <i class="bi bi-file-earmark-excel me-1"></i>导出 Excel
+                </a>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+{% if tasks %}
+<div class="card mt-4">
+    <div class="card-header">最近的导出记录</div>
+    <div class="card-body p-0 table-responsive">
+        <table class="table mb-0">
+            <thead><tr><th>时间</th><th>模块</th><th>格式</th><th>状态</th><th>记录数</th></tr></thead>
+            <tbody>
+            {% for t in tasks %}
+            <tr><td>{{ t.created_at|date:"Y-m-d H:i" }}</td><td>{{ t.module }}</td><td>{{ t.get_export_format_display }}</td>
+                <td>{% if t.status == "completed" %}<span class="badge bg-success">成功{% elif t.status == "failed" %}<span class="badge bg-danger">失败{% else %}<span class="badge bg-warning">{{ t.get_status_display }}{% endif %}</td>
+                <td>{{ t.record_count|default:"-" }}</td></tr>
+            {% empty %}<tr><td colspan="5" class="text-muted text-center">暂无记录</td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endif %}
+{% endblock %}

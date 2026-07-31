@@ -106,10 +106,27 @@ def student_edit(request, pk):
 
 @login_required
 def student_delete(request, pk):
-    """删除学生（软删除）"""
+    """删除学生（软删除 + 写入回收站）"""
     student = get_object_or_404(Student, pk=pk)
     if request.method == "POST":
         student.soft_delete()
+        # 写入回收站记录
+        from datetime import timedelta
+        from django.utils import timezone
+        from apps.audit.models import SoftDeleteRecord
+        SoftDeleteRecord.objects.create(
+            model_name="student",
+            object_id=student.pk,
+            object_repr=f"{student.name}（学号：{student.student_id}）",
+            module="students",
+            serialized_data={
+                "student_id": student.student_id,
+                "name": student.name,
+                "gender": student.gender,
+            },
+            deleted_by=request.user,
+            expires_at=timezone.now() + timedelta(days=30),
+        )
         messages.warning(request, f"学生「{student.name}」已移至回收站。")
         OperationLog.objects.create(
             user=request.user, action="delete", module="students",

@@ -1,0 +1,8 @@
+{% extends "base.html" %}{% block title %}考勤管理{% endblock %}
+{% block content %}<h4 class="mt-3 mb-4"><i class="bi bi-clipboard-check me-2 text-primary"></i>考勤管理</h4>
+<a href="{% url 'attendance:create' %}" class="btn btn-primary btn-sm mb-3"><i class="bi bi-plus-lg"></i> 录入考勤</a>
+<div class="card mb-3"><div class="card-body">今日缺勤：<strong>{{ today_absent }}</strong> 人次</div></div>
+<div class="card"><div class="card-body p-0 table-responsive">
+  <table class="table mb-0"><thead><tr><th>日期</th><th>学生</th><th>时段</th><th>状态</th><th>原因</th></tr></thead>
+  <tbody>{% for r in page_obj %}<tr><td>{{ r.date }}</td><td>{{ r.student.name }}</td><td>{{ r.get_period_display }}</td><td><span class="badge {% if r.status == 'normal' %}bg-success{% elif r.status == 'absent' or r.status == 'late' %}bg-danger{% else %}bg-warning{% endif %}">{{ r.get_status_display }}</span></td><td>{{ r.reason|truncatechars:20 }}</td></tr>{% empty %}<tr><td colspan="5" class="text-muted text-center">暂无记录</td></tr>{% endfor %}</tbody></table>
+</div></div>{% endblock %}

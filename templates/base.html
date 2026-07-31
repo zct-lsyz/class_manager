@@ -168,6 +168,16 @@
                                 <i class="bi bi-bar-chart-fill me-2"></i>成绩分析
                             </a>
                         </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="{% url 'scores:support_list' %}">
+                                <i class="bi bi-trophy me-2"></i>培优补差
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="{% url 'scores:ai_settings' %}">
+                                <i class="bi bi-stars me-2"></i>AI 分析设置
+                            </a>
+                        </li>
                     </ul>
 
                     <!-- 成长记录 -->
@@ -186,6 +196,11 @@
                         <li class="nav-item">
                             <a class="nav-link" href="{% url 'communications:home_school' %}">
                                 <i class="bi bi-chat-left-dots me-2"></i>家校沟通
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="{% url 'communications:concerns' %}">
+                                <i class="bi bi-exclamation-octagon me-2"></i>重点关注
                             </a>
                         </li>
                     </ul>
@@ -236,6 +251,11 @@
                         <li class="nav-item">
                             <a class="nav-link" href="{% url 'audit:log_list' %}">
                                 <i class="bi bi-journal-code me-2"></i>操作日志
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="{% url 'audit:trash_list' %}">
+                                <i class="bi bi-trash me-2"></i>回收站
                             </a>
                         </li>
                     </ul>

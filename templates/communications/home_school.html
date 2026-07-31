@@ -1,0 +1,5 @@
+{% extends "base.html" %}{% block title %}家校沟通{% endblock %}
+{% block content %}<h4 class="mt-3 mb-4"><i class="bi bi-chat-left-dots me-2 text-primary"></i>家校沟通</h4>
+<a href="{% url 'communications:home_school_create' %}" class="btn btn-primary btn-sm mb-3"><i class="bi bi-plus-lg"></i> 新建</a>
+<div class="card"><div class="card-body p-0 table-responsive"><table class="table mb-0"><thead><tr><th>日期</th><th>学生</th><th>对象</th><th>方式</th><th>跟进</th></tr></thead>
+<tbody>{% for c in page_obj %}<tr><td>{{ c.contact_date }}</td><td>{{ c.student.name }}</td><td>{{ c.contact_person|default:"-" }}</td><td>{{ c.get_contact_method_display }}</td><td>{{ c.follow_up_date|default:"-" }}</td></tr>{% empty %}<tr><td colspan="5" class="text-muted text-center">暂无</td></tr>{% endfor %}</tbody></table></div></div>{% endblock %}

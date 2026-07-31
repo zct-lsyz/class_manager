@@ -1,0 +1,128 @@
+{% extends "base.html" %}
+{% block title %}座位表{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mt-3 mb-4">
+    <h4 class="mb-0"><i class="bi bi-layout-text-window me-2 text-primary"></i>座位表</h4>
+    <div>
+        <a href="{% url 'seating:plan_create' %}" class="btn btn-primary btn-sm"><i class="bi bi-plus-lg"></i> 新方案</a>
+        <a href="{% url 'seating:layout' %}" class="btn btn-outline-primary btn-sm"><i class="bi bi-gear"></i> 布局</a>
+        {% if current_plan %}
+        <form method="post" action="{% url 'seating:auto_arrange' %}" class="d-inline">
+            {% csrf_token %}
+            <button class="btn btn-outline-info btn-sm" onclick="return confirm('自动排座将清空当前分配并按身高+性别重新排座，确认？')">
+                <i class="bi bi-magic me-1"></i>自动排座
+            </button>
+        </form>
+        {% endif %}
+    </div>
+</div>
+
+{% if not current_plan %}
+<div class="empty-state"><p>暂无座位方案，请先创建座位方案。</p><a href="{% url 'seating:plan_create' %}" class="btn btn-primary">创建方案</a></div>
+{% elif not layout %}
+<div class="empty-state"><p>当前方案未关联教室布局，请先设置。</p></div>
+{% else %}
+<div class="alert alert-info">
+    当前方案：v{{ current_plan.version|default:current_plan.pk }}
+    {% if current_plan.reason %}｜调整原因：{{ current_plan.reason }}{% endif %}
+    ｜布局：{{ layout.rows }}排 x {{ layout.cols }}列
+</div>
+
+<!-- 座位网格 -->
+<form method="post" action="{% url 'seating:save_plan' %}" id="seatForm">
+    {% csrf_token %}
+    <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <span><i class="bi bi-grid me-2"></i>教室座位图</span>
+            <span class="small text-muted">点击空位选择学生，点击已占座位可更换</span>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-bordered text-center mb-0 mx-auto" style="max-width: 720px;">
+                    {% for row_num, row in grid.items %}
+                    <tr>
+                        <td class="align-middle small text-muted" style="width:30px;">{{ row_num|add:1 }}</td>
+                        {% for col_num, student_id in row.items %}
+                        <td class="p-1" style="min-width:70px;" data-row="{{ row_num }}" data-col="{{ col_num }}">
+                            <select class="form-select form-select-sm seat-select" name="seat_{{ row_num }}_{{ col_num }}">
+                                <option value="">— 空座 —</option>
+                                {% for s in unassigned %}
+                                <option value="{{ s.pk }}" {% if student_id == s.pk %}selected{% endif %}>{{ s.name }}（{{ s.student_id }}）</option>
+                                {% endfor %}
+                                {% for s in unassigned %}
+                                {% endfor %}
+                            </select>
+                        </td>
+                        {% endfor %}
+                        <td class="align-middle small text-muted" style="width:30px;">{{ row_num|add:1 }}</td>
+                    </tr>
+                    {% endfor %}
+                </table>
+                <div class="text-center mt-2 text-muted small">讲台</div>
+            </div>
+        </div>
+        <div class="card-footer text-end">
+            <button type="submit" class="btn btn-primary">
+                <i class="bi bi-check-lg me-1"></i>保存座位方案
+            </button>
+        </div>
+    </div>
+</form>
+
+<!-- 未分配学生 -->
+{% if unassigned %}
+<div class="card mt-3">
+    <div class="card-header"><i class="bi bi-people me-2"></i>未分配学生（{{ unassigned|length }} 人）</div>
+    <div class="card-body">
+        {% for s in unassigned %}
+        <span class="badge bg-light text-dark border me-1 mb-1 p-2">{{ s.name }}</span>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+
+<!-- 历史方案 -->
+{% if plans %}
+<div class="card mt-3">
+    <div class="card-header">历史方案</div>
+    <div class="card-body p-0 table-responsive">
+        <table class="table mb-0">
+            <thead><tr><th>版本</th><th>原因</th><th>时间</th><th>操作</th></tr></thead>
+            <tbody>
+            {% for p in plans %}
+            <tr><td>v{{ p.version|default:p.pk }}</td><td>{{ p.reason|truncatechars:30|default:"-" }}</td><td>{{ p.created_at|date:"Y-m-d H:i" }}</td>
+                <td>{% if not p.is_active %}<form method="post" action="{% url 'seating:plan_activate' p.pk %}" class="d-inline">{% csrf_token %}<button class="btn btn-sm btn-outline-primary">恢复</button></form>{% else %}<span class="badge bg-success">当前</span>{% endif %}</td></tr>
+            {% empty %}<tr><td colspan="4" class="text-muted text-center">暂无</td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endif %}
+{% endif %}
+
+<script>
+// 座位选择联动：选中某学生后，将其从其他下拉框中移除选项（防止重复）
+document.addEventListener('DOMContentLoaded', function() {
+    const selects = document.querySelectorAll('.seat-select');
+    selects.forEach(function(select) {
+        select.addEventListener('change', function() {
+            const value = this.value;
+            if (!value) return;
+            selects.forEach(function(other) {
+                if (other !== select) {
+                    const opt = other.querySelector('option[value="' + value + '"]');
+                    if (opt) { opt.disabled = true; }
+                }
+            });
+            // 重新启用当前选中值在其他选项中的可用性
+            selects.forEach(function(other) {
+                if (other !== select && other.value === value) {
+                    other.value = '';
+                }
+            });
+        });
+    });
+});
+</script>
+{% endblock %}

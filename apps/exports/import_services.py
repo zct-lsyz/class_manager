@@ -1,0 +1,180 @@
+"""
+数据导入服务
+支持：学生花名册、家长联系方式
+流程：上传 → 解析 → 预览/校验 → 确认 → 正式导入
+"""
+import re
+from datetime import datetime
+
+from django.db import transaction
+
+from openpyxl import load_workbook
+
+from apps.classes.models import SchoolClass
+from apps.students.models import Student, Guardian
+
+
+PHONE_RE = re.compile(r"^1[3-9]\d{9}$")
+
+
+def parse_uploaded_file(uploaded_file):
+    """
+    解析上传的 Excel 文件，返回 (表头列表, 数据行列表)
+    数据行为 dict，键为表头
+    """
+    wb = load_workbook(uploaded_file, data_only=True)
+    ws = wb.active
+    rows = list(ws.iter_rows(values_only=True))
+    if not rows:
+        return [], []
+
+    headers = [str(h).strip() if h else "" for h in rows[0]]
+    data_rows = []
+    for row in rows[1:]:
+        # 跳过全空行
+        if all(v is None or str(v).strip() == "" for v in row):
+            continue
+        data_rows.append({headers[i]: row[i] if i < len(row) else None for i in range(len(headers))})
+    return headers, data_rows
+
+
+def validate_students(data_rows):
+    """
+    校验学生数据，返回 (有效行列表, 错误列表)
+    错误格式: {row: 行号, field: 字段, value: 原始值, error: 原因}
+    """
+    valid_rows = []
+    errors = []
+    existing_ids = set(Student.objects.values_list("student_id", flat=True))
+
+    for idx, row in enumerate(data_rows, start=2):  # 从第2行开始（跳过表头）
+        student_id = str(row.get("学号", "") or "").strip()
+        name = str(row.get("姓名", "") or "").strip()
+        gender = str(row.get("性别", "") or "").strip()
+
+        # 必填检查
+        if not student_id:
+            errors.append({"row": idx, "field": "学号", "value": student_id, "error": "学号不能为空"})
+            continue
+        if not name:
+            errors.append({"row": idx, "field": "姓名", "value": name, "error": "姓名不能为空"})
+            continue
+        # 学号重复
+        if student_id in existing_ids:
+            errors.append({"row": idx, "field": "学号", "value": student_id, "error": f"学号 {student_id} 已存在"})
+            continue
+        # 性别
+        if gender not in ("男", "女"):
+            errors.append({"row": idx, "field": "性别", "value": gender, "error": "性别必须为「男」或「女」"})
+            continue
+        # 手机号格式（如果有）
+        phone = str(row.get("联系电话", "") or "").strip()
+        if phone and not PHONE_RE.match(phone):
+            errors.append({"row": idx, "field": "联系电话", "value": phone, "error": "手机号格式不正确"})
+            continue
+        # 身高
+        height = row.get("身高(cm)", "")
+        if height not in ("", None):
+            try:
+                height = int(float(str(height).strip()))
+            except (ValueError, TypeError):
+                errors.append({"row": idx, "field": "身高(cm)", "value": height, "error": "身高必须为数字"})
+                continue
+
+        valid_rows.append({
+            "row": idx,
+            "student_id": student_id,
+            "name": name,
+            "gender": "male" if gender == "男" else "female",
+            "birth_date": row.get("出生日期", "") or None,
+            "height": height if height not in ("", None) else None,
+            "vision": str(row.get("视力", "") or "").strip(),
+            "seat_requirement": str(row.get("座位需求", "") or "").strip(),
+            "class_position": str(row.get("职务", "") or "").strip(),
+            "dormitory": str(row.get("宿舍", "") or "").strip(),
+            "bed_number": str(row.get("床位", "") or "").strip(),
+            "primary_contact": str(row.get("联系人", "") or "").strip(),
+            "primary_phone": str(row.get("联系电话", "") or "").strip(),
+            "remarks": str(row.get("备注", "") or "").strip(),
+        })
+        existing_ids.add(student_id)
+
+    return valid_rows, errors
+
+
+@transaction.atomic
+def import_students(valid_rows, school_class):
+    """正式导入学生数据"""
+    created = 0
+    for item in valid_rows:
+        birth_date = item["birth_date"]
+        if isinstance(birth_date, datetime):
+            birth_date = birth_date.date()
+        Student.objects.create(
+            school_class=school_class,
+            student_id=item["student_id"],
+            name=item["name"],
+            gender=item["gender"],
+            birth_date=birth_date,
+            height=item["height"],
+            vision=item["vision"],
+            seat_requirement=item["seat_requirement"],
+            class_position=item["class_position"],
+            dormitory=item["dormitory"],
+            bed_number=item["bed_number"],
+            primary_contact=item["primary_contact"],
+            primary_phone=item["primary_phone"],
+            remarks=item["remarks"],
+        )
+        created += 1
+    return created
+
+
+def validate_guardians(data_rows):
+    """校验家长联系方式数据"""
+    valid_rows = []
+    errors = []
+    student_map = {s.student_id: s for s in Student.objects.all()}
+
+    for idx, row in enumerate(data_rows, start=2):
+        student_id = str(row.get("学号", "") or "").strip()
+        if not student_id:
+            errors.append({"row": idx, "field": "学号", "value": student_id, "error": "学号不能为空"})
+            continue
+        student = student_map.get(student_id)
+        if not student:
+            errors.append({"row": idx, "field": "学号", "value": student_id, "error": f"学号 {student_id} 不存在"})
+            continue
+        if Guardian.objects.filter(student=student).exists():
+            errors.append({"row": idx, "field": "学号", "value": student_id, "error": f"学生 {student.name} 已有家长信息"})
+            continue
+        valid_rows.append({
+            "row": idx, "student": student,
+            "father_name": str(row.get("父亲姓名", "") or "").strip(),
+            "father_phone": str(row.get("父亲电话", "") or "").strip(),
+            "mother_name": str(row.get("母亲姓名", "") or "").strip(),
+            "mother_phone": str(row.get("母亲电话", "") or "").strip(),
+            "other_guardian": str(row.get("其他监护人", "") or "").strip(),
+            "home_address": str(row.get("家庭地址", "") or "").strip(),
+            "remarks": str(row.get("备注", "") or "").strip(),
+        })
+    return valid_rows, errors
+
+
+@transaction.atomic
+def import_guardians(valid_rows):
+    """正式导入家长数据"""
+    created = 0
+    for item in valid_rows:
+        Guardian.objects.create(
+            student=item["student"],
+            father_name=item["father_name"],
+            father_phone=item["father_phone"],
+            mother_name=item["mother_name"],
+            mother_phone=item["mother_phone"],
+            other_guardian=item["other_guardian"],
+            home_address=item["home_address"],
+            remarks=item["remarks"],
+        )
+        created += 1
+    return created

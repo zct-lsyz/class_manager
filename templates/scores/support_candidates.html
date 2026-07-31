@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block title %}按成绩筛选培优补差候选人{% endblock %}
+{% block content %}
+<h4 class="mt-3 mb-4"><i class="bi bi-funnel me-2 text-primary"></i>按成绩筛选候选人</h4>
+<div class="card p-3 mb-3">
+    <form method="get" class="row g-2 align-items-end">
+        <div class="col-md-4">
+            <label class="form-label small">考试</label>
+            <select name="exam_id" class="form-select form-select-sm">
+                <option value="">选择考试</option>
+                {% for e in exams %}<option value="{{ e.pk }}" {% if exam and exam.pk == e.pk %}selected{% endif %}>{{ e.name }}</option>{% endfor %}
+            </select>
+        </div>
+        <div class="col-md-3">
+            <label class="form-label small">类型</label>
+            <select name="plan_type" class="form-select form-select-sm">
+                <option value="excellent" {% if plan_type == 'excellent' %}selected{% endif %}>培优（均分≥85%或自定）</option>
+                <option value="remedial" {% if plan_type == 'remedial' %}selected{% endif %}>补差（均分<60%或自定）</option>
+            </select>
+        </div>
+        <div class="col-md-3">
+            <label class="form-label small">自定均分阈值（可选）</label>
+            <input type="number" name="threshold" class="form-control form-control-sm" value="{{ threshold }}" step="0.1" placeholder="如：80">
+        </div>
+        <div class="col-md-2"><button class="btn btn-primary btn-sm w-100"><i class="bi bi-search"></i> 筛选</button></div>
+    </form>
+</div>
+
+{% if exam %}
+<div class="card">
+    <div class="card-header">筛选结果（{{ candidates|length }} 人）</div>
+    <div class="card-body p-0 table-responsive">
+        <table class="table mb-0">
+            <thead><tr><th>学号</th><th>姓名</th><th>总分</th><th>均分</th><th>得分率</th><th>操作</th></tr></thead>
+            <tbody>
+            {% for c in candidates %}
+            <tr>
+                <td>{{ c.student.student_id }}</td>
+                <td><strong>{{ c.student.name }}</strong></td>
+                <td>{{ c.total }}</td>
+                <td>{{ c.avg }}</td>
+                <td>{{ c.ratio }}%</td>
+                <td><a href="{% url 'scores:support_create' %}?candidate={{ c.student.pk }}" class="btn btn-sm btn-outline-primary">添加计划</a></td>
+            </tr>
+            {% empty %}<tr><td colspan="6" class="text-muted text-center py-4">暂无符合条件的候选人</td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endif %}
+{% endblock %}

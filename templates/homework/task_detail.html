@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% block title %}{{ task.title }}{% endblock %}
+{% block content %}
+<div class="mt-3"><a href="{% url 'homework:index' %}">&larr; 返回作业列表</a></div>
+<h4 class="mt-2 mb-3">{{ task.title }}</h4>
+<div class="card mb-3">
+    <div class="card-body">
+        <p class="mb-1">科目：<strong>{{ task.subject.name|default:"-" }}</strong>
+            | 布置：{{ task.assigned_date }} | 截止：{{ task.due_date|default:"-" }}
+            | 负责人：{{ task.person_in_charge|default:"-" }}</p>
+        {% if task.content %}<p class="mb-0 text-muted">{{ task.content|linebreaks }}</p>{% endif %}
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header"><i class="bi bi-clipboard-check me-2"></i>完成情况（已登记 {{ records|length }} 人）</div>
+    <div class="card-body p-0 table-responsive">
+        <table class="table mb-0">
+            <thead><tr><th>学号</th><th>姓名</th><th>状态</th><th>提交日期</th></tr></thead>
+            <tbody>
+            {% for r in records %}
+            <tr>
+                <td>{{ r.student.student_id }}</td>
+                <td><strong>{{ r.student.name }}</strong></td>
+                <td>
+                    {% if r.status == 'submitted' %}<span class="badge bg-success">已交
+                    {% elif r.status == 'unsubmitted' %}<span class="badge bg-danger">未交
+                    {% elif r.status == 'late' %}<span class="badge bg-warning">迟交
+                    {% elif r.status == 'excellent' %}<span class="badge bg-primary">优秀
+                    {% else %}<span class="badge bg-secondary">{{ r.get_status_display }}{% endif %}
+                </td>
+                <td>{{ r.submission_date|default:"-" }}</td>
+            </tr>
+            {% empty %}<tr><td colspan="4" class="text-muted text-center py-4">暂无登记记录</td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% if unrecorded %}
+    <div class="card-footer">
+        <form method="post" class="row g-2" onsubmit="return confirm('确认登记所选学生的作业状态？')">
+            {% csrf_token %}
+            <div class="col-12"><strong class="small">未登记学生（{{ unrecorded|length }} 人）— 按住 Ctrl 多选</strong></div>
+            <div class="col-md-7">
+                <select name="batch_students" class="form-select form-select-sm" size="6" multiple>
+                    {% for s in unrecorded %}<option value="{{ s.pk }}">{{ s.name }}（{{ s.student_id }}）</option>{% endfor %}
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label small">状态</label>
+                <select name="batch_status" class="form-select form-select-sm">
+                    <option value="submitted">已交</option>
+                    <option value="unsubmitted">未交</option>
+                    <option value="late">迟交</option>
+                    <option value="excellent">优秀</option>
+                    <option value="resubmitted">补交</option>
+                    <option value="exempted">免交</option>
+                </select>
+            </div>
+            <div class="col-md-2 d-flex align-items-end">
+                <button class="btn btn-primary btn-sm w-100"><i class="bi bi-check-lg"></i> 批量登记</button>
+            </div>
+        </form>
+    </div>
+    {% endif %}
+</div>
+
+<script>
+// 处理批量登记表单提交（将 batch_students 展开为 record_ 字段）
+document.querySelector('form[onsubmit*="登记"]')?.addEventListener('submit', function(e) {
+    const sel = this.querySelector('select[name="batch_students"]');
+    if (!sel) return;
+    const selected = [...sel.selectedOptions].map(o => o.value);
+    if (selected.length === 0) { e.preventDefault(); alert('请先选择学生'); return; }
+    const status = this.querySelector('select[name="batch_status"]').value;
+    selected.forEach(id => {
+        const input = document.createElement('input');
+        input.type = 'hidden';
+        input.name = 'record_' + id;
+        input.value = status;
+        this.appendChild(input);
+    });
+});
+</script>
+{% endblock %}

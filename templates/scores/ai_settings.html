@@ -1,0 +1,130 @@
+{% extends "base.html" %}
+{% load custom_filters %}
+{% block title %}AI 成绩分析设置{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mt-3 mb-4">
+    <h4 class="mb-0"><i class="bi bi-stars me-2 text-primary"></i>AI 成绩分析设置</h4>
+    <a href="{% url 'scores:analysis' %}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i> 返回成绩分析</a>
+</div>
+
+<div class="alert alert-info">
+    <i class="bi bi-info-circle me-1"></i>
+    配置 API Key 后，可在成绩分析页生成 AI 文字分析。API Key 使用服务器密钥加密存储，可随时修改或留空保留原值。
+    支持任何 OpenAI 兼容接口（默认 DeepSeek）。
+</div>
+
+<div class="row g-4">
+    <!-- 基础配置 -->
+    <div class="col-md-5">
+        <div class="card">
+            <div class="card-header"><i class="bi bi-key me-2"></i>基础配置</div>
+            <div class="card-body">
+                <form method="post">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="save">
+                    <div class="mb-3">
+                        <label class="form-label small">API Key {% if has_key %}<span class="badge bg-success">已配置</span>{% else %}<span class="badge bg-warning">未配置</span>{% endif %}</label>
+                        <input type="password" name="api_key" class="form-control" placeholder="{% if has_key %}已配置（输入新值可覆盖）{% else %}sk-...{% endif %}">
+                        <div class="form-text">也可通过服务器环境变量 DEEPSEEK_API_KEY 配置（优先）。</div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small">模型名称</label>
+                        <input type="text" name="model_name" class="form-control" value="{{ config.model_name }}" placeholder="deepseek-chat">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small">API 地址</label>
+                        <input type="text" name="base_url" class="form-control" value="{{ config.base_url }}">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small">温度（0-1，越低越严谨）</label>
+                        <input type="number" name="temperature" class="form-control" value="{{ config.temperature }}" step="0.1" min="0" max="1">
+                    </div>
+                    <div class="form-check mb-3">
+                        <input class="form-check-input" type="checkbox" name="is_enabled" value="1" id="enabled" {% if config.is_enabled %}checked{% endif %}>
+                        <label class="form-check-label" for="enabled">启用 AI 成绩分析</label>
+                    </div>
+                    <button type="submit" class="btn btn-primary w-100"><i class="bi bi-save me-1"></i>保存设置</button>
+                </form>
+                <div class="d-flex gap-2 mt-2">
+                    <form method="post" class="flex-grow-1">
+                        {% csrf_token %}
+                        <input type="hidden" name="action" value="test">
+                        <button class="btn btn-outline-info w-100" {% if not has_key %}disabled{% endif %}><i class="bi bi-plug me-1"></i>测试连接</button>
+                    </form>
+                    <form method="post" class="flex-grow-1" onsubmit="return confirm('确认将九科提示词恢复为默认值？')">
+                        {% csrf_token %}
+                        <input type="hidden" name="action" value="reset_prompts">
+                        <button class="btn btn-outline-warning w-100"><i class="bi bi-arrow-counterclockwise me-1"></i>恢复默认提示词</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        {% if records %}
+        <div class="card mt-3">
+            <div class="card-header"><i class="bi bi-clock-history me-2"></i>最近调用记录</div>
+            <div class="card-body p-0 table-responsive">
+                <table class="table mb-0">
+                    <thead><tr><th>时间</th><th>类型</th><th>结果</th></tr></thead>
+                    <tbody>
+                    {% for r in records %}
+                    <tr>
+                        <td class="small text-nowrap">{{ r.created_at|date:"m-d H:i" }}</td>
+                        <td class="small">{{ r.get_analysis_type_display }}{% if r.subject_name %}（{{ r.subject_name }}）{% endif %}</td>
+                        <td>{% if r.success %}<span class="text-success"><i class="bi bi-check-circle"></i> {{ r.duration_ms }}ms{% else %}<span class="text-danger"><i class="bi bi-x-circle"></i> 失败{% endif %}</td>
+                    </tr>
+                    {% empty %}<tr><td colspan="3" class="text-muted text-center">暂无记录</td></tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- 科目提示词配置 -->
+    <div class="col-md-7">
+        <div class="card">
+            <div class="card-header"><i class="bi bi-chat-square-text me-2"></i>各科提示词（可分别修改）</div>
+            <div class="card-body">
+                <form method="post">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="save">
+                    <div class="accordion" id="promptAccordion">
+                        {% for subject in subjects %}
+                        {% with prompt_info=merged_prompts|dictsort:"" %}
+                        {% endwith %}
+                        <div class="accordion-item">
+                            <h2 class="accordion-header">
+                                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapse{{ forloop.counter }}">
+                                    <span class="me-2 fw-bold">{{ subject }}</span>
+                                    {% if merged_prompts|get_item:subject|get_item:"current" %}
+                                    <span class="badge bg-success">已自定义</span>
+                                    {% else %}
+                                    <span class="badge bg-light text-dark">使用默认</span>
+                                    {% endif %}
+                                </button>
+                            </h2>
+                            <div id="collapse{{ forloop.counter }}" class="accordion-collapse collapse" data-bs-parent="#promptAccordion">
+                                <div class="accordion-body">
+                                    <label class="form-label small">当前提示词：</label>
+                                    <textarea name="prompt_{{ subject }}" class="form-control" rows="4"
+                                        placeholder="留空则使用默认提示词">{% if merged_prompts|get_item:subject|get_item:"current" %}{{ merged_prompts|get_item:subject|get_item:"current" }}{% endif %}</textarea>
+                                    <details class="mt-2">
+                                        <summary class="small text-muted">查看默认提示词</summary>
+                                        <div class="p-2 bg-light rounded small text-muted mt-1">{{ merged_prompts|get_item:subject|get_item:"default" }}</div>
+                                    </details>
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    <div class="mt-3">
+                        <button type="submit" class="btn btn-primary"><i class="bi bi-save me-1"></i>保存提示词</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

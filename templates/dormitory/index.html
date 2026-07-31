@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}宿舍管理{% endblock %}
+{% block content %}
+<h4 class="mt-3 mb-4"><i class="bi bi-house-door me-2 text-primary"></i>宿舍管理</h4>
+
+<!-- 统计 -->
+<div class="row g-3 mb-4">
+    <div class="col-4"><div class="stat-card bg-white border text-center"><div class="stat-number">{{ total_rooms }}</div><div class="stat-label">宿舍数</div></div></div>
+    <div class="col-4"><div class="stat-card bg-white border text-center"><div class="stat-number">{{ total_beds }}</div><div class="stat-label">床位总数</div></div></div>
+    <div class="col-4"><div class="stat-card bg-white border text-center"><div class="stat-number">{{ assigned }}</div><div class="stat-label">已分配</div></div></div>
+</div>
+
+<div class="mb-3">
+    <a href="{% url 'dormitory:building_create' %}" class="btn btn-primary btn-sm"><i class="bi bi-plus-lg"></i> 新建宿舍楼</a>
+    <a href="{% url 'dormitory:room_create' %}" class="btn btn-outline-primary btn-sm"><i class="bi bi-plus-lg"></i> 新建宿舍</a>
+    <a href="{% url 'dormitory:hygiene' %}" class="btn btn-outline-success btn-sm"><i class="bi bi-clipboard-check"></i> 卫生检查</a>
+    <a href="{% url 'dormitory:discipline' %}" class="btn btn-outline-danger btn-sm"><i class="bi bi-house-exclamation"></i> 宿舍纪律</a>
+</div>
+
+{% for b in buildings %}
+<div class="card mt-2">
+    <div class="card-header py-2"><i class="bi bi-building me-1"></i>{{ b.name }}（{{ b.floors }}层）</div>
+    <div class="card-body p-0 table-responsive">
+        <table class="table mb-0">
+            <thead><tr><th>房间号</th><th>楼层</th><th>类型</th><th>床位数</th><th>已分配</th><th>宿舍长</th><th>操作</th></tr></thead>
+            <tbody>
+            {% for r in rooms %}{% if r.building.id == b.id %}
+            <tr>
+                <td><strong>{{ r.room_number }}</strong></td>
+                <td>{{ r.floor }}F</td>
+                <td>{{ r.get_room_type_display }}</td>
+                <td>{{ r.bed_count }}</td>
+                <td>{{ r.assigned_count }} / {{ r.bed_count }}</td>
+                <td>{{ r.monitor.name|default:"-" }}</td>
+                <td><a href="{% url 'dormitory:room_detail' r.pk %}" class="btn btn-sm btn-outline-primary"><i class="bi bi-person-gear"></i> 床位分配</a></td>
+            </tr>
+            {% endif %}{% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% empty %}
+<div class="empty-state mt-3"><i class="bi bi-house-door"></i><p>暂无宿舍数据</p><a href="{% url 'dormitory:building_create' %}" class="btn btn-primary">新建宿舍楼</a></div>
+{% endfor %}
+{% endblock %}

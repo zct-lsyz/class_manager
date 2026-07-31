@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block title %}班委名单{% endblock %}
+{% block content %}
+<h4 class="mt-3 mb-4"><i class="bi bi-person-badge me-2 text-primary"></i>班委名单</h4>
+
+<div class="row g-4">
+    <!-- 现有班委 -->
+    <div class="col-md-7">
+        <div class="card">
+            <div class="card-header"><i class="bi bi-award me-2"></i>现任班委</div>
+            <div class="card-body p-0 table-responsive">
+                <table class="table mb-0">
+                    <thead><tr><th>职务</th><th>学生</th><th>任命日期</th><th>操作</th></tr></thead>
+                    <tbody>
+                    {% for m in members %}
+                    <tr>
+                        <td><span class="badge bg-primary">{{ m.role.name }}</span></td>
+                        <td><strong>{{ m.student.name }}</strong>（{{ m.student.student_id }}）</td>
+                        <td>{{ m.appointment_date|default:"-" }}</td>
+                        <td>
+                            <form method="post" action="{% url 'classes:committee_member_remove' m.pk %}" class="d-inline" onsubmit="return confirm('确认卸任 {{ m.student.name }}？')">
+                                {% csrf_token %}
+                                <button class="btn btn-sm btn-outline-danger"><i class="bi bi-person-x"></i> 卸任</button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% empty %}<tr><td colspan="4" class="text-muted text-center py-4">暂无班委成员</td></tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- 任命班委 -->
+    <div class="col-md-5">
+        <div class="card mb-3">
+            <div class="card-header"><i class="bi bi-person-plus me-2"></i>任命班委</div>
+            <div class="card-body">
+                <form method="post" action="{% url 'classes:committee_member_create' %}" class="row g-2">
+                    {% csrf_token %}
+                    <div class="col-12"><label class="form-label small">职务</label>
+                        <select name="role" class="form-select">
+                            {% for r in roles %}<option value="{{ r.pk }}">{{ r.name }}</option>{% empty %}<option value="">暂无职务</option>{% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-12"><label class="form-label small">学生</label>
+                        <select name="student" class="form-select">
+                            {% for s in all_students %}<option value="{{ s.pk }}">{{ s.name }}（{{ s.student_id }}）</option>{% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-12"><button class="btn btn-primary btn-sm w-100">确认任命</button></div>
+                </form>
+            </div>
+        </div>
+        <div class="card">
+            <div class="card-header"><i class="bi bi-plus-circle me-2"></i>新增职务</div>
+            <div class="card-body">
+                <form method="post" action="{% url 'classes:committee_role_create' %}" class="row g-2">
+                    {% csrf_token %}
+                    <div class="col-12"><input type="text" name="name" class="form-control" placeholder="职务名称（如：班长、学习委员）" required></div>
+                    <div class="col-12"><input type="text" name="description" class="form-control" placeholder="职责说明（可选）"></div>
+                    <div class="col-12"><button class="btn btn-outline-primary btn-sm w-100">添加职务</button></div>
+                </form>
+                {% if roles %}
+                <hr>
+                <small class="text-muted">已有职务：{% for r in roles %}{{ r.name }}{% if not forloop.last %}、{% endif %}{% endfor %}</small>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

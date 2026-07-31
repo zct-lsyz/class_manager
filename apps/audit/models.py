@@ -43,3 +43,27 @@ class OperationLog(models.Model):
 
     def __str__(self):
         return f"[{self.created_at:%Y-%m-%d %H:%M}] {self.get_action_display()} - {self.module}"
+
+
+class SoftDeleteRecord(models.Model):
+    """回收站记录"""
+    model_name = models.CharField("模型名称", max_length=100)
+    object_id = models.IntegerField("对象ID")
+    object_repr = models.CharField("对象描述", max_length=200)
+    module = models.CharField("所属模块", max_length=50)
+    serialized_data = models.JSONField("序列化数据", blank=True, default=dict)
+    deleted_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL,
+        null=True, verbose_name="删除人",
+    )
+    deleted_at = models.DateTimeField("删除时间", auto_now_add=True)
+    expires_at = models.DateTimeField("过期时间")
+    is_permanently_deleted = models.BooleanField("已永久删除", default=False)
+
+    class Meta:
+        verbose_name = "回收站"
+        verbose_name_plural = "回收站"
+        ordering = ["-deleted_at"]
+
+    def __str__(self):
+        return f"{self.object_repr} ({self.deleted_at:%Y-%m-%d})"

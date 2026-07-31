@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}卫生项目配置{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mt-3 mb-4">
+    <h4 class="mb-0"><i class="bi bi-clipboard-check me-2 text-primary"></i>卫生检查项目配置</h4>
+    <a href="{% url 'dormitory:hygiene' %}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i> 返回卫生检查</a>
+</div>
+<div class="card p-3 mb-3">
+    <form method="post" class="row g-2 align-items-end">
+        {% csrf_token %}
+        <div class="col-md-5"><label class="form-label small">项目名称</label><input type="text" name="name" class="form-control" placeholder="如：地面、床铺" required></div>
+        <div class="col-md-3"><label class="form-label small">满分</label><input type="number" name="full_score" class="form-control" value="10" min="1"></div>
+        <div class="col-md-2"><label class="form-label small">默认扣分</label><input type="number" name="default_deduction" class="form-control" value="0" min="0"></div>
+        <div class="col-md-2"><button class="btn btn-primary w-100">添加</button></div>
+    </form>
+</div>
+<table class="table table-hover">
+    <thead><tr><th>名称</th><th>满分</th><th>默认扣分</th><th>启用</th><th>排序</th><th>操作</th></tr></thead>
+    <tbody>
+    {% for i in items %}
+    <tr>
+        <td>{{ i.name }}</td><td>{{ i.full_score }}</td><td>{{ i.default_deduction }}</td>
+        <td>{% if i.is_active %}<span class="text-success">启用{% else %}<span class="text-danger">停用{% endif %}</td>
+        <td>{{ i.sort_order }}</td>
+        <td><form method="post" action="{% url 'dormitory:hygiene_item_delete' i.pk %}" class="d-inline" onsubmit="return confirm('确认删除项目「{{ i.name }}」？')">{% csrf_token %}<button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button></form></td>
+    </tr>
+    {% empty %}<tr><td colspan="6" class="text-muted text-center">暂无卫生项目</td></tr>
+    {% endfor %}
+    </tbody>
+</table>
+{% endblock %}

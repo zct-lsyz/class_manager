@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}宿舍卫生{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mt-3 mb-4">
+    <h4 class="mb-0"><i class="bi bi-clipboard-check me-2 text-primary"></i>宿舍卫生检查</h4>
+    <a href="{% url 'dormitory:hygiene_create' %}" class="btn btn-primary btn-sm"><i class="bi bi-plus-lg"></i> 录入检查</a>
+    <a href="{% url 'dormitory:hygiene_items' %}" class="btn btn-outline-primary btn-sm"><i class="bi bi-gear"></i> 项目配置</a>
+</div>
+<div class="card">
+    <div class="card-body p-0 table-responsive">
+        <table class="table mb-0">
+            <thead><tr><th>日期</th><th>宿舍</th><th>总分</th><th>等级</th><th>检查人</th><th>整改</th><th>操作</th></tr></thead>
+            <tbody>
+            {% for c in page_obj %}
+            <tr>
+                <td>{{ c.date }}</td>
+                <td>{{ c.room.building.name|default:"" }} {{ c.room.room_number }}</td>
+                <td><strong>{{ c.total_score }}</strong></td>
+                <td>
+                    {% if c.grade == 'excellent' %}<span class="badge bg-success">优秀
+                    {% elif c.grade == 'good' %}<span class="badge bg-primary">良好
+                    {% elif c.grade == 'fair' %}<span class="badge bg-warning">一般
+                    {% elif c.grade == 'poor' %}<span class="badge bg-danger">差{% else %}<span class="badge bg-secondary">-{% endif %}
+                </td>
+                <td>{{ c.inspector|default:"-" }}</td>
+                <td>{% if c.rectification %}<span class="text-warning"><i class="bi bi-tools"></i> 待整改{% else %}<span class="text-muted">-{% endif %}</td>
+                <td><a href="{% url 'dormitory:hygiene_detail' c.pk %}" class="btn btn-sm btn-outline-primary">详情</a></td>
+            </tr>
+            {% empty %}<tr><td colspan="7" class="text-muted text-center py-4">暂无检查记录</td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% if page_obj.paginator.num_pages > 1 %}
+    <div class="card-footer"><nav><ul class="pagination pagination-sm mb-0">
+        {% if page_obj.has_previous %}<li class="page-item"><a class="page-link" href="?page={{ page_obj.previous_page_number }}">上一页</a></li>{% endif %}
+        <li class="page-item active"><span class="page-link">{{ page_obj.number }}/{{ page_obj.paginator.num_pages }}</span></li>
+        {% if page_obj.has_next %}<li class="page-item"><a class="page-link" href="?page={{ page_obj.next_page_number }}">下一页</a></li>{% endif %}
+    </ul></nav></div>
+    {% endif %}
+</div>
+{% endblock %}

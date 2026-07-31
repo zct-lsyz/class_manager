@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}重点关注{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mt-3 mb-4">
+    <h4 class="mb-0"><i class="bi bi-exclamation-octagon me-2 text-primary"></i>重点关注</h4>
+    <a href="{% url 'communications:concern_create' %}" class="btn btn-primary btn-sm"><i class="bi bi-plus-lg"></i> 新建关注</a>
+</div>
+<div class="filter-bar">
+    <form method="get" class="row g-2 align-items-end">
+        <div class="col-md-3">
+            <select name="status" class="form-select form-select-sm" onchange="this.form.submit()">
+                <option value="">全部状态</option>
+                <option value="active" {% if current_status == 'active' %}selected{% endif %}>关注中</option>
+                <option value="improving" {% if current_status == 'improving' %}selected{% endif %}>好转中</option>
+                <option value="resolved" {% if current_status == 'resolved' %}selected{% endif %}>已结束</option>
+            </select>
+        </div>
+    </form>
+</div>
+<div class="card">
+    <div class="card-body p-0 table-responsive">
+        <table class="table mb-0">
+            <thead><tr><th>学生</th><th>类型</th><th>等级</th><th>状态</th><th>下次跟进</th><th>操作</th></tr></thead>
+            <tbody>
+            {% for r in page_obj %}
+            <tr>
+                <td><strong>{{ r.student.name }}</strong></td>
+                <td>{{ r.get_concern_type_display }}</td>
+                <td>
+                    {% if r.level == 'serious' %}<span class="badge bg-danger">高度关注
+                    {% elif r.level == 'moderate' %}<span class="badge bg-warning">重点关注
+                    {% else %}<span class="badge bg-info">一般关注{% endif %}
+                </td>
+                <td>{% if r.status == 'active' %}<span class="text-danger">关注中{% elif r.status == 'improving' %}<span class="text-warning">好转中{% else %}<span class="text-success">已结束{% endif %}</td>
+                <td>{{ r.next_follow_up|default:"-" }}</td>
+                <td>
+                    <a href="{% url 'communications:concern_detail' r.pk %}" class="btn btn-sm btn-outline-info">详情</a>
+                    <a href="{% url 'communications:concern_update' r.pk %}" class="btn btn-sm btn-outline-primary">更新</a>
+                </td>
+            </tr>
+            {% empty %}<tr><td colspan="6" class="text-muted text-center py-4">暂无重点关注记录</td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

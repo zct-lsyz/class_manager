@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% load custom_filters %}
+{% block title %}{{ group.name }} - 值日记录{% endblock %}
+{% block content %}
+<div class="mt-3"><a href="{% url 'duty:index' %}">&larr; 返回值日生表</a></div>
+<h4 class="mt-2 mb-3"><i class="bi bi-brush me-2 text-primary"></i>{{ group.name }}（第{{ group.week }}周）
+    {% if group.leader %}<span class="badge bg-warning ms-2">组长：{{ group.leader.name }}</span>{% endif %}
+</h4>
+
+<div class="card mb-3">
+    <div class="card-header"><i class="bi bi-clipboard-check me-2"></i>登记当日值日</div>
+    <div class="card-body">
+        <form method="post" class="table-responsive">
+            {% csrf_token %}
+            <table class="table table-bordered mb-0">
+                <thead><tr><th>学号</th><th>姓名</th><th>完成情况</th><th>备注</th></tr></thead>
+                <tbody>
+                {% for m in members %}
+                <tr>
+                    <td>{{ m.student_id }}</td>
+                    <td><strong>{{ m.name }}</strong></td>
+                    <td>
+                        {% with rec=today_map|get_item:m.pk %}
+                        <select name="member_{{ m.pk }}" class="form-select form-select-sm">
+                            <option value="">— 未登记 —</option>
+                            <option value="completed" {% if rec and rec.is_completed and rec.evaluation == '' %}selected{% endif %}>已完成</option>
+                            <option value="excellent" {% if rec and rec.evaluation == 'excellent' %}selected{% endif %}>优秀</option>
+                            <option value="good" {% if rec and rec.evaluation == 'good' %}selected{% endif %}>良好</option>
+                            <option value="poor" {% if rec and rec.evaluation == 'poor' %}selected{% endif %}>一般</option>
+                            <option value="absent" {% if rec and rec.is_absent %}selected{% endif %}>缺岗</option>
+                        </select>
+                        {% endwith %}
+                    </td>
+                    <td><input type="text" name="remark_{{ m.pk }}" class="form-control form-control-sm"
+                        value="{% with rec=today_map|get_item:m.pk %}{{ rec.remark|default:'' }}{% endwith %}"></td>
+                </tr>
+                {% empty %}<tr><td colspan="4" class="text-muted text-center">该小组暂无成员</td></tr>
+                {% endfor %}
+                </tbody>
+            </table>
+            <div class="mt-2 d-flex justify-content-between align-items-center">
+                <span class="text-muted small">登记日期：{{ today|date:"Y-m-d" }}</span>
+                <button class="btn btn-primary btn-sm"><i class="bi bi-check-lg me-1"></i>保存当日记录</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+{% if history %}
+<div class="card">
+    <div class="card-header"><i class="bi bi-clock-history me-2"></i>最近记录</div>
+    <div class="card-body p-0 table-responsive">
+        <table class="table mb-0">
+            <thead><tr><th>日期</th><th>学生</th><th>状态</th><th>评价</th></tr></thead>
+            <tbody>
+            {% for r in history %}
+            <tr><td>{{ r.date }}</td><td>{{ r.student.name }}</td>
+                <td>{% if r.is_absent %}<span class="badge bg-danger">缺岗{% elif r.is_completed %}<span class="badge bg-success">完成{% else %}<span class="badge bg-secondary">未完成{% endif %}</td>
+                <td>{{ r.get_evaluation_display|default:"-" }}</td></tr>
+            {% empty %}<tr><td colspan="4" class="text-muted text-center">暂无历史记录</td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endif %}
+{% endblock %}

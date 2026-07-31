@@ -1,0 +1,13 @@
+{% extends "base.html" %}{% load static %}
+{% block title %}教室布局{% endblock %}
+{% block content %}
+<h4 class="mt-3 mb-4"><i class="bi bi-columns-gap me-2 text-primary"></i>教室布局</h4>
+<form method="post" class="card p-3">{% csrf_token %}
+  <div class="row g-2">{% for f in form %}<div class="col-md-4 mb-2"><label class="form-label small">{{ f.label }}</label>{{ f }}</div>{% endfor %}</div>
+  <button class="btn btn-primary mt-2">保存</button>
+</form>
+{% if layouts %}<div class="card mt-3"><div class="card-body p-0">
+  <table class="table mb-0"><thead><tr><th>名称</th><th>布局</th><th>桌位</th><th>当前</th></tr></thead>
+  <tbody>{% for l in layouts %}<tr><td>{{ l.name }}</td><td>{{ l.rows }}x{{ l.cols }}</td><td>{{ l.seats_per_desk }}人/桌</td><td>{% if l.is_current %}<span class="badge bg-success">是{% endif %}</td></tr>{% endfor %}</tbody></table>
+</div></div>{% endif %}
+{% endblock %}

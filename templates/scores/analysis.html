@@ -1,0 +1,196 @@
+{% extends "base.html" %}
+{% block title %}成绩分析{% endblock %}
+{% block content %}
+<h4 class="mt-3 mb-4"><i class="bi bi-bar-chart-fill me-2 text-primary"></i>成绩分析</h4>
+
+<form method="get" class="card p-3 mb-3">
+    <div class="row g-2 align-items-end">
+        <div class="col-md-4"><label class="form-label small">考试</label>
+            <select name="exam_id" class="form-select" onchange="this.form.submit()">
+                <option value="">选择考试</option>
+                {% for e in exams %}<option value="{{ e.pk }}" {% if exam and exam.pk == e.pk %}selected{% endif %}>{{ e.name }}</option>{% endfor %}
+            </select>
+        </div>
+        <div class="col-md-4"><label class="form-label small">学生趋势</label>
+            <select name="student_id" class="form-select" onchange="this.form.submit()">
+                <option value="">选择学生</option>
+                {% for s in student_list %}<option value="{{ s.pk }}" {% if student_id == s.pk|stringformat:'s' %}selected{% endif %}>{{ s.name }}（{{ s.student_id }}）</option>{% endfor %}
+            </select>
+        </div>
+    </div>
+</form>
+
+{% if exam %}
+<div class="card mb-3">
+    <div class="card-header">{{ exam.name }} 成绩统计</div>
+    <div class="card-body p-0 table-responsive">
+        <table class="table mb-0">
+            <thead><tr><th>科目</th><th>满分</th><th>均分</th><th>最高</th><th>最低</th><th>及格率</th><th>优秀率</th></tr></thead>
+            <tbody>
+            {% for name, data in analysis_data.items %}
+            <tr><td><strong>{{ name }}</strong></td><td>{{ data.full_score }}</td><td>{{ data.avg }}</td><td>{{ data.max }}</td><td>{{ data.min }}</td><td>{{ data.pass_rate }}%</td><td>{{ data.excellent_rate }}%</td></tr>
+            {% empty %}<tr><td colspan="7" class="text-muted text-center">暂无数据</td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+{% if analysis_data %}
+<div class="row">
+    <!-- 各科均分柱状图 -->
+    <div class="col-md-6">
+        <div class="card"><div class="card-header">各科均分对比</div>
+            <div class="card-body"><canvas id="subjectAvgChart" height="200"></canvas></div>
+        </div>
+    </div>
+    <!-- 分数段分布图（第一科） -->
+    <div class="col-md-6">
+        <div class="card"><div class="card-header">分数段分布（{{ analysis_data.items.0.0 }}）</div>
+            <div class="card-body"><canvas id="bandChart" height="200"></canvas></div>
+        </div>
+    </div>
+</div>
+{% endif %}
+{% endif %}
+
+{% if student_trend %}
+<div class="card mt-3">
+    <div class="card-header"><i class="bi bi-graph-up me-2"></i>{{ student_trend.student.name }} 历次总分趋势</div>
+    <div class="card-body"><canvas id="trendChart" height="120"></canvas></div>
+</div>
+{% endif %}
+
+<!-- ===== AI 文字分析区域 ===== -->
+<div class="card mt-3" id="ai-analysis">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-stars me-2 text-warning"></i>AI 文字分析</span>
+        <div>
+            <a href="{% url 'scores:ai_settings' %}" class="btn btn-sm btn-outline-secondary"><i class="bi bi-gear"></i> 设置</a>
+            <a href="{% url 'scores:ai_records' %}" class="btn btn-sm btn-outline-info"><i class="bi bi-clock-history"></i> 历史记录</a>
+        </div>
+    </div>
+    <div class="card-body">
+        {% if not exam %}
+        <p class="text-muted mb-0"><i class="bi bi-info-circle me-1"></i>请先选择考试，再生成 AI 分析。</p>
+        {% elif not ai_config %}
+        <p class="text-muted mb-0"><i class="bi bi-info-circle me-1"></i>AI 功能尚未配置，请前往「设置」完成 API Key 配置。</p>
+        {% elif not ai_config.is_enabled %}
+        <p class="text-muted mb-0"><i class="bi bi-info-circle me-1"></i>AI 分析当前未启用，请前往「设置」开启。</p>
+        {% elif not ai_config.has_key %}
+        <p class="text-muted mb-0"><i class="bi bi-info-circle me-1"></i>尚未配置 API Key，请前往「设置」填写。</p>
+        {% else %}
+        <form method="post" action="{% url 'scores:ai_generate' %}" class="row g-2 align-items-end" id="aiForm">
+            {% csrf_token %}
+            <input type="hidden" name="exam_id" value="{{ exam.pk }}">
+            <div class="col-md-3">
+                <label class="form-label small">分析类型</label>
+                <select name="analysis_type" class="form-select form-select-sm" id="aiType">
+                    <option value="subject">单科分析</option>
+                    <option value="comprehensive">全科综合分析</option>
+                    <option value="student">学生个人分析</option>
+                </select>
+            </div>
+            <div class="col-md-3" id="aiSubjectWrap">
+                <label class="form-label small">选择科目</label>
+                <select name="subject_name" class="form-select form-select-sm">
+                    {% for s in ai_subjects %}<option value="{{ s }}">{{ s }}</option>{% empty %}<option value="">（本考试暂无科目）</option>{% endfor %}
+                </select>
+            </div>
+            <div class="col-md-3" id="aiStudentWrap" style="display:none;">
+                <label class="form-label small">选择学生</label>
+                <select name="student_id" class="form-select form-select-sm">
+                    {% for s in student_list %}<option value="{{ s.pk }}">{{ s.name }}（{{ s.student_id }}）</option>{% endfor %}
+                </select>
+            </div>
+            <div class="col-md-3">
+                <button type="submit" class="btn btn-warning w-100" id="aiSubmitBtn">
+                    <i class="bi bi-stars me-1"></i>生成 AI 分析
+                </button>
+            </div>
+        </form>
+        <div class="mt-2">
+            <div id="aiLoading" class="text-muted small" style="display:none;">
+                <span class="spinner-border spinner-border-sm me-1"></span>AI 正在分析中，可能需要 10-60 秒，请勿关闭页面...
+            </div>
+        </div>
+        <div id="ai-analysis-result">
+            {% if latest_ai_result %}
+            <div class="mt-3 p-3 bg-light rounded">
+                <div class="text-muted small mb-2">
+                    <i class="bi bi-clock-history me-1"></i>{{ latest_ai_result.created_at|date:"Y-m-d H:i" }}｜{{ latest_ai_result.get_analysis_type_display }}
+                    {% if latest_ai_result.subject_name %}｜{{ latest_ai_result.subject_name }}{% endif %}
+                </div>
+                <div style="white-space: pre-wrap;">{{ latest_ai_result.result }}</div>
+            </div>
+            {% endif %}
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<script>
+// AI 分析类型联动
+const aiType = document.getElementById('aiType');
+const aiSubjectWrap = document.getElementById('aiSubjectWrap');
+const aiStudentWrap = document.getElementById('aiStudentWrap');
+const aiForm = document.getElementById('aiForm');
+const aiLoading = document.getElementById('aiLoading');
+const aiSubmitBtn = document.getElementById('aiSubmitBtn');
+if (aiType) {
+    aiType.addEventListener('change', function() {
+        aiSubjectWrap.style.display = this.value === 'subject' ? '' : 'none';
+        aiStudentWrap.style.display = this.value === 'student' ? '' : 'none';
+    });
+    aiForm.addEventListener('submit', function() {
+        aiLoading.style.display = '';
+        aiSubmitBtn.disabled = true;
+        aiSubmitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>分析中...';
+    });
+}
+</script>
+
+<script>
+{% if analysis_data %}
+// 各科均分柱状图
+const subjectLabels = [{% for name, d in analysis_data.items %}'{{ name }}',{% endfor %}];
+const subjectAvgs = [{% for name, d in analysis_data.items %}{{ d.avg }},{% endfor %}];
+new Chart(document.getElementById('subjectAvgChart'), {
+    type: 'bar',
+    data: {
+        labels: subjectLabels,
+        datasets: [{ label: '班级均分', data: subjectAvgs, backgroundColor: '#1a73e8' }]
+    },
+    options: { responsive: true, plugins: { legend: { display: false } } }
+});
+
+// 分数段分布
+{% for name, d in analysis_data.items %}{% if forloop.first %}
+const bandLabels = ['0-59', '60-69', '70-79', '80-89', '90-100'];
+const bandData = [{{ d.bands['0-59'] }}, {{ d.bands['60-69'] }}, {{ d.bands['70-79'] }}, {{ d.bands['80-89'] }}, {{ d.bands['90-100'] }}];
+new Chart(document.getElementById('bandChart'), {
+    type: 'bar',
+    data: {
+        labels: bandLabels,
+        datasets: [{ label: '人数', data: bandData, backgroundColor: ['#dc3545', '#f57c00', '#f9a825', '#7cb342', '#28a745'] }]
+    },
+    options: { responsive: true, plugins: { legend: { display: false } } }
+});
+{% endif %}{% endfor %}
+{% endif %}
+
+{% if student_trend %}
+// 学生趋势折线图
+const trendLabels = [{% for t in student_trend.trend %}'{{ t.exam }}({{ t.date }})',{% endfor %}];
+const trendData = [{% for t in student_trend.trend %}{{ t.score }},{% endfor %}];
+new Chart(document.getElementById('trendChart'), {
+    type: 'line',
+    data: {
+        labels: trendLabels,
+        datasets: [{ label: '{{ student_trend.student.name }} 总分', data: trendData, borderColor: '#1a73e8', backgroundColor: 'rgba(26,115,232,0.1)', fill: true, tension: 0.3 }]
+    },
+    options: { responsive: true }
+});
+{% endif %}
+</script>
+{% endblock %}

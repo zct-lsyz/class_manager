@@ -1,0 +1,5 @@
+{% extends "base.html" %}{% block title %}班级文化{% endblock %}
+{% block content %}<h4 class="mt-3 mb-4"><i class="bi bi-palette me-2 text-primary"></i>班级文化</h4>
+<a href="{% url 'activities:culture_create' %}" class="btn btn-primary btn-sm mb-3"><i class="bi bi-plus-lg"></i> 新建</a>
+<div class="card"><div class="card-body p-0 table-responsive"><table class="table mb-0"><thead><tr><th>类型</th><th>标题</th><th>负责人</th><th>截止</th><th>完成</th></tr></thead>
+<tbody>{% for t in page_obj %}<tr><td>{{ t.get_task_type_display }}</td><td>{{ t.title }}</td><td>{{ t.person_in_charge|default:"-" }}</td><td>{{ t.deadline|default:"-" }}</td><td>{% if t.is_completed %}<span class="text-success">是{% else %}<span class="text-warning">否{% endif %}</td></tr>{% empty %}<tr><td colspan="5" class="text-muted text-center">暂无</td></tr>{% endfor %}</tbody></table></div></div>{% endblock %}

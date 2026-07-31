@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}奖励与表扬{% endblock %}
+{% block content %}
+<h4 class="mt-3 mb-4"><i class="bi bi-star-fill me-2 text-primary"></i>奖励与表扬</h4>
+<a href="{% url 'rewards:reward_create' %}" class="btn btn-primary btn-sm mb-3"><i class="bi bi-plus-lg"></i> 新增奖励</a>
+<div class="card">
+    <div class="card-body p-0 table-responsive">
+        <table class="table mb-0">
+            <thead><tr><th>日期</th><th>学生</th><th>奖励</th><th>加分</th><th>等级</th><th>操作</th></tr></thead>
+            <tbody>
+            {% for r in page_obj %}
+            <tr>
+                <td>{{ r.date }}</td>
+                <td><strong>{{ r.student.name }}</strong></td>
+                <td>{{ r.item.name|default:r.custom_name }}</td>
+                <td class="text-success">+{{ r.points }}</td>
+                <td>{{ r.get_level_display }}</td>
+                <td class="text-nowrap">
+                    <a href="{% url 'rewards:reward_edit' r.pk %}" class="btn btn-sm btn-outline-primary" title="编辑"><i class="bi bi-pencil"></i></a>
+                    <form method="post" action="{% url 'rewards:reward_delete' r.pk %}" class="d-inline" onsubmit="return confirm('确认删除该奖励记录？')">
+                        {% csrf_token %}
+                        <button class="btn btn-sm btn-outline-danger" title="删除"><i class="bi bi-trash"></i></button>
+                    </form>
+                </td>
+            </tr>
+            {% empty %}<tr><td colspan="6" class="text-muted text-center py-4">暂无记录</td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

@@ -64,3 +64,113 @@ class Semester(BaseModel):
 
     def __str__(self):
         return f"{self.school_class.name} - {self.get_display_name()}"
+
+
+class CommitteeRole(BaseModel):
+    """班委职务（可配置）"""
+    school_class = models.ForeignKey(
+        SchoolClass, on_delete=models.CASCADE,
+        related_name="committee_roles", verbose_name="班级",
+    )
+    name = models.CharField("职务名称", max_length=50)
+    description = models.TextField("职责说明", blank=True, default="")
+    sort_order = models.IntegerField("排序", default=0)
+    is_active = models.BooleanField("启用", default=True)
+
+    class Meta:
+        verbose_name = "班委职务"
+        verbose_name_plural = "班委职务"
+        ordering = ["sort_order"]
+
+    def __str__(self):
+        return self.name
+
+
+class CommitteeMember(BaseModel):
+    """班委成员"""
+    role = models.ForeignKey(
+        CommitteeRole, on_delete=models.CASCADE,
+        related_name="members", verbose_name="职务",
+    )
+    student = models.ForeignKey(
+        "students.Student", on_delete=models.CASCADE,
+        related_name="committee_memberships", verbose_name="学生",
+    )
+    semester = models.ForeignKey(
+        Semester, on_delete=models.SET_NULL,
+        null=True, blank=True, verbose_name="任期学期",
+    )
+    is_active = models.BooleanField("在职", default=True)
+    appointment_date = models.DateField("任命日期", null=True, blank=True)
+
+    class Meta:
+        verbose_name = "班委成员"
+        verbose_name_plural = "班委成员"
+        unique_together = ["role", "student", "semester"]
+
+    def __str__(self):
+        return f"{self.student.name} - {self.role.name}"
+
+
+class StudyGroup(BaseModel):
+    """学习小组"""
+    school_class = models.ForeignKey(
+        SchoolClass, on_delete=models.CASCADE,
+        related_name="study_groups", verbose_name="班级",
+    )
+    semester = models.ForeignKey(
+        Semester, on_delete=models.SET_NULL,
+        null=True, blank=True, verbose_name="学期",
+    )
+    name = models.CharField("组名", max_length=50)
+    leader = models.ForeignKey(
+        "students.Student", on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name="led_study_groups", verbose_name="组长",
+    )
+    members = models.ManyToManyField(
+        "students.Student", blank=True,
+        related_name="study_groups", verbose_name="成员",
+    )
+    is_active = models.BooleanField("当前小组", default=True)
+    remarks = models.TextField("备注", blank=True, default="")
+
+    class Meta:
+        verbose_name = "学习小组"
+        verbose_name_plural = "学习小组"
+        ordering = ["name"]
+
+    def __str__(self):
+        return self.name
+
+
+class CourseScheduleEntry(BaseModel):
+    """课程表条目"""
+    WEEKDAY_CHOICES = [
+        (1, "周一"), (2, "周二"), (3, "周三"),
+        (4, "周四"), (5, "周五"), (6, "周六"), (7, "周日"),
+    ]
+
+    school_class = models.ForeignKey(
+        SchoolClass, on_delete=models.CASCADE,
+        related_name="course_entries", verbose_name="班级",
+    )
+    semester = models.ForeignKey(
+        Semester, on_delete=models.SET_NULL,
+        null=True, blank=True, verbose_name="学期",
+    )
+    weekday = models.IntegerField("星期", choices=WEEKDAY_CHOICES)
+    period = models.IntegerField("节次")
+    subject = models.CharField("科目", max_length=50, blank=True, default="")
+    teacher = models.CharField("任课教师", max_length=50, blank=True, default="")
+    location = models.CharField("上课地点", max_length=100, blank=True, default="")
+    remarks = models.CharField("备注", max_length=100, blank=True, default="")
+
+    class Meta:
+        verbose_name = "课程表"
+        verbose_name_plural = "课程表"
+        ordering = ["weekday", "period"]
+        unique_together = ["school_class", "semester", "weekday", "period"]
+
+    def __str__(self):
+        return f"周{self.weekday} 第{self.period}节 {self.subject or '自习'}"

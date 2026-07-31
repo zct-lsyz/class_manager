@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}培优补差{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mt-3 mb-4">
+    <h4 class="mb-0"><i class="bi bi-trophy me-2 text-primary"></i>培优补差</h4>
+    <div>
+        <a href="{% url 'scores:support_create' %}" class="btn btn-primary btn-sm"><i class="bi bi-plus-lg"></i> 手动添加</a>
+        <a href="{% url 'scores:support_candidates' %}" class="btn btn-outline-primary btn-sm"><i class="bi bi-funnel"></i> 按成绩筛选</a>
+    </div>
+</div>
+<div class="card">
+    <div class="card-body p-0 table-responsive">
+        <table class="table mb-0">
+            <thead><tr><th>学生</th><th>类型</th><th>科目</th><th>目标分数</th><th>阶段目标</th><th>状态</th><th>操作</th></tr></thead>
+            <tbody>
+            {% for p in plans %}
+            <tr>
+                <td><strong>{{ p.student.name }}</strong></td>
+                <td>{% if p.plan_type == 'excellent' %}<span class="badge bg-primary">培优{% else %}<span class="badge bg-warning">补差{% endif %}</td>
+                <td>{{ p.subject.name }}</td>
+                <td>{{ p.target_score|default:"-" }}</td>
+                <td class="text-truncate" style="max-width:200px;">{{ p.stage_goal|truncatechars:20 }}</td>
+                <td>{% if p.is_active %}<span class="text-success">进行中{% else %}<span class="text-muted">已结束{% endif %}</td>
+                <td class="text-nowrap">
+                    <a href="{% url 'scores:support_detail' p.pk %}" class="btn btn-sm btn-outline-primary">跟进</a>
+                    {% if p.is_active %}
+                    <form method="post" action="{% url 'scores:support_close' p.pk %}" class="d-inline" onsubmit="return confirm('确认结束该计划？')">
+                        {% csrf_token %}<button class="btn btn-sm btn-outline-secondary">结束</button>
+                    </form>
+                    {% endif %}
+                </td>
+            </tr>
+            {% empty %}<tr><td colspan="7" class="text-muted text-center py-4">暂无培优补差计划</td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

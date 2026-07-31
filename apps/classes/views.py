@@ -3,8 +3,12 @@ from django.contrib.auth.decorators import login_required
 from django.shortcuts import render, redirect, get_object_or_404
 from django.utils import timezone
 
-from apps.classes.models import SchoolClass, Semester
+from apps.classes.models import (
+    SchoolClass, Semester, CommitteeRole, CommitteeMember, StudyGroup, CourseScheduleEntry,
+)
 from apps.classes.forms import SchoolClassForm, SemesterForm
+from apps.homework.models import Subject
+from apps.students.models import Student
 from apps.audit.models import OperationLog
 
 
@@ -138,29 +142,183 @@ def semester_archive(request, pk):
     return redirect("classes:settings")
 
 
-# 占位视图：班委名单、学习小组、课程表
+# ====== 班委名单 ======
+
 @login_required
 def committee_list(request):
-    """班委名单（占位）"""
-    return render(request, "classes/placeholder.html", {
-        "title": "班委名单",
-        "message": "班委管理功能将在后续阶段实现。",
+    """班委名单"""
+    current_class = SchoolClass.objects.filter(is_current=True).first()
+    current_semester = Semester.objects.filter(is_current=True).first()
+
+    roles = CommitteeRole.objects.filter(school_class=current_class, is_active=True) if current_class else []
+    members = CommitteeMember.objects.filter(
+        is_active=True, semester=current_semester
+    ).select_related("student", "role") if current_semester else []
+
+    return render(request, "classes/committee_list.html", {
+        "roles": roles, "members": members,
+        "all_students": Student.objects.filter(
+            school_class=current_class, is_deleted=False
+        ).order_by("student_id") if current_class else [],
     })
 
+
+@login_required
+def committee_role_create(request):
+    """新增班委职务"""
+    current_class = SchoolClass.objects.filter(is_current=True).first()
+    if request.method == "POST":
+        name = request.POST.get("name", "").strip()
+        description = request.POST.get("description", "").strip()
+        if name:
+            CommitteeRole.objects.create(
+                school_class=current_class, name=name, description=description,
+            )
+            messages.success(request, f"职务「{name}」已添加。")
+        else:
+            messages.error(request, "职务名称不能为空。")
+    return redirect("classes:committee_list")
+
+
+@login_required
+def committee_member_create(request):
+    """任命班委"""
+    current_class = SchoolClass.objects.filter(is_current=True).first()
+    current_semester = Semester.objects.filter(is_current=True).first()
+    if request.method == "POST":
+        role_id = request.POST.get("role", "")
+        student_id = request.POST.get("student", "")
+        if role_id and student_id:
+            from apps.students.models import Student
+            role = get_object_or_404(CommitteeRole, pk=role_id)
+            student = get_object_or_404(Student, pk=student_id)
+            CommitteeMember.objects.create(
+                role=role, student=student, semester=current_semester, is_active=True,
+            )
+            messages.success(request, f"{student.name} 已任命为「{role.name}」。")
+        else:
+            messages.error(request, "请选择职务和学生。")
+    return redirect("classes:committee_list")
+
+
+@login_required
+def committee_member_remove(request, pk):
+    """卸任班委"""
+    member = get_object_or_404(CommitteeMember, pk=pk)
+    if request.method == "POST":
+        member.is_active = False
+        member.save()
+        messages.info(request, f"{member.student.name} 已卸任「{member.role.name}」。")
+    return redirect("classes:committee_list")
+
+
+# ====== 学习小组 ======
 
 @login_required
 def study_groups(request):
-    """学习小组（占位）"""
-    return render(request, "classes/placeholder.html", {
-        "title": "学习小组",
-        "message": "学习小组功能将在后续阶段实现。",
+    """学习小组"""
+    current_class = SchoolClass.objects.filter(is_current=True).first()
+    groups = StudyGroup.objects.filter(
+        school_class=current_class, is_active=True
+    ).select_related("leader").prefetch_related("members") if current_class else []
+
+    ungrouped = Student.objects.filter(
+        school_class=current_class, is_deleted=False
+    ).exclude(study_groups__in=[g.pk for g in groups]) if current_class else []
+
+    return render(request, "classes/study_groups.html", {
+        "groups": groups, "ungrouped": ungrouped,
+        "all_students": Student.objects.filter(
+            school_class=current_class, is_deleted=False
+        ).order_by("student_id") if current_class else [],
     })
 
 
 @login_required
+def study_group_create(request):
+    """创建学习小组"""
+    current_class = SchoolClass.objects.filter(is_current=True).first()
+    current_semester = Semester.objects.filter(is_current=True).first()
+    if request.method == "POST":
+        name = request.POST.get("name", "").strip()
+        leader_id = request.POST.get("leader", "")
+        member_ids = request.POST.getlist("members")
+        if name:
+            group = StudyGroup.objects.create(
+                school_class=current_class, semester=current_semester,
+                name=name,
+                leader_id=int(leader_id) if leader_id else None,
+            )
+            if member_ids:
+                group.members.set(member_ids)
+            messages.success(request, f"小组「{name}」已创建（{len(member_ids)} 名成员）。")
+        else:
+            messages.error(request, "组名不能为空。")
+    return redirect("classes:study_groups")
+
+
+@login_required
+def study_group_delete(request, pk):
+    """删除学习小组"""
+    group = get_object_or_404(StudyGroup, pk=pk)
+    if request.method == "POST":
+        group.is_active = False
+        group.save()
+        messages.info(request, f"小组「{group.name}」已解散。")
+    return redirect("classes:study_groups")
+
+
+# ====== 课程表 ======
+
+@login_required
 def course_schedule(request):
-    """课程表（占位）"""
-    return render(request, "classes/placeholder.html", {
-        "title": "课程表",
-        "message": "课程表功能将在后续阶段实现。",
+    """课程表"""
+    current_class = SchoolClass.objects.filter(is_current=True).first()
+    current_semester = Semester.objects.filter(is_current=True).first()
+
+    entries = CourseScheduleEntry.objects.filter(
+        school_class=current_class, semester=current_semester
+    ) if current_class else []
+
+    # 构建网格: {weekday: {period: entry}}
+    grid = {}
+    max_period = 8
+    for d in range(1, 8):
+        grid[d] = {}
+    for e in entries:
+        grid[e.weekday][e.period] = e
+        max_period = max(max_period, e.period)
+
+    # 可选课程（来自 homework 的 Subject）
+    subjects = Subject.objects.filter(is_active=True)
+
+    if request.method == "POST":
+        from django.db import transaction as db_transaction
+        with db_transaction.atomic():
+            CourseScheduleEntry.objects.filter(
+                school_class=current_class, semester=current_semester
+            ).delete()
+            count = 0
+            for key, value in request.POST.items():
+                if key.startswith("cell_") and value.strip():
+                    try:
+                        _, weekday, period = key.split("_")
+                        weekday, period = int(weekday), int(period)
+                        CourseScheduleEntry.objects.create(
+                            school_class=current_class, semester=current_semester,
+                            weekday=weekday, period=period,
+                            subject=value.strip(),
+                            teacher=request.POST.get(f"teacher_{weekday}_{period}", "").strip(),
+                            location=request.POST.get(f"location_{weekday}_{period}", "").strip(),
+                        )
+                        count += 1
+                    except (ValueError, TypeError):
+                        continue
+        messages.success(request, f"课程表已保存（{count} 节课）。")
+        return redirect("classes:course_schedule")
+
+    return render(request, "classes/course_schedule.html", {
+        "grid": grid, "max_period": max_period, "subjects": subjects,
+        "periods": range(1, max_period + 1),
+        "weekdays": range(1, 8),
     })

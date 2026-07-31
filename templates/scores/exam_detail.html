@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% block title %}{{ exam.name }} - 考试详情{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mt-3 mb-4">
+    <h4 class="mb-0"><i class="bi bi-file-earmark-text me-2 text-primary"></i>{{ exam.name }}</h4>
+    <div>
+        <form method="post" class="d-inline">{% csrf_token %}
+            <input type="hidden" name="toggle_publish" value="1">
+            <button class="btn btn-sm {% if exam.is_published %}btn-outline-warning{% else %}btn-success{% endif %}">
+                {% if exam.is_published %}<i class="bi bi-eye-slash me-1"></i>取消发布{% else %}<i class="bi bi-eye me-1"></i>发布成绩{% endif %}
+            </button>
+        </form>
+        <a href="{% url 'scores:exam_list' %}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left me-1"></i>返回</a>
+    </div>
+</div>
+
+<div class="row g-4">
+    <!-- 考试信息 -->
+    <div class="col-md-5">
+        <div class="card">
+            <div class="card-header"><i class="bi bi-info-circle me-2"></i>考试信息</div>
+            <div class="card-body">
+                <table class="table table-borderless mb-0">
+                    <tr><td class="text-muted" style="width:90px;">考试类型</td><td>{{ exam.get_exam_type_display }}</td></tr>
+                    <tr><td class="text-muted">日期</td><td>{{ exam.date }}</td></tr>
+                    <tr><td class="text-muted">学期</td><td>{{ exam.semester.get_display_name|default:"-" }}</td></tr>
+                    <tr><td class="text-muted">总分</td><td>{{ exam.total_score|default:"-" }}</td></tr>
+                    <tr><td class="text-muted">状态</td><td>{% if exam.is_published %}<span class="badge bg-success">已发布{% else %}<span class="badge bg-warning">草稿{% endif %}</td></tr>
+                    <tr><td class="text-muted">备注</td><td>{{ exam.remarks|default:"-" }}</td></tr>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- 科目管理 -->
+    <div class="col-md-7">
+        <div class="card">
+            <div class="card-header"><i class="bi bi-book me-2"></i>考试科目</div>
+            <div class="card-body p-0 table-responsive">
+                <table class="table mb-0">
+                    <thead><tr><th>科目</th><th>满分</th><th>已录入</th><th>操作</th></tr></thead>
+                    <tbody>
+                    {% for es in exam_subjects %}
+                    <tr>
+                        <td><strong>{{ es.subject.name }}</strong></td>
+                        <td>{{ es.full_score }}</td>
+                        <td>{{ es.score_count }} 人</td>
+                        <td class="text-nowrap">
+                            <a href="{% url 'scores:score_entry' %}?exam_id={{ exam.pk }}&subject_id={{ es.pk }}" class="btn btn-sm btn-outline-primary">录入成绩</a>
+                            <form method="post" action="{% url 'scores:exam_subject_delete' es.pk %}" class="d-inline" onsubmit="return confirm('确认移除科目「{{ es.subject.name }}」？')">
+                                {% csrf_token %}
+                                <button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% empty %}<tr><td colspan="4" class="text-muted text-center py-4">尚未添加科目，请从下方添加。</td></tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% if available_subjects %}
+            <div class="card-footer">
+                <form method="post" action="{% url 'scores:exam_subject_create' exam.pk %}" class="row g-2 align-items-end">
+                    {% csrf_token %}
+                    <div class="col-md-5"><label class="form-label small">选择科目</label>
+                        <select name="subject" class="form-select form-select-sm">
+                            {% for s in available_subjects %}<option value="{{ s.pk }}">{{ s.name }}</option>{% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-4"><label class="form-label small">满分</label>
+                        <input type="number" name="full_score" class="form-control form-control-sm" value="100" min="1">
+                    </div>
+                    <div class="col-md-3"><button class="btn btn-primary btn-sm w-100"><i class="bi bi-plus-lg"></i> 添加科目</button></div>
+                </form>
+            </div>
+            {% else %}
+            <div class="card-footer text-muted small">
+                <i class="bi bi-info-circle me-1"></i>所有科目均已添加。如需新科目，请到「科目与考试设置」中添加。
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

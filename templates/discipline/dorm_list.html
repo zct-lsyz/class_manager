@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block title %}宿舍纪律{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mt-3 mb-4">
+    <h4 class="mb-0"><i class="bi bi-house-exclamation me-2 text-primary"></i>宿舍纪律</h4>
+    <a href="{% url 'discipline:dorm_create' %}" class="btn btn-primary btn-sm"><i class="bi bi-plus-lg"></i> 登记事件</a>
+</div>
+<div class="card">
+    <div class="card-body p-0 table-responsive">
+        <table class="table mb-0">
+            <thead><tr><th>日期</th><th>学生</th><th>宿舍</th><th>条目</th><th>扣分</th><th>严重程度</th><th>跟进</th><th>操作</th></tr></thead>
+            <tbody>
+            {% for r in page_obj %}
+            <tr>
+                <td>{{ r.date }}{% if r.time %}<small class="text-muted d-block">{{ r.time }}</small>{% endif %}</td>
+                <td><strong>{{ r.student.name }}</strong></td>
+                <td>{{ r.dorm_room.room_number|default:"-" }}</td>
+                <td>{{ r.item.name|default:r.custom_content }}</td>
+                <td class="text-danger">{{ r.points_deducted }}</td>
+                <td><span class="badge {% if r.severity == 'serious' or r.severity == 'critical' %}bg-danger{% else %}bg-warning{% endif %}">{{ r.get_severity_display }}</span></td>
+                <td>{% if r.needs_follow_up %}<span class="text-warning"><i class="bi bi-clock"></i> 待跟进{% else %}<span class="text-muted small">{{ r.follow_up_result|truncatechars:12|default:"-" }}{% endif %}</td>
+                <td class="text-nowrap">
+                    <a href="{% url 'discipline:dorm_edit' r.pk %}" class="btn btn-sm btn-outline-primary" title="编辑"><i class="bi bi-pencil"></i></a>
+                    {% if r.needs_follow_up %}
+                    <button class="btn btn-sm btn-outline-warning" data-bs-toggle="modal" data-bs-target="#followModal{{ r.pk }}" title="处理跟进"><i class="bi bi-check2-square"></i></button>
+                    {% endif %}
+                    <form method="post" action="{% url 'discipline:dorm_delete' r.pk %}" class="d-inline" onsubmit="return confirm('确认删除该记录？')">
+                        {% csrf_token %}
+                        <button class="btn btn-sm btn-outline-danger" title="删除"><i class="bi bi-trash"></i></button>
+                    </form>
+                </td>
+            </tr>
+
+            {% if r.needs_follow_up %}
+            <div class="modal fade" id="followModal{{ r.pk }}" tabindex="-1">
+                <div class="modal-dialog"><div class="modal-content">
+                    <form method="post" action="{% url 'discipline:dorm_follow_up' r.pk %}">
+                        {% csrf_token %}
+                        <div class="modal-header"><h5 class="modal-title">处理跟进 - {{ r.student.name }}</h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+                        <div class="modal-body">
+                            <div class="mb-3"><label class="form-label small">跟进日期</label>
+                                <input type="date" name="follow_up_date" class="form-control"></div>
+                            <div class="mb-3"><label class="form-label small">整改结果</label>
+                                <textarea name="follow_up_result" class="form-control" rows="3" required></textarea></div>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                            <button type="submit" class="btn btn-success">确认处理</button>
+                        </div>
+                    </form>
+                </div></div>
+            </div>
+            {% endif %}
+            {% empty %}<tr><td colspan="8" class="text-muted text-center py-4">暂无宿舍纪律记录</td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

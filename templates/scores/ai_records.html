@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}AI 分析记录{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mt-3 mb-4">
+    <h4 class="mb-0"><i class="bi bi-clock-history me-2 text-primary"></i>AI 分析历史记录</h4>
+    <a href="{% url 'scores:analysis' %}" class="btn btn-outline-secondary btn-sm">返回成绩分析</a>
+</div>
+<div class="card">
+    <div class="card-body p-0 table-responsive">
+        <table class="table mb-0">
+            <thead><tr><th>时间</th><th>类型</th><th>对象</th><th>考试</th><th>模型</th><th>耗时</th><th>状态</th><th>操作</th></tr></thead>
+            <tbody>
+            {% for r in records %}
+            <tr>
+                <td class="small text-nowrap">{{ r.created_at|date:"Y-m-d H:i" }}</td>
+                <td>{{ r.get_analysis_type_display }}</td>
+                <td>{{ r.subject_name|default:r.student.name|default:"-" }}</td>
+                <td>{{ r.exam.name|default:"-" }}</td>
+                <td class="small">{{ r.model_name }}</td>
+                <td class="small">{{ r.duration_ms|default:"-" }}ms</td>
+                <td>{% if r.success %}<span class="text-success"><i class="bi bi-check-circle"></i>{% else %}<span class="text-danger"><i class="bi bi-x-circle"></i> 失败{% endif %}</td>
+                <td><a href="{% url 'scores:ai_record_detail' r.pk %}" class="btn btn-sm btn-outline-primary">查看</a></td>
+            </tr>
+            {% empty %}<tr><td colspan="8" class="text-muted text-center py-4">暂无 AI 分析记录</td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

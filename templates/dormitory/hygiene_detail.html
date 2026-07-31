@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}卫生检查详情{% endblock %}
+{% block content %}
+<div class="mt-3"><a href="{% url 'dormitory:hygiene' %}">&larr; 返回列表</a></div>
+<h4 class="mt-2 mb-3">{{ check.room.building.name }} {{ check.room.room_number }} - {{ check.date }}</h4>
+
+<div class="row g-3">
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-header">基本信息</div>
+            <div class="card-body">
+                <table class="table table-borderless mb-0">
+                    <tr><td class="text-muted">总分</td><td><strong>{{ check.total_score }}</strong> 分</td></tr>
+                    <tr><td class="text-muted">等级</td><td>
+                        {% if check.grade == 'excellent' %}<span class="badge bg-success">优秀
+                        {% elif check.grade == 'good' %}<span class="badge bg-primary">良好
+                        {% elif check.grade == 'fair' %}<span class="badge bg-warning">一般
+                        {% elif check.grade == 'poor' %}<span class="badge bg-danger">差{% else %}<span class="badge bg-secondary">未评级{% endif %}
+                    </td></tr>
+                    <tr><td class="text-muted">检查人</td><td>{{ check.inspector|default:"-" }}</td></tr>
+                    <tr><td class="text-muted">检查时间</td><td>{{ check.check_time|default:"-" }}</td></tr>
+                </table>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header">项目得分</div>
+            <div class="card-body p-0 table-responsive">
+                <table class="table mb-0">
+                    <thead><tr><th>项目</th><th>得分</th><th>满分</th><th>扣分原因</th></tr></thead>
+                    <tbody>
+                    {% for s in scores %}
+                    <tr><td>{{ s.item.name }}</td><td>{{ s.score }}</td><td>{{ s.item.full_score }}</td><td>{{ s.deduction_reason|default:"-" }}</td></tr>
+                    {% empty %}<tr><td colspan="4" class="text-muted text-center">无项目得分</td></tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
