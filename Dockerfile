@@ -12,7 +12,12 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     TZ=Asia/Shanghai
 
 # 安装系统依赖
-RUN apt-get update && apt-get install -y --no-install-recommends \
+RUN sed -i \
+        -e 's|http://deb.debian.org/debian|https://mirrors.aliyun.com/debian|g' \
+        -e 's|http://security.debian.org/debian-security|https://mirrors.aliyun.com/debian-security|g' \
+        /etc/apt/sources.list \
+    && apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=45 -o Acquire::https::Timeout=45 update \
+    && apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=45 -o Acquire::https::Timeout=45 install -y --no-install-recommends \
     gcc \
     libc6-dev \
     tesseract-ocr \
