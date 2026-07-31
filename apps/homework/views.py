@@ -150,3 +150,18 @@ def status_settings(request):
 
     context = {"statuses": statuses}
     return render(request, "homework/status_settings.html", context)
+
+
+@login_required
+def status_delete(request, pk):
+    current_class = SchoolClass.objects.filter(is_current=True).first()
+    status = get_object_or_404(HomeworkStatus, pk=pk, school_class=current_class)
+    if request.method == "POST":
+        if HomeworkRecord.objects.filter(status=f"custom:{status.pk}").exists():
+            status.is_active = False
+            status.save(update_fields=["is_active", "updated_at"])
+            messages.info(request, "状态已有历史记录，已停用并保留原状态。")
+        else:
+            status.delete()
+            messages.info(request, "作业状态已删除。")
+    return redirect("homework:status_settings")

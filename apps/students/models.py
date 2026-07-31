@@ -1,7 +1,9 @@
 from django.db import models
+from django.core.validators import MaxValueValidator, MinValueValidator
 from django.utils import timezone
 
 from apps.classes.models import SchoolClass
+from apps.students.validators import phone_validator, student_id_validator
 
 
 class BaseModel(models.Model):
@@ -37,11 +39,11 @@ class Student(BaseModel):
         null=True, blank=True,
         related_name="students", verbose_name="班级",
     )
-    student_id = models.CharField("学号", max_length=20, unique=True)
+    student_id = models.CharField("学号", max_length=20, unique=True, validators=[student_id_validator])
     name = models.CharField("姓名", max_length=50)
     gender = models.CharField("性别", max_length=10, choices=GENDER_CHOICES)
     birth_date = models.DateField("出生日期", null=True, blank=True)
-    height = models.IntegerField("身高(cm)", null=True, blank=True)
+    height = models.IntegerField("身高(cm)", null=True, blank=True, validators=[MinValueValidator(50), MaxValueValidator(250)])
     vision = models.CharField("视力情况", max_length=100, blank=True, default="")
     seat_requirement = models.CharField(
         "特殊座位需求", max_length=200, blank=True, default=""
@@ -55,13 +57,13 @@ class Student(BaseModel):
         "主要联系人", max_length=50, blank=True, default=""
     )
     primary_phone = models.CharField(
-        "主要联系电话", max_length=20, blank=True, default=""
+        "主要联系电话", max_length=20, blank=True, default="", validators=[phone_validator]
     )
     secondary_contact = models.CharField(
         "备用联系人", max_length=50, blank=True, default=""
     )
     secondary_phone = models.CharField(
-        "备用联系电话", max_length=20, blank=True, default=""
+        "备用联系电话", max_length=20, blank=True, default="", validators=[phone_validator]
     )
     remarks = models.TextField("备注", blank=True, default="")
     sort_order = models.IntegerField("排序", default=0)
@@ -136,9 +138,9 @@ class Guardian(BaseModel):
         related_name="guardian", verbose_name="学生",
     )
     father_name = models.CharField("父亲姓名", max_length=50, blank=True, default="")
-    father_phone = models.CharField("父亲电话", max_length=20, blank=True, default="")
+    father_phone = models.CharField("父亲电话", max_length=20, blank=True, default="", validators=[phone_validator])
     mother_name = models.CharField("母亲姓名", max_length=50, blank=True, default="")
-    mother_phone = models.CharField("母亲电话", max_length=20, blank=True, default="")
+    mother_phone = models.CharField("母亲电话", max_length=20, blank=True, default="", validators=[phone_validator])
     other_guardian = models.CharField(
         "其他监护人", max_length=50, blank=True, default=""
     )

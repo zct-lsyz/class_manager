@@ -15,6 +15,7 @@
     <a href="{% url 'dormitory:room_create' %}" class="btn btn-outline-primary btn-sm"><i class="bi bi-plus-lg"></i> 新建宿舍</a>
     <a href="{% url 'dormitory:hygiene' %}" class="btn btn-outline-success btn-sm"><i class="bi bi-clipboard-check"></i> 卫生检查</a>
     <a href="{% url 'dormitory:discipline' %}" class="btn btn-outline-danger btn-sm"><i class="bi bi-house-exclamation"></i> 宿舍纪律</a>
+    <a href="{% url 'students:history_browser' 'dormitory' %}" class="btn btn-outline-primary btn-sm"><i class="bi bi-people"></i> 浏览全部学生</a>
 </div>
 
 {% for b in buildings %}

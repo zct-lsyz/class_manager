@@ -2,11 +2,13 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.shortcuts import render, redirect, get_object_or_404
 from django.core.paginator import Paginator
-from django.db.models import Sum, Q
+from django.db.models import Sum, Q, Count
+from django.db.models.functions import TruncDay, TruncWeek, TruncMonth
+from django.db import transaction
 from django.utils import timezone
 
 from apps.rewards.models import RewardItem, RewardRecord, PointRecord
-from apps.rewards.forms import RewardItemForm, RewardRecordForm, PointRecordForm
+from apps.rewards.forms import RewardItemForm, RewardRecordForm, PointRecordForm, BatchRewardRecordForm
 from apps.classes.models import SchoolClass, Semester
 from apps.students.models import Student
 from apps.audit.services import soft_delete
@@ -28,6 +30,7 @@ def index(request):
 
 
 @login_required
+@transaction.atomic
 def reward_create(request):
     """新增奖励"""
     current_class = SchoolClass.objects.filter(is_current=True).first()
@@ -36,18 +39,32 @@ def reward_create(request):
     ).first() if current_class else None
 
     if request.method == "POST":
-        form = RewardRecordForm(request.POST, request.FILES, current_class=current_class)
+        post_data = request.POST.copy()
+        if not post_data.getlist("students") and post_data.get("student"):
+            post_data.setlist("students", [post_data["student"]])
+        form = BatchRewardRecordForm(post_data, request.FILES, current_class=current_class)
         if form.is_valid():
-            record = form.save(commit=False)
-            record.school_class = current_class
-            record.semester = current_semester
-            record.points = -abs(record.points) if record.record_type == "penalty" else abs(record.points)
-            record.save()
-            _sync_point_record(record)
-            messages.success(request, "奖惩记录已保存。")
+            saved_photo = ""
+            for index, student in enumerate(form.cleaned_data["students"]):
+                record = RewardRecord(
+                    school_class=current_class, semester=current_semester, student=student,
+                    date=form.cleaned_data["date"], record_type=form.cleaned_data["record_type"],
+                    item=form.cleaned_data["item"], custom_name=form.cleaned_data["custom_name"],
+                    level=form.cleaned_data["level"], points=form.cleaned_data["points"],
+                    description=form.cleaned_data["description"],
+                )
+                record.points = -abs(record.points) if record.record_type == "penalty" else abs(record.points)
+                if index == 0:
+                    record.certificate_photo = form.cleaned_data["certificate_photo"]
+                elif saved_photo:
+                    record.certificate_photo = saved_photo
+                record.save()
+                saved_photo = record.certificate_photo.name if record.certificate_photo else ""
+                _sync_point_record(record)
+            messages.success(request, f"已为 {len(form.cleaned_data['students'])} 名学生保存奖惩记录。")
             return redirect("rewards:index")
     else:
-        form = RewardRecordForm(current_class=current_class)
+        form = BatchRewardRecordForm(current_class=current_class)
 
     return render(request, "rewards/form.html", {"form": form, "title": "新增奖惩"})
 
@@ -97,6 +114,18 @@ def points(request):
         school_class=current_class, is_current=True,
     ).first() if current_class else None
 
+    date_from = request.GET.get("date_from", "")
+    date_to = request.GET.get("date_to", "")
+    period = request.GET.get("period", "month")
+
+    records = PointRecord.objects.filter(
+        school_class=current_class, semester=current_semester, is_deleted=False
+    ).select_related("student").order_by("-date") if current_class else PointRecord.objects.none()
+    if date_from:
+        records = records.filter(date__gte=date_from)
+    if date_to:
+        records = records.filter(date__lte=date_to)
+
     # 获取所有学生的积分汇总
     students = Student.objects.filter(
         school_class=current_class, is_deleted=False
@@ -104,17 +133,14 @@ def points(request):
 
     student_points = []
     for s in students:
-        total = PointRecord.objects.filter(
-            student=s, semester=current_semester, is_deleted=False,
-        ).aggregate(Sum("points"))["points__sum"] or 0
+        total = records.filter(student=s).aggregate(Sum("points"))["points__sum"] or 0
         student_points.append({"student": s, "total": total})
 
     student_points.sort(key=lambda x: x["total"], reverse=True)
 
-    # 积分明细
-    records = PointRecord.objects.filter(
-        school_class=current_class, semester=current_semester, is_deleted=False
-    ).select_related("student").order_by("-date") if current_class else []
+    trunc = {"day": TruncDay, "week": TruncWeek, "month": TruncMonth}.get(period, TruncMonth)
+    trends = list(records.annotate(bucket=trunc("date")).values("bucket", "student__name").annotate(total=Sum("points")).order_by("bucket", "student__name"))
+    distribution = list(records.values("reason").annotate(total=Sum("points"), count=Count("id")).order_by("-count")[:20])
 
     paginator = Paginator(records, 30)
     page = request.GET.get("page", 1)
@@ -123,6 +149,9 @@ def points(request):
     context = {
         "student_points": student_points,
         "page_obj": page_obj,
+        "trends": trends,
+        "distribution": distribution,
+        "filters": {"date_from": date_from, "date_to": date_to, "period": period},
     }
     return render(request, "rewards/points.html", context)
 
@@ -145,6 +174,21 @@ def rules(request):
         form = RewardItemForm()
 
     return render(request, "rewards/rules.html", {"items": items, "form": form})
+
+
+@login_required
+def rule_delete(request, pk):
+    current_class = SchoolClass.objects.filter(is_current=True).first()
+    item = get_object_or_404(RewardItem, pk=pk, school_class=current_class)
+    if request.method == "POST":
+        if item.records.exists():
+            item.is_active = False
+            item.save(update_fields=["is_active", "updated_at"])
+            messages.info(request, "条目已有历史记录，已改为停用。")
+        else:
+            item.delete()
+            messages.info(request, "奖惩条目已删除。")
+    return redirect("rewards:rules")
 
 
 def _sync_point_record(record):

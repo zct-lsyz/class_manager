@@ -38,12 +38,27 @@ def task_list(request):
             task.school_class = current_class
             task.save()
             messages.success(request, f"任务「{task.name}」已添加。")
-            return redirect("duty:task_list")
+            return redirect("duty:index")
     else:
         form = DutyTaskForm()
 
     context = {"tasks": tasks, "form": form}
     return render(request, "duty/task_list.html", context)
+
+
+@login_required
+def task_delete(request, pk):
+    current_class = SchoolClass.objects.filter(is_current=True).first()
+    task = get_object_or_404(DutyTask, pk=pk, school_class=current_class)
+    if request.method == "POST":
+        if task.duty_groups.exists() or task.member_assignments.exists():
+            task.is_active = False
+            task.save(update_fields=["is_active", "updated_at"])
+            messages.info(request, "任务已有历史分配，已改为停用。")
+        else:
+            task.delete()
+            messages.info(request, "值日任务已删除。")
+    return redirect("duty:task_list")
 
 
 @login_required
@@ -145,7 +160,7 @@ def group_detail(request, pk):
                 )
                 saved += 1
         messages.success(request, f"已保存 {saved} 条值日记录。")
-        return redirect("duty:group_detail", pk=group.pk)
+        return redirect("duty:index")
 
     return render(request, "duty/group_detail.html", {
         "group": group, "members": members,

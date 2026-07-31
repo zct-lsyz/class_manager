@@ -2,12 +2,14 @@
 import json
 import tempfile
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import patch
 
 from django.test import TestCase
 from openpyxl import Workbook
 
 from apps.classes.models import SchoolClass
-from apps.scores.exam_analysis_services import ExamAnalysisParseError, parse_score_sheet
+from apps.scores.exam_analysis_services import ExamAnalysisParseError, generate_exam_analysis, parse_score_sheet
 from apps.students.models import Student
 
 
@@ -62,3 +64,16 @@ class ExamScoreSheetTests(TestCase):
                 parse_score_sheet(path, self.school_class)
         finally:
             temp_dir.cleanup()
+
+    @patch("apps.scores.exam_analysis_services.call_chat_completion")
+    def test_selected_subject_uses_subject_prompt(self, mocked_chat):
+        mocked_chat.return_value = (json.dumps({"overall_summary": "", "questions": []}), 10)
+        config = SimpleNamespace(
+            prompts={"语文": "语文专用提示词"}, base_url="https://example.com",
+            model_name="test-model", temperature=0.2,
+        )
+
+        generate_exam_analysis(config, "试卷文本", [], "语文")
+
+        messages = mocked_chat.call_args.args[3]
+        self.assertIn("语文专用提示词", messages[1]["content"])

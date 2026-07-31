@@ -24,6 +24,7 @@ from apps.exports.services import (
 )
 from apps.audit.models import OperationLog
 from apps.exports.module_data import MODULE_EXPORTS, collect_module_data
+from apps.exports.option_services import import_options, option_template_response
 
 
 def get_client_ip(request):
@@ -40,6 +41,33 @@ def export_center(request):
     modules = [(key, name) for key, name, _path in MODULE_EXPORTS]
 
     return render(request, "exports/center.html", {"modules": modules, "tasks": tasks})
+
+
+@login_required
+def option_template(request, category):
+    try:
+        return option_template_response(category)
+    except ValueError as exc:
+        messages.error(request, str(exc))
+        return redirect("dashboard:index")
+
+
+@login_required
+def option_import(request, category):
+    redirects = {
+        "classroom_discipline": "discipline:classroom_items", "dorm_discipline": "discipline:dorm_items",
+        "reward": "rewards:rules", "dorm_hygiene": "dormitory:hygiene_items",
+        "attendance_reason": "attendance:reasons", "duty_task": "duty:task_list",
+        "homework_status": "homework:status_settings",
+    }
+    if request.method == "POST" and request.FILES.get("file"):
+        current_class = SchoolClass.objects.filter(is_current=True).first()
+        try:
+            count = import_options(category, request.FILES["file"], current_class)
+            messages.success(request, f"已导入或更新 {count} 个选项。")
+        except Exception as exc:
+            messages.error(request, f"导入失败：{exc}")
+    return redirect(redirects.get(category, "dashboard:index"))
 
 
 @login_required

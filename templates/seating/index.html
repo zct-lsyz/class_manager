@@ -7,12 +7,7 @@
         <a href="{% url 'seating:plan_create' %}" class="btn btn-primary btn-sm"><i class="bi bi-plus-lg"></i> 新方案</a>
         <a href="{% url 'seating:layout' %}" class="btn btn-outline-primary btn-sm"><i class="bi bi-gear"></i> 布局</a>
         {% if current_plan %}
-        <form method="post" action="{% url 'seating:auto_arrange' %}" class="d-inline">
-            {% csrf_token %}
-            <button class="btn btn-outline-info btn-sm" onclick="return confirm('自动排座将清空当前分配并按身高+性别重新排座，确认？')">
-                <i class="bi bi-magic me-1"></i>自动排座
-            </button>
-        </form>
+        <a href="{% url 'seating:print' %}" target="_blank" class="btn btn-outline-secondary btn-sm"><i class="bi bi-printer me-1"></i>导出/打印</a>
         {% endif %}
     </div>
 </div>
@@ -37,24 +32,25 @@
             <span class="small text-muted">拖动学生块到空座；目标已有学生时，原学生自动回到未分配区</span>
         </div>
         <div class="card-body">
-            <div class="table-responsive">
-                <table class="table table-bordered text-center mb-0 mx-auto" style="max-width: 720px;">
+            <div class="table-responsive seat-table-wrapper">
+                <table class="table table-bordered text-center mb-0 mx-auto seat-table">
                     {% for row_num, row in grid.items %}
                     <tr>
                         <td class="align-middle small text-muted" style="width:30px;">{{ row_num|add:1 }}</td>
                         {% for col_num, student in row.items %}
-                        <td class="p-1" style="min-width:92px;" data-row="{{ row_num }}" data-col="{{ col_num }}">
-                            <div class="seat-slot border rounded d-flex align-items-center justify-content-center" style="min-height:58px; background:#f8f9fa">
+                        <td class="p-1 seat-cell" data-row="{{ row_num }}" data-col="{{ col_num }}">
+                            <div class="seat-slot border rounded d-flex align-items-center justify-content-center">
                                 <input type="hidden" name="seat_{{ row_num }}_{{ col_num }}" value="{% if student %}{{ student.pk }}{% endif %}">
-                                {% if student %}<div class="student-block badge bg-primary p-2 w-100" draggable="true" data-student-id="{{ student.pk }}">{{ student.name }}<br><small>{{ student.student_id }}</small></div>{% else %}<span class="seat-placeholder text-muted small">空座</span>{% endif %}
+                                {% if student %}{% include "seating/_student_block.html" with student=student full_width=True %}{% else %}<span class="seat-placeholder text-muted small">空座</span>{% endif %}
                             </div>
                         </td>
+                        {% if col_num|add:1 in aisle_positions %}<td class="seat-aisle" aria-label="过道"></td>{% endif %}
                         {% endfor %}
                         <td class="align-middle small text-muted" style="width:30px;">{{ row_num|add:1 }}</td>
                     </tr>
                     {% endfor %}
                 </table>
-                <div class="text-center mt-2 text-muted small">讲台</div>
+                <div class="podium mt-3">讲台（教师视角）</div>
             </div>
         </div>
         <div class="card-footer text-end">
@@ -69,7 +65,7 @@
     <div class="card-header"><i class="bi bi-people me-2"></i>未分配学生（{{ unassigned|length }} 人）</div>
     <div class="card-body d-flex flex-wrap gap-2" id="unassignedStudents" style="min-height:64px">
         {% for s in unassigned %}
-        <div class="student-block badge {% if s.seat_requirement %}bg-danger text-white{% else %}bg-light text-dark border{% endif %} p-2" draggable="true" data-student-id="{{ s.pk }}"{% if s.seat_requirement %} data-seat-requirement="特殊座位要求：{{ s.seat_requirement }}" data-bs-toggle="tooltip" data-bs-title="特殊座位要求：{{ s.seat_requirement }}"{% endif %}>{{ s.name }}<br><small>{{ s.student_id }}</small></div>
+        {% include "seating/_student_block.html" with student=s %}
         {% empty %}<span class="unassigned-empty text-muted small">暂无未分配学生</span>
         {% endfor %}
     </div>
@@ -93,12 +89,71 @@
     </div>
 </div>
 {% endif %}
+
+<div class="card mt-3 mb-4">
+    <div class="card-header"><i class="bi bi-magic me-2"></i>智能排座位</div>
+    <div class="card-body d-flex justify-content-between align-items-center flex-wrap gap-3">
+        <div><strong>按规则自动生成座位</strong><div class="small text-muted mt-1">支持身高视力、男女均衡、优差搭配、宿舍分散、特殊需求避让和按月轮换。</div></div>
+        <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#smartArrangeModal"><i class="bi bi-sliders me-1"></i>打开智能排座面板</button>
+    </div>
+</div>
+
+<div class="modal fade" id="smartArrangeModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable"><div class="modal-content">
+        <form method="post" action="{% url 'seating:auto_arrange' %}" id="smartArrangeForm">
+            {% csrf_token %}
+            <div class="modal-header"><h5 class="modal-title">智能排座位设置</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+            <div class="modal-body">
+                <div class="alert alert-warning py-2"><i class="bi bi-exclamation-triangle me-1"></i>执行后会覆盖当前座位分配，请先确认已保存需要保留的历史方案。</div>
+                <h6>排序依据优先级</h6>
+                <div class="row g-2 mb-3">
+                    {% for index, current_priority in priority_rows %}
+                    <div class="col-md-6"><label class="form-label small">优先级 {{ index }}</label><select name="priority_{{ index }}" class="form-select priority-select">
+                        {% for value, label in priority_options %}<option value="{{ value }}"{% if value == current_priority %} selected{% endif %}>{{ label }}</option>{% endfor %}
+                    </select></div>
+                    {% endfor %}
+                </div>
+                <div class="border rounded p-3 small mb-3">
+                    <div class="mb-1"><strong>身高/视力：</strong>偏矮、视力不佳和需重点关注的学生优先靠前。</div>
+                    <div class="mb-1"><strong>男女均衡：</strong>同桌保持同性，并平衡每排、每列男女比例。</div>
+                    <div class="mb-1"><strong>优差搭配：</strong>依据最近一次考试总分，让不同学习水平的学生相邻。</div>
+                    <div class="mb-1"><strong>宿舍号：</strong>避免同宿舍学生集中相邻。</div>
+                    <div><strong>特殊要求：</strong>识别前排、后排、靠窗、远离窗、过敏、多动等文字要求。</div>
+                </div>
+                <label class="form-label">自动左右轮换周期</label>
+                <select name="rotation_interval_months" class="form-select">
+                    <option value="0"{% if rotation_interval == 0 %} selected{% endif %}>不自动轮换</option>
+                    <option value="1"{% if rotation_interval == 1 %} selected{% endif %}>每 1 个月</option>
+                    <option value="2"{% if rotation_interval == 2 %} selected{% endif %}>每 2 个月</option>
+                    <option value="3"{% if rotation_interval == 3 %} selected{% endif %}>每 3 个月</option>
+                    <option value="6"{% if rotation_interval == 6 %} selected{% endif %}>每 6 个月</option>
+                </select>
+                <div class="form-text">轮换时每两列向右移动一组：1-2列 → 3-4列，最后一组回到1-2列。</div>
+            </div>
+            <div class="modal-footer"><button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">取消</button><button type="submit" class="btn btn-primary">生成并保存座位</button></div>
+        </form>
+    </div></div>
+</div>
 {% endif %}
 
+<style>
+.seat-table { width:max-content; table-layout:fixed; }
+.seat-cell { width:132px; min-width:132px; }
+.seat-slot { min-height:76px; background:#f8f9fa; padding:4px; }
+.seat-aisle { width:20px; min-width:20px; border:none !important; background:#fff !important; }
+.podium { width:min(420px, 70%); margin:0 auto; padding:9px; border:2px solid #94a3b8; border-radius:8px; background:#f8fafc; text-align:center; font-weight:600; color:#475569; }
+.student-block { position:relative; box-sizing:border-box; min-width:112px; max-width:100%; padding:8px 10px; border:1px solid transparent; border-radius:8px; color:#1f2937; cursor:grab; text-align:center; line-height:1.25; }
+.student-male { background:#dbeafe; border-color:#93c5fd; }
+.student-female { background:#fce7f3; border-color:#f9a8d4; }
+.student-name { font-size:.92rem; font-weight:700; }
+.student-meta { margin-top:4px; overflow:hidden; text-overflow:ellipsis; font-size:.68rem; font-weight:400; white-space:nowrap; color:#475569; }
+.special-star { position:absolute; top:2px; right:5px; color:#dc2626; font-size:.9rem; line-height:1; }
+</style>
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     let dragged = null;
     const unassigned = document.getElementById('unassignedStudents');
+    if (!unassigned) return;
     const syncSeats = () => document.querySelectorAll('.seat-slot').forEach(slot => {
         const block = slot.querySelector('.student-block');
         slot.querySelector('input[type="hidden"]').value = block ? block.dataset.studentId : '';
@@ -134,6 +189,18 @@ document.addEventListener('DOMContentLoaded', function() {
     unassigned.addEventListener('drop', event => {
         event.preventDefault();
         if (dragged) { unassigned.appendChild(dragged); syncSeats(); }
+    });
+    const prioritySelects = Array.from(document.querySelectorAll('.priority-select'));
+    prioritySelects.forEach(select => {
+        select.dataset.previous = select.value;
+        select.addEventListener('change', () => {
+            const duplicate = prioritySelects.find(other => other !== select && other.value === select.value);
+            if (duplicate) {
+                duplicate.value = select.dataset.previous;
+                duplicate.dataset.previous = duplicate.value;
+            }
+            select.dataset.previous = select.value;
+        });
     });
 });
 </script>

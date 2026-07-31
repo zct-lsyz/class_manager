@@ -23,13 +23,12 @@ class ClassroomLayout(BaseModel):
     rows = models.IntegerField("排数", default=8)
     cols = models.IntegerField("每排座位数", default=6)
     seats_per_desk = models.IntegerField("每桌人数", default=1)
-    has_middle_aisle = models.BooleanField("中间过道", default=True)
-    has_left_aisle = models.BooleanField("左边过道", default=False)
-    has_right_aisle = models.BooleanField("右边过道", default=False)
+    aisle_count = models.PositiveSmallIntegerField("过道数", default=0)
+    aisle_positions = models.JSONField("过道位置", default=list, blank=True)
     podium_position = models.CharField(
         "讲台位置", max_length=20,
         choices=[("front", "前方"), ("back", "后方")],
-        default="front",
+        default="back",
     )
     is_current = models.BooleanField("当前布局", default=True)
 
@@ -58,6 +57,9 @@ class SeatPlan(BaseModel):
     version = models.CharField("版本号", max_length=50, blank=True, default="")
     reason = models.TextField("调整原因", blank=True, default="")
     is_active = models.BooleanField("当前方案", default=True)
+    arrangement_priorities = models.JSONField("智能排座优先级", default=list, blank=True)
+    rotation_interval_months = models.PositiveSmallIntegerField("轮换周期(月)", default=0)
+    last_rotated_at = models.DateField("上次轮换日期", null=True, blank=True)
 
     class Meta:
         verbose_name = "座位方案"

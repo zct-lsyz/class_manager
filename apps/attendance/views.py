@@ -5,7 +5,7 @@ from django.core.paginator import Paginator
 from django.db.models import Q, Count
 from django.utils import timezone
 
-from apps.attendance.models import AttendanceRecord
+from apps.attendance.models import AttendanceRecord, AttendanceReason
 from apps.attendance.forms import AttendanceForm
 from apps.classes.models import SchoolClass, Semester
 from apps.students.models import Student
@@ -83,7 +83,8 @@ def create(request):
         if student_id:
             form.fields["student"].initial = student_id
 
-    return render(request, "attendance/form.html", {"form": form, "title": "新增异常考勤"})
+    reasons = AttendanceReason.objects.filter(school_class=current_class, is_active=True) if current_class else []
+    return render(request, "attendance/form.html", {"form": form, "title": "新增异常考勤", "reasons": reasons})
 
 
 @login_required
@@ -101,4 +102,29 @@ def edit(request, pk):
             return redirect("attendance:index")
     else:
         form = AttendanceForm(instance=record, current_class=current_class)
-    return render(request, "attendance/form.html", {"form": form, "title": "修改异常考勤"})
+    reasons = AttendanceReason.objects.filter(school_class=current_class, is_active=True) if current_class else []
+    return render(request, "attendance/form.html", {"form": form, "title": "修改异常考勤", "reasons": reasons})
+
+
+@login_required
+def reasons(request):
+    current_class = SchoolClass.objects.filter(is_current=True).first()
+    if request.method == "POST":
+        name = request.POST.get("name", "").strip()
+        if name and current_class:
+            AttendanceReason.objects.update_or_create(school_class=current_class, name=name, defaults={"is_active": True})
+            messages.success(request, "考勤原因项已添加。")
+            return redirect("attendance:reasons")
+        messages.error(request, "原因项不能为空。")
+    items = AttendanceReason.objects.filter(school_class=current_class) if current_class else []
+    return render(request, "attendance/reasons.html", {"items": items})
+
+
+@login_required
+def reason_delete(request, pk):
+    current_class = SchoolClass.objects.filter(is_current=True).first()
+    item = get_object_or_404(AttendanceReason, pk=pk, school_class=current_class)
+    if request.method == "POST":
+        item.delete()
+        messages.info(request, "考勤原因项已删除。历史考勤中的文字不会丢失。")
+    return redirect("attendance:reasons")

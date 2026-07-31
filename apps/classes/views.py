@@ -2,6 +2,7 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.shortcuts import render, redirect, get_object_or_404
 from django.utils import timezone
+from django.db.models import Q
 
 from apps.classes.models import (
     SchoolClass, Semester, CommitteeRole, CommitteeMember, StudyGroup,
@@ -149,17 +150,21 @@ def semester_archive(request, pk):
 def committee_list(request):
     """班委名单"""
     current_class = SchoolClass.objects.filter(is_current=True).first()
-    current_semester = Semester.objects.filter(is_current=True).first()
+    current_semester = Semester.objects.filter(
+        school_class=current_class, is_current=True,
+    ).first() if current_class else None
 
     roles = CommitteeRole.objects.filter(school_class=current_class, is_active=True) if current_class else []
     members = CommitteeMember.objects.filter(
-        is_active=True, semester=current_semester
-    ).select_related("student", "role") if current_semester else []
+        is_active=True, role__school_class=current_class,
+    ).select_related("student", "role") if current_class else []
+    if current_semester:
+        members = members.filter(Q(semester=current_semester) | Q(semester__isnull=True))
 
     return render(request, "classes/committee_list.html", {
         "roles": roles, "members": members,
         "all_students": Student.objects.filter(
-            school_class=current_class, is_deleted=False
+            Q(school_class=current_class) | Q(school_class__isnull=True), is_deleted=False
         ).order_by("student_id") if current_class else [],
     })
 
@@ -197,8 +202,12 @@ def committee_member_create(request):
                 CommitteeRole, pk=role_id, school_class=current_class,
             )
             student = get_object_or_404(
-                Student, pk=student_id, school_class=current_class, is_deleted=False,
+                Student, Q(school_class=current_class) | Q(school_class__isnull=True),
+                pk=student_id, is_deleted=False,
             )
+            if not student.school_class:
+                student.school_class = current_class
+                student.save(update_fields=["school_class", "updated_at"])
             CommitteeMember.objects.update_or_create(
                 role=role, student=student, semester=current_semester,
                 defaults={"is_active": True},

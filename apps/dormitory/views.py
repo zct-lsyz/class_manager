@@ -7,7 +7,7 @@ from django.db.models import Q
 
 from apps.dormitory.models import (
     DormBuilding, DormRoom, DormBed, DormAssignment,
-    DormHygieneItem, DormHygieneCheck, DormHygieneItemScore,
+    DormHygieneItem, DormHygieneCheck, DormHygieneItemScore, DormHygienePhoto,
 )
 from apps.dormitory.forms import (
     DormBuildingForm, DormRoomForm, DormAssignmentForm,
@@ -17,6 +17,7 @@ from apps.classes.models import SchoolClass, Semester
 from apps.students.models import Student
 from apps.audit.models import OperationLog
 from apps.audit.services import soft_delete
+from apps.dormitory.photo_services import prepare_hygiene_photo
 
 
 def get_client_ip(request):
@@ -258,6 +259,17 @@ def hygiene_create(request):
                 check.school_class = current_class
                 check.semester = current_semester
                 check.save()
+
+                for uploaded in form.cleaned_data["photos"]:
+                    image_file, original_size = prepare_hygiene_photo(uploaded)
+                    photo = DormHygienePhoto(
+                        check_record=check,
+                        original_name=uploaded.name,
+                        original_size=original_size,
+                    )
+                    photo.image.save(image_file.name, image_file, save=False)
+                    photo.stored_size = image_file.size
+                    photo.save()
 
                 # 保存父记录后再写项目得分
                 total = 0

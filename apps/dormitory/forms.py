@@ -3,6 +3,18 @@ from apps.dormitory.models import DormBuilding, DormRoom, DormAssignment, DormHy
 from apps.students.models import Student
 
 
+class MultipleImageInput(forms.ClearableFileInput):
+    allow_multiple_selected = True
+
+
+class MultipleImageField(forms.ImageField):
+    widget = MultipleImageInput
+
+    def clean(self, data, initial=None):
+        files = data if isinstance(data, (list, tuple)) else ([data] if data else [])
+        return [super(MultipleImageField, self).clean(file_item, initial) for file_item in files]
+
+
 class DormBuildingForm(forms.ModelForm):
     class Meta:
         model = DormBuilding
@@ -61,9 +73,14 @@ class DormHygieneItemForm(forms.ModelForm):
 
 
 class DormHygieneCheckForm(forms.ModelForm):
+    photos = MultipleImageField(
+        label="现场照片（可多选）", required=False,
+        widget=MultipleImageInput(attrs={"class": "form-control", "accept": "image/*"}),
+    )
+
     class Meta:
         model = DormHygieneCheck
-        fields = ["room", "date", "check_time", "inspector", "rectification", "rectification_deadline", "photo", "remarks"]
+        fields = ["room", "date", "check_time", "inspector", "rectification", "rectification_deadline", "remarks"]
         widgets = {
             "room": forms.Select(attrs={"class": "form-select"}),
             "date": forms.DateInput(attrs={"class": "form-control", "type": "date"}),
@@ -71,6 +88,5 @@ class DormHygieneCheckForm(forms.ModelForm):
             "inspector": forms.TextInput(attrs={"class": "form-control"}),
             "rectification": forms.Textarea(attrs={"class": "form-control", "rows": 2}),
             "rectification_deadline": forms.DateInput(attrs={"class": "form-control", "type": "date"}),
-            "photo": forms.FileInput(attrs={"class": "form-control", "accept": "image/*"}),
             "remarks": forms.Textarea(attrs={"class": "form-control", "rows": 2}),
         }

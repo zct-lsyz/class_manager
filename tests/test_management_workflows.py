@@ -60,6 +60,8 @@ class ManagementWorkflowTests(TestCase):
             reverse("duty:group_edit", args=[self.group.pk]), reverse("attendance:index"),
             reverse("attendance:create"), reverse("homework:task_detail", args=[self.homework.pk]),
             reverse("rewards:reward_edit", args=[self.reward.pk]), reverse("rewards:points"),
+            reverse("dashboard:warnings"), reverse("backups:storage_center"),
+            reverse("students:history_browser", args=["rewards"]),
         ]
         for url in urls:
             with self.subTest(url=url):
@@ -67,18 +69,19 @@ class ManagementWorkflowTests(TestCase):
                 self.assertEqual(response.status_code, 200)
         self.assertContains(self.client.get(reverse("seating:index")), 'draggable="true"')
         self.assertContains(self.client.get(reverse("seating:index")), "特殊座位要求：需安排前排座位")
-        self.assertContains(self.client.get(reverse("seating:index")), "bg-danger text-white")
+        self.assertContains(self.client.get(reverse("seating:index")), "special-star")
+        self.assertContains(self.client.get(reverse("seating:index")), "student-female")
 
     def test_student_roster_accepts_contacts_and_bed(self):
         response = self.client.post(reverse("students:create"), {
-            "school_class": self.school_class.pk, "student_id": "S003",
+            "school_class": self.school_class.pk, "student_id": "2026010100000000003",
             "name": "王五", "gender": "male", "dormitory": "2号楼301",
             "bed_number": "3", "primary_contact": "王先生",
             "primary_phone": "13800138000", "secondary_contact": "王女士",
             "secondary_phone": "13900139000", "sort_order": 0,
         })
         self.assertEqual(response.status_code, 302)
-        student = Student.objects.get(student_id="S003")
+        student = Student.objects.get(student_id="2026010100000000003")
         self.assertEqual(student.bed_number, "3")
         self.assertEqual(student.secondary_contact, "王女士")
 
@@ -104,6 +107,12 @@ class ManagementWorkflowTests(TestCase):
         assignment = DutyMemberTask.objects.get(group=self.group, student=self.student)
         self.assertEqual(assignment.task, self.duty_task)
 
+    def test_duty_record_redirects_to_list(self):
+        response = self.client.post(reverse("duty:group_detail", args=[self.group.pk]), {
+            "date": "2026-07-31", f"member_{self.student.pk}": "completed",
+        })
+        self.assertRedirects(response, reverse("duty:index"))
+
     def test_homework_batch_marks_poor(self):
         response = self.client.post(reverse("homework:task_detail", args=[self.homework.pk]), {
             "batch_students": [self.student.pk, self.student2.pk], "batch_status": "poor",
@@ -125,3 +134,12 @@ class ManagementWorkflowTests(TestCase):
         self.assertEqual(
             PointRecord.objects.get(source_type="reward", source_id=record.pk).points, -3,
         )
+
+    def test_batch_penalty_creates_records_for_selected_students(self):
+        response = self.client.post(reverse("rewards:reward_create"), {
+            "students": [self.student.pk, self.student2.pk], "date": "2026-07-31",
+            "record_type": "penalty", "custom_name": "集体迟到",
+            "level": "class", "points": 2, "description": "批量登记",
+        })
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(RewardRecord.objects.filter(custom_name="集体迟到", points=-2).count(), 2)

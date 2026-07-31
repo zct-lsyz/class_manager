@@ -20,10 +20,10 @@
             <div class="row g-3">
                 <div class="col-md-4">
                     <label class="form-label">考试科目</label>
-                    <select name="exam_subject" class="form-select" required>
+                    <select name="subject_name" class="form-select" required>
                         <option value="">请选择</option>
-                        {% for item in exam_subjects %}
-                        <option value="{{ item.pk }}">{{ item.exam.name }} - {{ item.subject.name }}（满分 {{ item.full_score }}）</option>
+                        {% for subject_name in subject_names %}
+                        <option value="{{ subject_name }}">{{ subject_name }}</option>
                         {% endfor %}
                     </select>
                 </div>
@@ -63,8 +63,8 @@
             {% for source in sources %}
             <tr>
                 <td>{{ source.created_at|date:"Y-m-d H:i" }}</td>
-                <td>{{ source.exam_subject.exam.name }}</td>
-                <td>{{ source.exam_subject.subject.name }}</td>
+                <td>{% if source.exam_subject %}{{ source.exam_subject.exam.name }}{% else %}独立试卷{% endif %}</td>
+                <td>{{ source.subject_name|default:source.exam_subject.subject.name }}</td>
                 <td class="small">{{ source.paper_file.name|default:"-" }}<br>{{ source.score_file.name|default:"-" }}</td>
                 <td>{% if source.status == "completed" %}<span class="badge bg-success">已完成</span>{% elif source.status == "failed" %}<span class="badge bg-danger">失败</span>{% else %}<span class="badge bg-warning text-dark">{{ source.get_status_display }}</span>{% endif %}</td>
                 <td><a href="{% url 'scores:exam_analysis_detail' source.pk %}" class="btn btn-sm btn-outline-primary">查看</a></td>

@@ -3,12 +3,18 @@ from django.contrib.auth.decorators import login_required
 from django.shortcuts import render, redirect, get_object_or_404
 from django.core.paginator import Paginator
 from django.db import transaction
+from django.db.models import Q
+from django.utils import timezone
 
 from apps.seating.models import ClassroomLayout, SeatPlan, SeatAssignment
 from apps.seating.forms import ClassroomLayoutForm, SeatPlanForm
 from apps.classes.models import SchoolClass, Semester
 from apps.students.models import Student
 from apps.audit.models import OperationLog
+from apps.seating.services import (
+    DEFAULT_PRIORITIES, PRIORITY_LABELS, arrange_students,
+    attach_student_seat_metadata, normalize_priorities, rotate_due_plans,
+)
 
 
 def get_client_ip(request):
@@ -19,7 +25,8 @@ def get_client_ip(request):
 def _build_grid(layout, assignments):
     """将座位分配转换为网格字典 {row: {col: student}}"""
     grid = {}
-    for r in range(layout.rows):
+    rows = range(layout.rows - 1, -1, -1) if layout.podium_position == "back" else range(layout.rows)
+    for r in rows:
         grid[r] = {}
         for c in range(layout.cols):
             grid[r][c] = None
@@ -33,6 +40,8 @@ def _build_grid(layout, assignments):
 def index(request):
     """座位表 - 可视化排座"""
     current_class = SchoolClass.objects.filter(is_current=True).first()
+    if current_class:
+        rotate_due_plans(school_class=current_class)
     current_plan = SeatPlan.objects.filter(
         school_class=current_class, is_active=True
     ).first() if current_class else None
@@ -43,18 +52,23 @@ def index(request):
     if current_plan:
         layout = current_plan.layout
         if layout:
-            assignments = SeatAssignment.objects.filter(
+            assignments = list(SeatAssignment.objects.filter(
                 seat_plan=current_plan
-            ).select_related("student")
+            ).select_related("student"))
             grid = _build_grid(layout, assignments)
 
     # 未分配学生
     assigned_ids = {a.student_id for a in assignments}
-    unassigned = Student.objects.filter(
-        school_class=current_class, is_deleted=False
-    ).exclude(id__in=assigned_ids) if current_class else []
+    unassigned = list(Student.objects.filter(
+        Q(school_class=current_class) | Q(school_class__isnull=True), is_deleted=False
+    ).exclude(id__in=assigned_ids)) if current_class else []
+    if current_class:
+        attach_student_seat_metadata([a.student for a in assignments] + unassigned, current_class)
 
     plans = SeatPlan.objects.filter(school_class=current_class).order_by("-created_at") if current_class else []
+    priorities = normalize_priorities(
+        current_plan.arrangement_priorities if current_plan else DEFAULT_PRIORITIES
+    )
 
     context = {
         "current_plan": current_plan,
@@ -62,6 +76,10 @@ def index(request):
         "grid": grid,
         "unassigned": unassigned,
         "plans": plans,
+        "aisle_positions": layout.aisle_positions if layout else [],
+        "priority_rows": list(enumerate(priorities, start=1)),
+        "priority_options": PRIORITY_LABELS.items(),
+        "rotation_interval": current_plan.rotation_interval_months or 1 if current_plan else 1,
     }
     return render(request, "seating/index.html", context)
 
@@ -71,21 +89,33 @@ def layout_settings(request):
     """教室布局设置"""
     current_class = SchoolClass.objects.filter(is_current=True).first()
     layouts = ClassroomLayout.objects.filter(school_class=current_class) if current_class else []
+    current_layout = layouts.filter(is_current=True).first() if current_class else None
+
+    if not current_class:
+        messages.error(request, "请先设置当前班级。")
+        return redirect("classes:settings")
 
     if request.method == "POST":
-        form = ClassroomLayoutForm(request.POST)
+        form = ClassroomLayoutForm(request.POST, instance=current_layout)
         if form.is_valid():
             layout = form.save(commit=False)
             layout.school_class = current_class
+            layout.podium_position = "back"
             layout.save()
+            SeatAssignment.objects.filter(seat_plan__layout=layout).filter(
+                Q(row__gte=layout.rows) | Q(col__gte=layout.cols)
+            ).delete()
             if layout.is_current:
                 ClassroomLayout.objects.filter(school_class=current_class).exclude(pk=layout.pk).update(is_current=False)
             messages.success(request, "教室布局已保存。")
             return redirect("seating:layout")
     else:
-        form = ClassroomLayoutForm()
+        form = ClassroomLayoutForm(instance=current_layout)
 
-    context = {"layouts": layouts, "form": form}
+    aisle_positions = request.POST.getlist("aisle_positions") if request.method == "POST" else (
+        current_layout.aisle_positions if current_layout else [3]
+    )
+    context = {"layouts": layouts, "form": form, "aisle_positions": aisle_positions}
     return render(request, "seating/layout.html", context)
 
 
@@ -154,9 +184,20 @@ def save_plan(request):
                 try:
                     _, row, col = key.split("_")
                     row, col = int(row), int(col)
+                    if row not in range(layout.rows) or col not in range(layout.cols):
+                        continue
                     student_id = int(value)
+                    student = Student.objects.filter(
+                        Q(school_class=current_class) | Q(school_class__isnull=True),
+                        pk=student_id, is_deleted=False,
+                    ).first()
+                    if not student:
+                        continue
+                    if not student.school_class:
+                        student.school_class = current_class
+                        student.save(update_fields=["school_class", "updated_at"])
                     SeatAssignment.objects.create(
-                        seat_plan=plan, student_id=student_id, row=row, col=col,
+                        seat_plan=plan, student=student, row=row, col=col,
                     )
                     count += 1
                 except (ValueError, TypeError):
@@ -175,7 +216,7 @@ def save_plan(request):
 @login_required
 @transaction.atomic
 def auto_arrange(request):
-    """自动排座：身高从低到高 + 性别均衡"""
+    """按用户优先级执行确定性智能排座。"""
     current_class = SchoolClass.objects.filter(is_current=True).first()
     plan = SeatPlan.objects.filter(school_class=current_class, is_active=True).first()
     if not plan or not plan.layout:
@@ -185,45 +226,62 @@ def auto_arrange(request):
     if request.method == "POST":
         layout = plan.layout
         students = list(Student.objects.filter(
-            school_class=current_class, is_deleted=False,
-        ).order_by("height", "student_id"))
-
-        # 排序：有视力的优先前排
-        vision_front = request.POST.get("vision_front") == "1"
-        male_front = request.POST.get("male_front") == "1"
-
-        # 身高从低到高排序（None 排最后）
-        students.sort(key=lambda s: (s.height is None, s.height or 0))
+            Q(school_class=current_class) | Q(school_class__isnull=True), is_deleted=False,
+        ).order_by("student_id"))
+        attach_student_seat_metadata(students, current_class)
 
         total_seats = layout.rows * layout.cols
         if len(students) > total_seats:
             messages.warning(request, f"学生数（{len(students)}）超过座位数（{total_seats}），部分学生将无法安排。")
-            students = students[:total_seats]
 
-        # 清空旧分配
+        priorities = normalize_priorities([
+            request.POST.get(f"priority_{index}", "") for index in range(1, 6)
+        ])
+        try:
+            rotation_interval = min(12, max(0, int(request.POST.get("rotation_interval_months", "1"))))
+        except (TypeError, ValueError):
+            rotation_interval = 1
+        arranged = arrange_students(layout, students, priorities)
+
         SeatAssignment.objects.filter(seat_plan=plan).delete()
-
-        # 蛇形填充：低身高学生坐前排
-        seat_positions = []
-        for r in range(layout.rows):
-            row_seats = list(range(layout.cols))
-            if r % 2 == 1:  # 偶数排反序（蛇形）
-                row_seats.reverse()
-            for c in row_seats:
-                seat_positions.append((r, c))
-
-        count = 0
-        for (row, col), student in zip(seat_positions, students):
-            SeatAssignment.objects.create(
-                seat_plan=plan, student=student, row=row, col=col,
-            )
-            count += 1
+        SeatAssignment.objects.bulk_create([
+            SeatAssignment(seat_plan=plan, student=student, row=row, col=col)
+            for (row, col), student in arranged.items()
+        ])
+        Student.objects.filter(
+            pk__in=[student.pk for student in arranged.values()], school_class__isnull=True,
+        ).update(school_class=current_class)
+        plan.arrangement_priorities = priorities
+        plan.rotation_interval_months = rotation_interval
+        plan.last_rotated_at = timezone.localdate() if rotation_interval else None
+        plan.save(update_fields=[
+            "arrangement_priorities", "rotation_interval_months", "last_rotated_at", "updated_at",
+        ])
+        count = len(arranged)
 
         OperationLog.objects.create(
             user=request.user, action="edit", module="seating",
             object_repr=f"座位方案 v{plan.version or plan.pk}",
-            detail=f"自动排座完成，共 {count} 个位置",
+            detail=f"智能排座完成，共 {count} 个位置；优先级：{'、'.join(PRIORITY_LABELS[item] for item in priorities)}",
             ip_address=get_client_ip(request), success=True,
         )
         messages.success(request, f"自动排座完成（{count} 名学生）。")
     return redirect("seating:index")
+
+
+@login_required
+def print_plan(request):
+    """打印当前座位表，仅显示学生姓名。"""
+    current_class = SchoolClass.objects.filter(is_current=True).first()
+    plan = SeatPlan.objects.filter(school_class=current_class, is_active=True).select_related("layout").first()
+    if not plan or not plan.layout:
+        messages.error(request, "暂无可打印的座位方案。")
+        return redirect("seating:index")
+    assignments = SeatAssignment.objects.filter(seat_plan=plan).select_related("student")
+    return render(request, "seating/print.html", {
+        "current_class": current_class,
+        "plan": plan,
+        "layout": plan.layout,
+        "grid": _build_grid(plan.layout, assignments),
+        "aisle_positions": plan.layout.aisle_positions or [],
+    })

@@ -120,7 +120,9 @@ class AIExamAnalysisSource(BaseModel):
     exam_subject = models.ForeignKey(
         "scores.ExamSubject", on_delete=models.CASCADE,
         related_name="ai_exam_analysis_sources", verbose_name="考试科目",
+        null=True, blank=True,
     )
+    subject_name = models.CharField("科目", max_length=50, blank=True, default="")
     paper_file = models.FileField("试卷原卷", upload_to="ai_exam/papers/%Y/%m/")
     score_file = models.FileField("小分表", upload_to="ai_exam/scores/%Y/%m/")
     paper_text = models.TextField("试卷解析文本", blank=True, default="")
@@ -145,7 +147,7 @@ class AIExamAnalysisSource(BaseModel):
         ordering = ["-created_at"]
 
     def __str__(self):
-        return f"{self.exam_subject} - {self.created_at:%Y-%m-%d %H:%M}"
+        return f"{self.subject_name or self.exam_subject} - {self.created_at:%Y-%m-%d %H:%M}"
 
 
 class AIQuestionWeakness(BaseModel):

@@ -18,6 +18,7 @@
                 {% for s in student_list %}<option value="{{ s.pk }}" {% if student_id == s.pk|stringformat:'s' %}selected{% endif %}>{{ s.name }}（{{ s.student_id }}）</option>{% endfor %}
             </select>
         </div>
+        <div class="col-md-2">{% if selected_student %}<a href="{% url 'scores:student_analysis_detail' selected_student.pk %}" class="btn btn-outline-primary w-100">个人详情</a>{% else %}<button type="button" class="btn btn-outline-secondary w-100" disabled>个人详情</button>{% endif %}</div>
     </div>
 </form>
 
@@ -45,14 +46,24 @@
             <div class="card-body"><canvas id="subjectAvgChart" height="200"></canvas></div>
         </div>
     </div>
-    <!-- 分数段分布图（第一科） -->
+    <!-- 分数段分布图 -->
     <div class="col-md-6">
-        <div class="card"><div class="card-header">分数段分布（{{ analysis_data.items.0.0 }}）</div>
+        <div class="card"><div class="card-header d-flex justify-content-between align-items-center"><span>分数段分布</span><select id="bandSubjectSelect" class="form-select form-select-sm" style="width:auto">{% for name, data in analysis_data.items %}<option value="{{ name }}">{{ name }}</option>{% endfor %}</select></div>
             <div class="card-body"><canvas id="bandChart" height="200"></canvas></div>
         </div>
     </div>
+    {% if rank_distribution %}
+    <div class="col-md-6 mt-3">
+        <div class="card"><div class="card-header">总分排名分布</div>
+            <div class="card-body"><canvas id="rankChart" height="200"></canvas></div>
+        </div>
+    </div>
+    {% endif %}
 </div>
 {% endif %}
+
+{% if rank_distribution %}{{ rank_distribution|json_script:"rank-distribution-data" }}{% endif %}
+{{ band_chart_data|json_script:"band-chart-data" }}
 {% endif %}
 
 {% if student_trend %}
@@ -166,18 +177,31 @@ new Chart(document.getElementById('subjectAvgChart'), {
 });
 
 // 分数段分布
-{% for name, d in analysis_data.items %}{% if forloop.first %}
 const bandLabels = ['0-59%', '60-69%', '70-79%', '80-89%', '90-100%'];
-const bandData = [{{ d.bands|get_item:'0-59%' }}, {{ d.bands|get_item:'60-69%' }}, {{ d.bands|get_item:'70-79%' }}, {{ d.bands|get_item:'80-89%' }}, {{ d.bands|get_item:'90-100%' }}];
-new Chart(document.getElementById('bandChart'), {
+const bandSets = JSON.parse(document.getElementById('band-chart-data').textContent);
+const bandSubjectSelect = document.getElementById('bandSubjectSelect');
+const currentBandData = () => bandLabels.map(label => bandSets[bandSubjectSelect.value][label]);
+const bandChart = new Chart(document.getElementById('bandChart'), {
     type: 'bar',
     data: {
         labels: bandLabels,
-        datasets: [{ label: '人数', data: bandData, backgroundColor: ['#dc3545', '#f57c00', '#f9a825', '#7cb342', '#28a745'] }]
+        datasets: [{ label: '人数', data: currentBandData(), backgroundColor: ['#dc3545', '#f57c00', '#f9a825', '#7cb342', '#28a745'] }]
     },
-    options: { responsive: true, plugins: { legend: { display: false } } }
+    options: { responsive: true, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { precision: 0 } } } }
 });
-{% endif %}{% endfor %}
+bandSubjectSelect.addEventListener('change', function() { bandChart.data.datasets[0].data = currentBandData(); bandChart.update(); });
+{% endif %}
+
+{% if rank_distribution %}
+const rankDistribution = JSON.parse(document.getElementById('rank-distribution-data').textContent);
+new Chart(document.getElementById('rankChart'), {
+    type: '{{ rank_chart_type }}',
+    data: {
+        labels: Object.keys(rankDistribution).map(rank => '第' + rank + '名'),
+        datasets: [{ label: '人数', data: Object.values(rankDistribution), borderColor: '#7c3aed', backgroundColor: 'rgba(124,58,237,.65)', tension: .25 }]
+    },
+    options: { responsive: true, scales: { y: { beginAtZero: true, ticks: { precision: 0 } } } }
+});
 {% endif %}
 
 {% if student_trend %}

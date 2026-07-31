@@ -17,7 +17,10 @@ urlpatterns = [
     path("entry/score/<int:pk>/delete/", views.score_delete, name="score_delete"),
     path("entry/import/", views.score_import, name="score_import"),
     path("entry/template/", views.score_import_template, name="score_import_template"),
+    path("entry/import-wide/", views.score_import_wide, name="score_import_wide"),
+    path("entry/template-wide/", views.score_import_wide_template, name="score_import_wide_template"),
     path("analysis/", views.analysis, name="analysis"),
+    path("analysis/student/<int:pk>/", views.student_analysis_detail, name="student_analysis_detail"),
     path("subjects/", views.subject_settings, name="subject_settings"),
     # 培优补差
     path("support/", support_views.support_list, name="support_list"),

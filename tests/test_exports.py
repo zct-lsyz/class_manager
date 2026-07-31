@@ -35,11 +35,11 @@ class ImportServiceTests(TestCase):
     def test_validate_duplicate_student_id(self):
         """重复学号校验"""
         Student.objects.create(
-            school_class=self.cls, student_id="2026001", name="已存在", gender="male",
+            school_class=self.cls, student_id="2026010100000000001", name="已存在", gender="male",
         )
         file = self._make_excel(
             ["学号", "姓名", "性别"],
-            [["2026001", "张三", "男"]],
+            [["2026010100000000001", "张三", "男"]],
         )
         _, data_rows = parse_uploaded_file(file)
         valid_rows, errors = validate_students(data_rows)
@@ -51,7 +51,7 @@ class ImportServiceTests(TestCase):
         """非法性别校验"""
         file = self._make_excel(
             ["学号", "姓名", "性别"],
-            [["2026002", "李四", "未知"]],
+            [["2026010100000000002", "李四", "未知"]],
         )
         _, data_rows = parse_uploaded_file(file)
         valid_rows, errors = validate_students(data_rows)
@@ -63,7 +63,7 @@ class ImportServiceTests(TestCase):
         """正常导入学生"""
         file = self._make_excel(
             ["学号", "姓名", "性别", "身高(cm)"],
-            [["2026003", "王五", "男", 175], ["2026004", "赵六", "女", 162]],
+            [["2026010100000000003", "王五", "男", 175], ["2026010100000000004", "赵六", "女", 162]],
         )
         _, data_rows = parse_uploaded_file(file)
         valid_rows, errors = validate_students(data_rows)

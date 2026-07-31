@@ -1,0 +1,5 @@
+<div class="student-block student-{{ student.gender }}{% if full_width %} w-100{% endif %}" draggable="true" data-student-id="{{ student.pk }}"{% if student.seat_requirement %} data-seat-requirement="特殊座位要求：{{ student.seat_requirement }}"{% endif %}>
+    {% if student.seat_requirement %}<span class="special-star" aria-label="有特殊座位要求">★</span>{% endif %}
+    <div class="student-name">{{ student.name }}</div>
+    <div class="student-meta">{{ student.seat_dormitory|truncatechars:10 }} · {% if student.height %}{{ student.height }}cm{% else %}身高-{% endif %} · {% if student.seat_rank %}第{{ student.seat_rank }}名{% else %}名次-{% endif %}</div>
+</div>

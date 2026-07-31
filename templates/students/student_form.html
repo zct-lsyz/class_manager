@@ -11,8 +11,10 @@
                 <i class="bi bi-{% if student %}pencil{% else %}plus-circle{% endif %} me-2"></i>{{ title }}
             </div>
             <div class="card-body">
+                {% if form.errors %}<div class="alert alert-danger py-2">保存失败，请检查下方填写内容。</div>{% endif %}
                 <form method="post" novalidate>
                     {% csrf_token %}
+                    {{ form.sort_order.as_hidden }}
                     <div class="row">
                         <div class="col-md-4 mb-3">
                             <label class="form-label small">{{ form.student_id.label }}</label>
@@ -42,6 +44,7 @@
                         <div class="col-md-4 mb-3">
                             <label class="form-label small">{{ form.height.label }}</label>
                             {{ form.height }}
+                            {% if form.height.errors %}<div class="text-danger small">{{ form.height.errors.0 }}</div>{% endif %}
                         </div>
                     </div>
                     <div class="row">
@@ -76,6 +79,7 @@
                         <div class="col-md-6 mb-3">
                             <label class="form-label small">{{ form.primary_phone.label }}</label>
                             {{ form.primary_phone }}
+                            {% if form.primary_phone.errors %}<div class="text-danger small">{{ form.primary_phone.errors.0 }}</div>{% endif %}
                         </div>
                     </div>
                     <div class="row">
@@ -86,6 +90,7 @@
                         <div class="col-md-6 mb-3">
                             <label class="form-label small">{{ form.secondary_phone.label }}</label>
                             {{ form.secondary_phone }}
+                            {% if form.secondary_phone.errors %}<div class="text-danger small">{{ form.secondary_phone.errors.0 }}</div>{% endif %}
                         </div>
                     </div>
                     <div class="mb-3">

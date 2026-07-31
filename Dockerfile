@@ -29,7 +29,7 @@ WORKDIR /app
 
 # 安装 Python 依赖
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir --index-url https://mirrors.aliyun.com/pypi/simple --retries 3 --timeout 60 -r requirements.txt
 
 # 复制项目代码
 COPY . .

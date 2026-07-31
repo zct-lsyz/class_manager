@@ -14,7 +14,7 @@
             <div class="col-md-4"><label class="form-label small">检查人</label>{{ form.inspector }}</div>
             <div class="col-md-4"><label class="form-label small">整改要求</label>{{ form.rectification }}</div>
             <div class="col-md-4"><label class="form-label small">整改期限</label>{{ form.rectification_deadline }}</div>
-            <div class="col-md-4"><label class="form-label small">现场照片</label>{{ form.photo }}</div>
+            <div class="col-md-4"><label class="form-label small">现场照片（可多选）</label>{{ form.photos }}{% if form.photos.errors %}<div class="text-danger small">{{ form.photos.errors.0 }}</div>{% endif %}<div class="form-text">单张过大时将自动压缩至约 3MB 以内。</div></div>
             <div class="col-12"><label class="form-label small">备注</label>{{ form.remarks }}</div>
         </div>
     </div>

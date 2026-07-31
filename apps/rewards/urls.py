@@ -10,4 +10,5 @@ urlpatterns = [
     path("<int:pk>/delete/", views.reward_delete, name="reward_delete"),
     path("points/", views.points, name="points"),
     path("rules/", views.rules, name="rules"),
+    path("rules/<int:pk>/delete/", views.rule_delete, name="rule_delete"),
 ]

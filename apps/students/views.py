@@ -63,7 +63,10 @@ def student_create(request):
     if request.method == "POST":
         form = StudentForm(request.POST)
         if form.is_valid():
-            student = form.save()
+            student = form.save(commit=False)
+            if not student.school_class:
+                student.school_class = SchoolClass.objects.filter(is_current=True).first()
+            student.save()
             messages.success(request, f"学生「{student.name}」添加成功。")
             OperationLog.objects.create(
                 user=request.user, action="create", module="students",
@@ -72,6 +75,7 @@ def student_create(request):
                 ip_address=get_client_ip(request), success=True,
             )
             return redirect("students:list")
+        messages.error(request, "保存失败，请检查页面中的格式提示。")
     else:
         form = StudentForm()
         # 默认选中当前班级
@@ -97,6 +101,7 @@ def student_edit(request, pk):
                 ip_address=get_client_ip(request), success=True,
             )
             return redirect("students:list")
+        messages.error(request, "保存失败，请检查页面中的格式提示。")
     else:
         form = StudentForm(instance=student)
     return render(request, "students/student_form.html", {
@@ -198,6 +203,60 @@ def student_detail(request, pk):
         "comments": comments,
         "conversations": conversations,
         "timeline": timeline[:100],
+    })
+
+
+HISTORY_MODULES = {
+    "rewards": "奖惩记录", "points": "积分变动", "dormitory": "宿舍管理",
+    "discipline": "课堂纪律", "attendance": "考勤管理",
+}
+
+
+@login_required
+def history_browser(request, module):
+    from apps.students.history_services import get_student_events
+    if module not in HISTORY_MODULES:
+        return redirect("students:list")
+    current_class = SchoolClass.objects.filter(is_current=True).first()
+    students = Student.objects.filter(school_class=current_class, is_deleted=False) if current_class else []
+    date_from = request.GET.get("date_from", "")
+    date_to = request.GET.get("date_to", "")
+    direction = request.GET.get("direction", "all")
+    metric = request.GET.get("metric", "count")
+    event_type = request.GET.get("event_type", "").strip()
+    try:
+        threshold = max(0, int(request.GET.get("threshold", "0") or 0))
+    except ValueError:
+        threshold = 0
+    rows = []
+    for student in students:
+        events = get_student_events(student, module, date_from, date_to)
+        if direction == "add":
+            events = [event for event in events if event["points"] > 0]
+        elif direction == "deduct":
+            events = [event for event in events if event["points"] < 0 or event["adverse"]]
+        if event_type:
+            events = [event for event in events if event_type in event["code"] or event_type in event["item"]]
+        value = len(events) if metric == "count" else sum(abs(event["points"]) for event in events)
+        if not threshold or value >= threshold:
+            rows.append({"student": student, "events": events, "value": value, "add_count": sum(1 for event in events if event["points"] > 0), "deduct_count": sum(1 for event in events if event["points"] < 0 or event["adverse"])})
+    rows.sort(key=lambda row: (-row["value"], row["student"].student_id))
+    return render(request, "students/history_browser.html", {
+        "module": module, "module_name": HISTORY_MODULES[module], "rows": rows,
+        "filters": {"date_from": date_from, "date_to": date_to, "direction": direction, "metric": metric, "threshold": threshold, "event_type": event_type},
+    })
+
+
+@login_required
+def history_detail(request, module, pk):
+    from apps.students.history_services import get_student_events
+    if module not in HISTORY_MODULES:
+        return redirect("students:list")
+    student = get_object_or_404(Student, pk=pk, is_deleted=False)
+    events = get_student_events(student, module, request.GET.get("date_from", ""), request.GET.get("date_to", ""))
+    return render(request, "students/history_detail.html", {
+        "student": student, "module": module, "module_name": HISTORY_MODULES[module], "events": events,
+        "querystring": request.GET.urlencode(),
     })
 
 

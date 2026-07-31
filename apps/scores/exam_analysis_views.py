@@ -9,7 +9,7 @@ from django.utils import timezone
 from apps.audit.models import OperationLog
 from apps.classes.models import SchoolClass
 from apps.scores.ai_models import AIAnalysisConfig, AIExamAnalysisSource, AIQuestionWeakness
-from apps.scores.ai_prompts import get_default_prompts
+from apps.scores.ai_prompts import get_default_prompts, get_subject_names
 from apps.scores.exam_analysis_services import (
     ExamAnalysisParseError,
     build_score_template_bytes,
@@ -62,12 +62,15 @@ def exam_analysis(request):
             messages.error(request, "请确认外部 AI 数据范围后再开始分析。")
             return redirect("scores:exam_analysis")
 
-        exam_subject = get_object_or_404(
-            ExamSubject.objects.select_related("exam", "subject"),
-            pk=request.POST.get("exam_subject"),
+        subject_name = request.POST.get("subject_name", "").strip()
+        if subject_name not in get_subject_names():
+            messages.error(request, "请选择九科中的一个科目。")
+            return redirect("scores:exam_analysis")
+        exam_subject = ExamSubject.objects.filter(
             exam__school_class=current_class,
             exam__is_deleted=False,
-        )
+            subject__name__in=(["英语", "外语"] if subject_name == "英语" else [subject_name]),
+        ).select_related("exam", "subject").order_by("-exam__date").first()
         paper_file = request.FILES.get("paper_file")
         score_file = request.FILES.get("score_file")
         if not paper_file or not score_file:
@@ -82,6 +85,7 @@ def exam_analysis(request):
         source = AIExamAnalysisSource.objects.create(
             school_class=current_class,
             exam_subject=exam_subject,
+            subject_name=subject_name,
             paper_file=paper_file,
             score_file=score_file,
             status="parsing",
@@ -96,7 +100,7 @@ def exam_analysis(request):
             source.warnings = warnings
             source.save(update_fields=["paper_text", "question_summary", "warnings", "updated_at"])
 
-            result, duration = generate_exam_analysis(config, paper_text, question_summaries)
+            result, duration = generate_exam_analysis(config, paper_text, question_summaries, subject_name)
             ai_questions = {
                 str(item.get("question_label", "")).strip(): item
                 for item in result.get("questions", []) if isinstance(item, dict)
@@ -136,7 +140,7 @@ def exam_analysis(request):
             config.save(update_fields=["last_used_at", "last_error", "updated_at"])
             OperationLog.objects.create(
                 user=request.user, action="create", module="ai_exam_analysis",
-                object_repr=f"{exam_subject.exam.name} - {exam_subject.subject.name}",
+                object_repr=f"{exam_subject.exam.name + ' - ' if exam_subject else ''}{subject_name}",
                 detail=f"原卷和匿名小分表联合分析，共 {len(question_summaries)} 道题",
                 ip_address=_client_ip(request), success=True,
             )
@@ -149,7 +153,7 @@ def exam_analysis(request):
             config.save(update_fields=["last_error", "updated_at"])
             OperationLog.objects.create(
                 user=request.user, action="create", module="ai_exam_analysis",
-                object_repr=f"{exam_subject.exam.name} - {exam_subject.subject.name}",
+                object_repr=f"{exam_subject.exam.name + ' - ' if exam_subject else ''}{subject_name}",
                 detail=f"原卷和小分表分析失败：{exc}", ip_address=_client_ip(request), success=False,
             )
             messages.error(request, f"分析失败：{exc}")
@@ -159,6 +163,7 @@ def exam_analysis(request):
         "current_class": current_class,
         "config": config,
         "exam_subjects": exam_subjects,
+        "subject_names": get_subject_names(),
         "sources": sources,
         "ai_ready": bool(config and config.is_enabled and config.has_api_key()),
     })

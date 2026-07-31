@@ -3,7 +3,8 @@ import logging
 from django.contrib.auth.decorators import login_required
 import logging
 
-from django.shortcuts import render
+from django.shortcuts import render, redirect, get_object_or_404
+from django.contrib import messages
 from django.utils import timezone
 
 from apps.classes.models import SchoolClass, Semester
@@ -12,6 +13,14 @@ from apps.classes.models import SchoolClass, Semester
 logger = logging.getLogger(__name__)
 
 logger = logging.getLogger(__name__)
+
+
+def _warning_events(student, rule):
+    from apps.students.history_services import get_student_events
+    events = [event for event in get_student_events(student, rule.content) if event["adverse"]]
+    if rule.content == "attendance":
+        events = [event for event in events if event["code"] in {"late", "early_leave", "absent"}]
+    return events
 
 
 @login_required
@@ -207,3 +216,61 @@ def index(request):
         "reminders": reminders,
     }
     return render(request, "dashboard/index.html", context)
+
+
+@login_required
+def warnings(request):
+    from apps.attendance.models import WarningRule
+    from apps.students.models import Student
+    current_class = SchoolClass.objects.filter(is_current=True).first()
+    if request.method == "POST":
+        try:
+            threshold = int(request.POST.get("threshold", "2"))
+        except ValueError:
+            threshold = 0
+        content = request.POST.get("content", "")
+        unit = request.POST.get("unit", "count")
+        name = request.POST.get("name", "").strip()
+        if current_class and name and content in dict(WarningRule.CONTENT_CHOICES) and unit in dict(WarningRule.UNIT_CHOICES) and 1 <= threshold <= 20:
+            WarningRule.objects.create(school_class=current_class, name=name, content=content, unit=unit, threshold=threshold)
+            messages.success(request, "预警条目已添加。")
+            return redirect("dashboard:warnings")
+        messages.error(request, "请完整填写预警内容，数量必须为 1–20。")
+    rules = WarningRule.objects.filter(school_class=current_class, is_active=True) if current_class else []
+    warning_students = []
+    students = Student.objects.filter(school_class=current_class, is_deleted=False) if current_class else []
+    for student in students:
+        matched = []
+        for rule in rules:
+            events = _warning_events(student, rule)
+            value = len(events) if rule.unit == "count" else sum(abs(event["points"]) for event in events if event["points"] < 0)
+            if value >= rule.threshold:
+                matched.append({"rule": rule, "events": events, "value": value, "items": "、".join(sorted({event["item"] for event in events}))})
+        if matched:
+            warning_students.append({"student": student, "warnings": matched})
+    return render(request, "dashboard/warnings.html", {"rules": rules, "warning_students": warning_students, "content_choices": WarningRule.CONTENT_CHOICES})
+
+
+@login_required
+def warning_delete(request, pk):
+    from apps.attendance.models import WarningRule
+    rule = get_object_or_404(WarningRule, pk=pk)
+    if request.method == "POST":
+        rule.delete()
+        messages.info(request, "预警条目已删除。")
+    return redirect("dashboard:warnings")
+
+
+@login_required
+def warning_detail(request, pk):
+    from apps.attendance.models import WarningRule
+    from apps.students.models import Student
+    student = get_object_or_404(Student, pk=pk, is_deleted=False)
+    rules = WarningRule.objects.filter(school_class=student.school_class, is_active=True)
+    details = []
+    for rule in rules:
+        events = _warning_events(student, rule)
+        value = len(events) if rule.unit == "count" else sum(abs(event["points"]) for event in events if event["points"] < 0)
+        if value >= rule.threshold:
+            details.append({"rule": rule, "events": events, "value": value})
+    return render(request, "dashboard/warning_detail.html", {"student": student, "details": details})

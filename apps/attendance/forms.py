@@ -12,7 +12,7 @@ class AttendanceForm(forms.ModelForm):
             "date": forms.DateInput(attrs={"class": "form-control", "type": "date"}),
             "period": forms.Select(attrs={"class": "form-select"}),
             "status": forms.Select(attrs={"class": "form-select"}),
-            "reason": forms.Textarea(attrs={"class": "form-control", "rows": 2}),
+            "reason": forms.TextInput(attrs={"class": "form-control", "list": "attendance-reason-options"}),
             "leave_proof": forms.FileInput(attrs={"class": "form-control"}),
         }
         labels = {

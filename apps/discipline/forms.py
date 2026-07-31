@@ -3,6 +3,14 @@ from apps.discipline.models import ConfigurableItem, ClassroomDisciplineRecord, 
 from apps.students.models import Student
 
 
+class ItemPointsSelect(forms.Select):
+    def create_option(self, name, value, label, selected, index, subindex=None, attrs=None):
+        option = super().create_option(name, value, label, selected, index, subindex, attrs)
+        if value and getattr(value, "instance", None):
+            option["attrs"]["data-points"] = abs(value.instance.default_points)
+        return option
+
+
 class ConfigurableItemForm(forms.ModelForm):
     class Meta:
         model = ConfigurableItem
@@ -34,7 +42,7 @@ class ClassroomDisciplineForm(forms.ModelForm):
             "time": forms.TimeInput(attrs={"class": "form-control", "type": "time"}),
             "period": forms.TextInput(attrs={"class": "form-control"}),
             "subject": forms.TextInput(attrs={"class": "form-control"}),
-            "item": forms.Select(attrs={"class": "form-select"}),
+            "item": ItemPointsSelect(attrs={"class": "form-select"}),
             "custom_content": forms.Textarea(attrs={"class": "form-control", "rows": 2}),
             "severity": forms.Select(attrs={"class": "form-select"}),
             "description": forms.Textarea(attrs={"class": "form-control", "rows": 3}),
@@ -69,7 +77,7 @@ class DormDisciplineForm(forms.ModelForm):
             "dorm_room": forms.Select(attrs={"class": "form-select"}),
             "date": forms.DateInput(attrs={"class": "form-control", "type": "date"}),
             "time": forms.TimeInput(attrs={"class": "form-control", "type": "time"}),
-            "item": forms.Select(attrs={"class": "form-select"}),
+            "item": ItemPointsSelect(attrs={"class": "form-select"}),
             "custom_content": forms.Textarea(attrs={"class": "form-control", "rows": 2}),
             "severity": forms.Select(attrs={"class": "form-select"}),
             "description": forms.Textarea(attrs={"class": "form-control", "rows": 3}),

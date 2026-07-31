@@ -2,7 +2,7 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.shortcuts import render, redirect, get_object_or_404
 from django.core.paginator import Paginator
-from django.db.models import Avg, Max, Min, Count, Q
+from django.db.models import Avg, Max, Min, Count, Q, Sum
 from django.utils import timezone
 from django.db import transaction
 
@@ -11,7 +11,21 @@ from apps.scores.forms import ExamForm, ExamSubjectForm, ScoreForm, SupportPlanF
 from apps.classes.subjects import Subject
 from apps.classes.models import SchoolClass, Semester
 from apps.audit.services import soft_delete
+from apps.audit.models import OperationLog
 from apps.students.models import Student
+
+
+WIDE_SCORE_COLUMNS = [
+    ("语文", ["语文赋分", "语文原始", "语文"], 150),
+    ("数学", ["数学赋分", "数学原始", "数学"], 150),
+    ("英语", ["英语赋分", "外语赋分", "英语原始", "外语原始", "英语", "外语"], 150),
+    ("物理", ["物理赋分", "物理原始", "物理"], 100),
+    ("化学", ["化学赋分", "化学原始", "化学"], 100),
+    ("生物", ["生物赋分", "生物原始", "生物"], 100),
+    ("政治", ["政治赋分", "政治原始", "政治"], 100),
+    ("历史", ["历史赋分", "历史原始", "历史"], 100),
+    ("地理", ["地理赋分", "地理原始", "地理"], 100),
+]
 
 
 def get_client_ip(request):
@@ -158,6 +172,9 @@ def score_entry(request):
     exam = None
     exam_subject = None
     scores = []
+
+    if exam_id and not subject_id:
+        exam = get_object_or_404(Exam, pk=exam_id, school_class=current_class, is_deleted=False)
 
     if exam_id and subject_id:
         exam = get_object_or_404(Exam, pk=exam_id, school_class=current_class, is_deleted=False)
@@ -306,13 +323,15 @@ def analysis(request):
     current_class = SchoolClass.objects.filter(is_current=True).first()
     current_semester = Semester.objects.filter(is_current=True).first()
 
-    exams = Exam.objects.filter(school_class=current_class, is_published=True, is_deleted=False).order_by("-date") if current_class else []
+    exams = Exam.objects.filter(school_class=current_class, is_deleted=False).order_by("-date") if current_class else []
     exam_id = request.GET.get("exam_id", "")
     exam = get_object_or_404(
         Exam, pk=exam_id, school_class=current_class, is_deleted=False,
     ) if exam_id else None
 
     analysis_data = {}
+    rank_distribution = {}
+    rank_chart_type = "bar"
     if exam:
         for es in ExamSubject.objects.filter(exam=exam).select_related("subject"):
             scores_qs = Score.objects.filter(exam_subject=es, is_deleted=False)
@@ -352,15 +371,29 @@ def analysis(request):
                 "bands": bands,
             }
 
+        total_scores = list(Score.objects.filter(
+            exam=exam, status="normal", score__isnull=False, is_deleted=False,
+        ).values("student_id").annotate(total=Sum("score")).order_by("-total"))
+        previous_total = None
+        current_rank = 0
+        for position, row in enumerate(total_scores, 1):
+            if row["total"] != previous_total:
+                current_rank = position
+                previous_total = row["total"]
+            rank_distribution[str(current_rank)] = rank_distribution.get(str(current_rank), 0) + 1
+        rank_chart_type = "line" if len(rank_distribution) > 12 else "bar"
+
     # 学生个人趋势
     student_id = request.GET.get("student_id", "")
     student_trend = None
-    from apps.students.models import Student
-    if student_id and exam:
-        student = Student.objects.filter(pk=student_id).first()
+    selected_student = Student.objects.filter(
+        pk=student_id, school_class=current_class, is_deleted=False,
+    ).first() if student_id else None
+    if selected_student and exam:
+        student = selected_student
         if student:
             exams_qs = Exam.objects.filter(
-                school_class=current_class, is_published=True, is_deleted=False
+                school_class=current_class, is_deleted=False
             ).order_by("date")
             trend = []
             for e in exams_qs:
@@ -382,7 +415,9 @@ def analysis(request):
 
     return render(request, "scores/analysis.html", {
         "exams": exams, "exam": exam, "analysis_data": analysis_data,
-        "student_trend": student_trend, "student_id": student_id,
+        "student_trend": student_trend, "student_id": student_id, "selected_student": selected_student,
+        "rank_distribution": rank_distribution, "rank_chart_type": rank_chart_type,
+        "band_chart_data": {name: data["bands"] for name, data in analysis_data.items()},
         "student_list": Student.objects.filter(
             school_class=current_class, is_deleted=False
         ).order_by("student_id") if current_class else [],
@@ -390,6 +425,55 @@ def analysis(request):
         "ai_config": _get_ai_config(current_class),
         "ai_subjects": _get_ai_subjects(exam),
         "latest_ai_result": _get_latest_ai_result(current_class, exam),
+    })
+
+
+@login_required
+def student_analysis_detail(request, pk):
+    """学生历次成绩、趋势和手动 AI 分析。"""
+    current_class = SchoolClass.objects.filter(is_current=True).first()
+    student = get_object_or_404(
+        Student, pk=pk, school_class=current_class, is_deleted=False,
+    )
+    records = Score.objects.filter(
+        student=student, exam__school_class=current_class, exam__is_deleted=False,
+        is_deleted=False,
+    ).select_related("exam", "exam_subject__subject").order_by("exam__date", "exam_subject__sort_order")
+    history = []
+    history_map = {}
+    for record in records:
+        item = history_map.get(record.exam_id)
+        if not item:
+            item = {
+                "exam": record.exam, "subjects": [], "total": 0.0,
+                "full_score": 0, "score_rate": 0,
+            }
+            history_map[record.exam_id] = item
+            history.append(item)
+        item["subjects"].append(record)
+        if record.status == "normal" and record.score is not None:
+            item["total"] += float(record.score)
+            item["full_score"] += record.exam_subject.full_score
+    for item in history:
+        item["total"] = round(item["total"], 1)
+        item["score_rate"] = round(item["total"] / item["full_score"] * 100, 1) if item["full_score"] else 0
+
+    from apps.scores.ai_models import AIAnalysisRecord
+    latest_ai_result = AIAnalysisRecord.objects.filter(
+        school_class=current_class, student=student, analysis_type="student", success=True,
+    ).order_by("-created_at").first()
+    latest_exam = Exam.objects.filter(
+        school_class=current_class, is_deleted=False,
+    ).order_by("-date").first()
+    chart_data = {
+        "labels": [f"{item['exam'].name}（{item['exam'].date:%Y-%m-%d}）" for item in history],
+        "rates": [item["score_rate"] for item in history],
+        "totals": [item["total"] for item in history],
+    }
+    return render(request, "scores/student_analysis_detail.html", {
+        "student": student, "history": history, "chart_data": chart_data,
+        "latest_ai_result": latest_ai_result, "latest_exam": latest_exam,
+        "ai_config": _get_ai_config(current_class),
     })
 
 
@@ -609,4 +693,185 @@ def score_import_template(request):
     )
     response["Content-Disposition"] = 'attachment; filename="score_import_template.xlsx"'
     wb.save(response)
+    return response
+
+
+def _excel_text(value):
+    if value is None:
+        return ""
+    if isinstance(value, float) and value.is_integer():
+        return str(int(value))
+    return str(value).strip()
+
+
+def _wide_exam_subject(exam, subject_name, full_score, sort_order):
+    names = ["英语", "外语"] if subject_name == "英语" else [subject_name]
+    exam_subject = ExamSubject.objects.filter(
+        exam=exam, subject__name__in=names,
+    ).select_related("subject").first()
+    if exam_subject:
+        return exam_subject
+    subject = Subject.objects.filter(name__in=names).order_by("sort_order", "pk").first()
+    if not subject:
+        subject = Subject.objects.create(
+            name=subject_name, short_name=subject_name, sort_order=sort_order,
+        )
+    return ExamSubject.objects.create(
+        exam=exam, subject=subject, full_score=full_score, sort_order=sort_order,
+    )
+
+
+@login_required
+def score_import_wide(request):
+    """按参考成绩宽表一次导入一场考试的多个科目。"""
+    if request.method != "POST":
+        return redirect("scores:score_entry")
+    current_class = SchoolClass.objects.filter(is_current=True).first()
+    exam_id = request.POST.get("exam_id", "")
+    if not exam_id:
+        messages.error(request, "请先选择考试。")
+        return redirect("scores:score_entry")
+    exam = get_object_or_404(
+        Exam, pk=exam_id, school_class=current_class, is_deleted=False,
+    )
+    uploaded = request.FILES.get("file")
+    if not uploaded or not uploaded.name.lower().endswith(".xlsx"):
+        messages.error(request, "请上传 XLSX 成绩表。")
+        return redirect(f"/scores/entry/?exam_id={exam.pk}")
+
+    from openpyxl import load_workbook
+    try:
+        workbook = load_workbook(uploaded, data_only=True, read_only=True)
+        rows = list(workbook.active.iter_rows(values_only=True))
+    except Exception as exc:
+        messages.error(request, f"文件解析失败：{exc}")
+        return redirect(f"/scores/entry/?exam_id={exam.pk}")
+
+    header_index = None
+    header_map = {}
+    for index, row in enumerate(rows[:10]):
+        candidate = {_excel_text(value): col for col, value in enumerate(row) if _excel_text(value)}
+        subject_hits = sum(any(alias in candidate for alias in aliases) for _name, aliases, _full in WIDE_SCORE_COLUMNS)
+        if ("姓名" in candidate or "学号" in candidate) and subject_hits:
+            header_index = index
+            header_map = candidate
+            break
+    if header_index is None:
+        messages.error(request, "未找到有效表头：至少需要「姓名」或「学号」，并包含一个九科成绩列。")
+        return redirect(f"/scores/entry/?exam_id={exam.pk}")
+
+    subject_columns = []
+    for sort_order, (subject_name, aliases, full_score) in enumerate(WIDE_SCORE_COLUMNS, 1):
+        matched = next((alias for alias in aliases if alias in header_map), None)
+        if matched:
+            subject_columns.append((
+                _wide_exam_subject(exam, subject_name, full_score, sort_order),
+                header_map[matched], matched,
+            ))
+
+    students = list(Student.objects.filter(school_class=current_class, is_deleted=False))
+    student_id_map = {student.student_id: student for student in students}
+    student_name_map = {}
+    for student in students:
+        student_name_map.setdefault(student.name.strip(), []).append(student)
+    imported = 0
+    imported_students = set()
+    skipped = []
+
+    with transaction.atomic():
+        for row_number, row in enumerate(rows[header_index + 1:], start=header_index + 2):
+            student = None
+            student_id = _excel_text(row[header_map["学号"]]) if "学号" in header_map and header_map["学号"] < len(row) else ""
+            name = _excel_text(row[header_map["姓名"]]) if "姓名" in header_map and header_map["姓名"] < len(row) else ""
+            if student_id:
+                student = student_id_map.get(student_id)
+            if not student and name:
+                matches = student_name_map.get(name, [])
+                if len(matches) == 1:
+                    student = matches[0]
+                elif len(matches) > 1:
+                    skipped.append(f"第{row_number}行「{name}」存在同名学生，请补充学号")
+                    continue
+            if not student:
+                if student_id or name:
+                    skipped.append(f"第{row_number}行未匹配学生：{student_id or name}")
+                continue
+
+            for exam_subject, column_index, column_name in subject_columns:
+                raw_score = row[column_index] if column_index < len(row) else None
+                if raw_score is None or _excel_text(raw_score) == "":
+                    continue
+                try:
+                    score_value = float(raw_score)
+                except (TypeError, ValueError):
+                    skipped.append(f"第{row_number}行「{column_name}」不是数字")
+                    continue
+                if score_value < 0 or score_value > exam_subject.full_score:
+                    skipped.append(f"第{row_number}行「{column_name}」须在0至{exam_subject.full_score}之间")
+                    continue
+                Score.objects.update_or_create(
+                    exam_subject=exam_subject, student=student,
+                    defaults={
+                        "exam": exam, "score": score_value, "status": "normal", "is_deleted": False,
+                    },
+                )
+                imported += 1
+                imported_students.add(student.pk)
+
+        for exam_subject, _column_index, _column_name in subject_columns:
+            _update_ranks(exam_subject)
+
+    OperationLog.objects.create(
+        user=request.user, action="batch_import", module="scores",
+        object_repr=f"{exam.name} - 多科成绩",
+        detail=f"参考宽表导入：{len(imported_students)}名学生，{imported}条成绩，{len(skipped)}项跳过",
+        ip_address=get_client_ip(request), success=True,
+    )
+    if skipped:
+        messages.warning(request, f"已导入 {len(imported_students)} 名学生的 {imported} 条成绩；另有 {len(skipped)} 项未导入：" + "；".join(skipped[:8]))
+    else:
+        messages.success(request, f"已导入 {len(imported_students)} 名学生的 {imported} 条成绩。")
+    return redirect(f"/scores/entry/?exam_id={exam.pk}")
+
+
+@login_required
+def score_import_wide_template(request):
+    """下载与参考文件结构兼容的九科成绩宽表模板。"""
+    from django.http import HttpResponse
+    from openpyxl import Workbook
+    from openpyxl.styles import Alignment, Font, PatternFill
+
+    current_class = SchoolClass.objects.filter(is_current=True).first()
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "九科成绩导入"
+    headers = [
+        "姓名", "学号", "总分原始", "总分赋分", "校名", "班名", "语数外", "三科校名", "三科班名",
+        "语文", "语文校名", "语文班名", "数学", "数学校名", "数学班名", "外语", "外语校名", "外语班名",
+        "物理原始", "物理赋分", "物理校名", "物理班名", "化学原始", "化学赋分", "化学校名", "化学班名",
+        "生物原始", "生物赋分", "生物校名", "生物班名", "政治原始", "政治赋分", "政治校名", "政治班名",
+        "历史原始", "历史赋分", "历史校名", "历史班名", "地理原始", "地理赋分", "地理校名", "地理班名",
+    ]
+    sheet.append(headers)
+    for student in Student.objects.filter(school_class=current_class, is_deleted=False).order_by("student_id") if current_class else []:
+        sheet.append([student.name, student.student_id])
+    for cell in sheet[1]:
+        cell.font = Font(bold=True, color="FFFFFF")
+        cell.fill = PatternFill(start_color="1A73E8", end_color="1A73E8", fill_type="solid")
+        cell.alignment = Alignment(horizontal="center", vertical="center")
+    sheet.freeze_panes = "C2"
+    sheet.auto_filter.ref = sheet.dimensions
+    sheet.column_dimensions["A"].width = 12
+    sheet.column_dimensions["B"].width = 22
+    for column in range(3, len(headers) + 1):
+        sheet.column_dimensions[sheet.cell(1, column).column_letter].width = 12
+    note_sheet = workbook.create_sheet("填写说明")
+    note_sheet.append(["说明"])
+    note_sheet.append(["可直接粘贴参考成绩表；系统优先读取“赋分”，没有赋分列时读取“原始”或科目名列。"])
+    note_sheet.append(["姓名或学号至少填写一项；同名学生必须填写学号。总分、校名、班名等统计列用于留存原表结构，不重复写入单科成绩。"])
+    note_sheet.column_dimensions["A"].width = 110
+
+    response = HttpResponse(content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    response["Content-Disposition"] = 'attachment; filename="class_score_wide_import_template.xlsx"'
+    workbook.save(response)
     return response

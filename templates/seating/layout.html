@@ -3,11 +3,73 @@
 {% block content %}
 <h4 class="mt-3 mb-4"><i class="bi bi-columns-gap me-2 text-primary"></i>教室布局</h4>
 <form method="post" class="card p-3">{% csrf_token %}
-  <div class="row g-2">{% for f in form %}<div class="col-md-4 mb-2"><label class="form-label small">{{ f.label }}</label>{{ f }}</div>{% endfor %}</div>
+  {% if form.errors %}<div class="alert alert-danger py-2">保存失败，请检查布局设置。</div>{% endif %}
+  <div class="row g-2">
+    <div class="col-md-4 mb-2"><label class="form-label small">{{ form.name.label }}</label>{{ form.name }}{{ form.name.errors }}</div>
+    <div class="col-md-4 mb-2"><label class="form-label small">{{ form.cols.label }}</label>{{ form.cols }}{{ form.cols.errors }}</div>
+    <div class="col-md-4 mb-2"><label class="form-label small">{{ form.aisle_count.label }}</label>{{ form.aisle_count }}{{ form.aisle_count.errors }}</div>
+    <div class="col-md-4 mb-2"><label class="form-label small">{{ form.rows.label }}</label>{{ form.rows }}{{ form.rows.errors }}</div>
+    <div class="col-md-4 mb-2"><label class="form-label small">{{ form.seats_per_desk.label }}</label>{{ form.seats_per_desk }}{{ form.seats_per_desk.errors }}</div>
+    <div class="col-md-4 mb-2"><label class="form-label small d-block">{{ form.is_current.label }}</label>{{ form.is_current }}</div>
+    <div class="col-12 mb-2">
+      <label class="form-label small">过道位置</label>
+      <div class="row g-2" id="aislePositions"></div>
+      {% if form.aisle_positions.errors %}<div class="text-danger small">{{ form.aisle_positions.errors.0 }}</div>{% endif %}
+      <div class="form-text">过道只能设置在相邻两列座位之间，位置不可重复。</div>
+    </div>
+    <div class="col-12"><div class="alert alert-light border mb-0 py-2"><i class="bi bi-info-circle me-1"></i>讲台固定显示在座位表下方，第一排始终最靠近讲台。</div></div>
+  </div>
   <button class="btn btn-primary mt-2">保存</button>
 </form>
 {% if layouts %}<div class="card mt-3"><div class="card-body p-0">
-  <table class="table mb-0"><thead><tr><th>名称</th><th>布局</th><th>桌位</th><th>当前</th></tr></thead>
-  <tbody>{% for l in layouts %}<tr><td>{{ l.name }}</td><td>{{ l.rows }}x{{ l.cols }}</td><td>{{ l.seats_per_desk }}人/桌</td><td>{% if l.is_current %}<span class="badge bg-success">是{% endif %}</td></tr>{% endfor %}</tbody></table>
+  <table class="table mb-0"><thead><tr><th>名称</th><th>布局</th><th>过道位置</th><th>桌位</th><th>当前</th></tr></thead>
+  <tbody>{% for l in layouts %}<tr><td>{{ l.name }}</td><td>{{ l.rows }}x{{ l.cols }}</td><td>{% for p in l.aisle_positions %}第{{ p }}-{{ p|add:1 }}列{% if not forloop.last %}、{% endif %}{% empty %}无{% endfor %}</td><td>{{ l.seats_per_desk }}人/桌</td><td>{% if l.is_current %}<span class="badge bg-success">是</span>{% else %}否{% endif %}</td></tr>{% endfor %}</tbody></table>
 </div></div>{% endif %}
+{{ aisle_positions|json_script:"initial-aisle-positions" }}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  const colsInput = document.getElementById('id_cols');
+  const countInput = document.getElementById('id_aisle_count');
+  const container = document.getElementById('aislePositions');
+  const initial = JSON.parse(document.getElementById('initial-aisle-positions').textContent).map(Number);
+  const selectedValues = () => Array.from(container.querySelectorAll('select')).map(select => Number(select.value));
+  const preventDuplicates = () => {
+    const selects = Array.from(container.querySelectorAll('select'));
+    selects.forEach(select => Array.from(select.options).forEach(option => {
+      option.disabled = selects.some(other => other !== select && other.value === option.value);
+    }));
+  };
+  const renderPositions = (reset) => {
+    const cols = Math.max(1, Number(colsInput.value) || 1);
+    const maximum = Math.max(0, cols - 1);
+    countInput.max = maximum;
+    if (Number(countInput.value) > maximum) countInput.value = maximum;
+    const count = Math.max(0, Number(countInput.value) || 0);
+    const previous = reset ? initial : selectedValues();
+    container.innerHTML = '';
+    for (let index = 0; index < count; index += 1) {
+      const wrapper = document.createElement('div');
+      wrapper.className = 'col-md-4';
+      const select = document.createElement('select');
+      select.name = 'aisle_positions';
+      select.className = 'form-select';
+      select.setAttribute('aria-label', `第${index + 1}个过道位置`);
+      for (let position = 1; position < cols; position += 1) {
+        const option = document.createElement('option');
+        option.value = position;
+        option.textContent = `第${position}-${position + 1}列中间`;
+        if (position === Number(previous[index] || index + 1)) option.selected = true;
+        select.appendChild(option);
+      }
+      select.addEventListener('change', preventDuplicates);
+      wrapper.appendChild(select);
+      container.appendChild(wrapper);
+    }
+    preventDuplicates();
+  };
+  colsInput.addEventListener('input', () => renderPositions(true));
+  countInput.addEventListener('input', () => renderPositions(false));
+  renderPositions(true);
+});
+</script>
 {% endblock %}

@@ -8,8 +8,13 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.core.paginator import Paginator
 from django.utils import timezone
 
-from apps.backups.models import BackupRecord
+from apps.backups.models import BackupRecord, MediaArchiveExport, MediaArchiveImport, StorageAlertRule
+from apps.backups.forms import StorageAlertRuleForm
 from apps.backups.services import create_backup, verify_backup, restore_backup
+from apps.backups.storage_services import (
+    check_storage_alerts, clear_archived_modules, create_media_archive,
+    import_media_archives,
+)
 from apps.classes.models import SchoolClass
 from apps.audit.models import OperationLog
 
@@ -122,3 +127,101 @@ def restore_view(request, pk):
         except Exception as exc:
             messages.error(request, f"恢复失败: {exc}")
     return redirect("backups:index")
+
+
+@login_required
+def storage_center(request):
+    rules = StorageAlertRule.objects.all()
+    archives = MediaArchiveExport.objects.all()[:30]
+    import_history = MediaArchiveImport.objects.all()[:30]
+    if request.method == "POST":
+        form = StorageAlertRuleForm(request.POST)
+        if form.is_valid():
+            form.save()
+            messages.success(request, "存储空间提醒规则已保存。")
+            return redirect("backups:storage_center")
+    else:
+        form = StorageAlertRuleForm()
+    return render(request, "backups/storage_center.html", {
+        "rules": rules, "archives": archives, "import_history": import_history, "form": form,
+    })
+
+
+@login_required
+def storage_rule_delete(request, pk):
+    rule = get_object_or_404(StorageAlertRule, pk=pk)
+    if request.method == "POST":
+        rule.delete()
+        messages.info(request, "提醒规则已删除。")
+    return redirect("backups:storage_center")
+
+
+@login_required
+def storage_check_now(request):
+    if request.method == "POST":
+        try:
+            sent = check_storage_alerts(force=True)
+            messages.success(request, f"检查完成，本次发送 {sent} 封提醒邮件。")
+        except Exception as exc:
+            messages.error(request, f"检查或发信失败：{exc}")
+    return redirect("backups:storage_center")
+
+
+@login_required
+def media_archive_create(request):
+    if request.method == "POST":
+        try:
+            archive = create_media_archive(request.POST.getlist("modules"), request.user)
+            messages.success(request, "媒体数据包已生成，可在下方下载或执行导出并清除。")
+        except Exception as exc:
+            messages.error(request, f"归档失败：{exc}")
+    return redirect("backups:storage_center")
+
+
+@login_required
+def media_archive_download(request, pk):
+    archive = get_object_or_404(MediaArchiveExport, pk=pk)
+    path = Path(archive.file_path)
+    if not path.is_file():
+        messages.error(request, "归档文件不存在。")
+        return redirect("backups:storage_center")
+    return FileResponse(open(path, "rb"), as_attachment=True, filename=path.name)
+
+
+@login_required
+def media_archive_clear(request, pk):
+    archive = get_object_or_404(MediaArchiveExport, pk=pk)
+    if request.method == "POST":
+        confirmation = request.POST.get("confirmation", "").strip()
+        if confirmation != "确认清除":
+            messages.error(request, "必须完整输入“确认清除”四个字，未执行清理。")
+        elif not request.user.check_password(request.POST.get("password", "")):
+            messages.error(request, "管理员密码不正确，未执行清理。")
+        else:
+            clear_archived_modules(archive)
+            messages.warning(request, "所选模块的服务器媒体文件已清理，数据库文字记录已保留。")
+    return redirect("backups:storage_center")
+
+
+@login_required
+def media_archive_import(request):
+    if request.method == "POST":
+        files = request.FILES.getlist("archives")
+        if not files:
+            messages.error(request, "请至少选择一个压缩包。")
+        else:
+            file_names = [uploaded.name for uploaded in files]
+            try:
+                packages, records = import_media_archives(files)
+                MediaArchiveImport.objects.create(
+                    file_names=file_names, package_count=packages, record_count=records,
+                    status="completed", user=request.user,
+                )
+                messages.success(request, f"已导入 {packages} 个数据包，共恢复 {records} 条媒体关联。")
+            except Exception as exc:
+                MediaArchiveImport.objects.create(
+                    file_names=file_names, package_count=len(files), status="failed",
+                    error_message=str(exc), user=request.user,
+                )
+                messages.error(request, f"导入失败：{exc}")
+    return redirect("backups:storage_center")

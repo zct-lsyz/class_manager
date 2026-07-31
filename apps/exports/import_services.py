@@ -12,9 +12,11 @@ from openpyxl import load_workbook
 
 from apps.classes.models import SchoolClass
 from apps.students.models import Student, Guardian
+from apps.students.validators import PHONE_PATTERN, STUDENT_ID_PATTERN
 
 
-PHONE_RE = re.compile(r"^1[3-9]\d{9}$")
+PHONE_RE = re.compile(PHONE_PATTERN)
+STUDENT_ID_RE = re.compile(STUDENT_ID_PATTERN)
 
 
 def parse_uploaded_file(uploaded_file):
@@ -56,6 +58,9 @@ def validate_students(data_rows):
         if not student_id:
             errors.append({"row": idx, "field": "学号", "value": student_id, "error": "学号不能为空"})
             continue
+        if not STUDENT_ID_RE.match(student_id):
+            errors.append({"row": idx, "field": "学号", "value": student_id, "error": "学号必须为19位纯数字"})
+            continue
         if not name:
             errors.append({"row": idx, "field": "姓名", "value": name, "error": "姓名不能为空"})
             continue
@@ -70,15 +75,21 @@ def validate_students(data_rows):
         # 手机号格式（如果有）
         phone = str(row.get("联系电话", "") or "").strip()
         if phone and not PHONE_RE.match(phone):
-            errors.append({"row": idx, "field": "联系电话", "value": phone, "error": "手机号格式不正确"})
+            errors.append({"row": idx, "field": "联系电话", "value": phone, "error": "手机号必须为11位纯数字"})
             continue
         # 身高
         height = row.get("身高(cm)", "")
         if height not in ("", None):
             try:
-                height = int(float(str(height).strip()))
-            except (ValueError, TypeError):
-                errors.append({"row": idx, "field": "身高(cm)", "value": height, "error": "身高必须为数字"})
+                height_value = float(str(height).strip())
+                if not height_value.is_integer():
+                    raise ValueError
+                height = int(height_value)
+            except (ValueError, TypeError, OverflowError):
+                errors.append({"row": idx, "field": "身高(cm)", "value": height, "error": "身高必须为整数"})
+                continue
+            if not 50 <= height <= 250:
+                errors.append({"row": idx, "field": "身高(cm)", "value": height, "error": "身高必须为50至250之间的整数"})
                 continue
 
         valid_rows.append({
@@ -141,6 +152,9 @@ def validate_guardians(data_rows):
         if not student_id:
             errors.append({"row": idx, "field": "学号", "value": student_id, "error": "学号不能为空"})
             continue
+        if not STUDENT_ID_RE.match(student_id):
+            errors.append({"row": idx, "field": "学号", "value": student_id, "error": "学号必须为19位纯数字"})
+            continue
         student = student_map.get(student_id)
         if not student:
             errors.append({"row": idx, "field": "学号", "value": student_id, "error": f"学号 {student_id} 不存在"})
@@ -148,12 +162,20 @@ def validate_guardians(data_rows):
         if Guardian.objects.filter(student=student).exists():
             errors.append({"row": idx, "field": "学号", "value": student_id, "error": f"学生 {student.name} 已有家长信息"})
             continue
+        father_phone = str(row.get("父亲电话", "") or "").strip()
+        if father_phone and not PHONE_RE.match(father_phone):
+            errors.append({"row": idx, "field": "父亲电话", "value": father_phone, "error": "手机号必须为11位纯数字"})
+            continue
+        mother_phone = str(row.get("母亲电话", "") or "").strip()
+        if mother_phone and not PHONE_RE.match(mother_phone):
+            errors.append({"row": idx, "field": "母亲电话", "value": mother_phone, "error": "手机号必须为11位纯数字"})
+            continue
         valid_rows.append({
             "row": idx, "student": student,
             "father_name": str(row.get("父亲姓名", "") or "").strip(),
-            "father_phone": str(row.get("父亲电话", "") or "").strip(),
+            "father_phone": father_phone,
             "mother_name": str(row.get("母亲姓名", "") or "").strip(),
-            "mother_phone": str(row.get("母亲电话", "") or "").strip(),
+            "mother_phone": mother_phone,
             "other_guardian": str(row.get("其他监护人", "") or "").strip(),
             "home_address": str(row.get("家庭地址", "") or "").strip(),
             "remarks": str(row.get("备注", "") or "").strip(),

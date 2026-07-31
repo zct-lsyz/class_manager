@@ -300,10 +300,12 @@ def _extract_json_response(content):
     return result
 
 
-def generate_exam_analysis(config, paper_text, question_summaries):
+def generate_exam_analysis(config, paper_text, question_summaries, subject_name=""):
     """向外部 AI 仅发送试题文字和匿名逐题汇总。"""
+    from apps.scores.ai_prompts import DEFAULT_PROMPTS
+    subject_prompt = (config.prompts or {}).get(subject_name) or DEFAULT_PROMPTS.get(subject_name, "")
     system_prompt = (
-        "你是一名严谨的学科教学诊断专家。请结合试卷题型、题目内容和匿名逐题得分统计，"
+        f"你是一名严谨的{subject_name or '学科'}教学诊断专家。请结合试卷题型、题目内容和匿名逐题得分统计，"
         "识别班级主要薄弱知识点。不得推断学生身份，不得编造试卷中不存在的知识点。"
     )
     output_schema = {
@@ -321,6 +323,7 @@ def generate_exam_analysis(config, paper_text, question_summaries):
         {"role": "system", "content": system_prompt},
         {"role": "user", "content": (
             "请只返回严格 JSON，不要使用 Markdown。必须覆盖输入中的每一道题。\n"
+            f"科目专属分析要求：{subject_prompt}\n"
             f"输出结构：{json.dumps(output_schema, ensure_ascii=False)}\n\n"
             f"试卷文字：\n{paper_text[:settings.AI_EXAM_MAX_TEXT_CHARS]}\n\n"
             f"匿名逐题统计：\n{json.dumps(question_summaries, ensure_ascii=False, indent=2)}"

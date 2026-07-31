@@ -40,4 +40,14 @@
         </div>
     </div>
 </div>
+
+{% if check.photo or check.photos.all %}
+<div class="card mt-3">
+    <div class="card-header">现场照片</div>
+    <div class="card-body"><div class="row g-3">
+        {% if check.photo %}<div class="col-6 col-md-3"><a href="{{ check.photo.url }}" target="_blank"><img src="{{ check.photo.url }}" class="img-fluid rounded border" alt="现场照片"></a></div>{% endif %}
+        {% for photo in check.photos.all %}<div class="col-6 col-md-3"><a href="{{ photo.image.url }}" target="_blank"><img src="{{ photo.image.url }}" class="img-fluid rounded border" alt="{{ photo.original_name|default:'现场照片' }}"></a></div>{% endfor %}
+    </div></div>
+</div>
+{% endif %}
 {% endblock %}

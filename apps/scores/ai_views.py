@@ -237,12 +237,14 @@ def ai_generate(request):
             record.student = student
             # 学生历次总分
             exams_qs = Exam.objects.filter(
-                school_class=current_class, is_published=True, is_deleted=False,
+                school_class=current_class, is_deleted=False,
             ).order_by("date")
             trend = []
             for e in exams_qs:
                 total = 0
+                total_full = 0
                 count = 0
+                subject_scores = {}
                 for es in ExamSubject.objects.filter(exam=e):
                     s = Score.objects.filter(
                         exam_subject=es,
@@ -252,9 +254,16 @@ def ai_generate(request):
                     ).first()
                     if s and s.score is not None:
                         total += float(s.score)
+                        total_full += es.full_score
                         count += 1
+                        subject_scores[es.subject.name] = {
+                            "成绩": float(s.score), "满分": es.full_score, "班级名次": s.rank,
+                        }
                 if count > 0:
-                    trend.append({"考试": e.name, "日期": str(e.date), "总分": round(total, 1)})
+                    trend.append({
+                        "考试": e.name, "日期": str(e.date), "各科": subject_scores,
+                        "总分": round(total, 1), "得分率": round(total / total_full * 100, 1) if total_full else 0,
+                    })
             data_context = {"学生": "匿名学生", "历次考试": trend}
             result, duration, prompt = ai_services.generate_student_analysis(config, data_context)
             record.subject_name = student.name

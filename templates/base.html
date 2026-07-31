@@ -148,6 +148,11 @@
                                 <i class="bi bi-trophy me-2"></i>积分排名
                             </a>
                         </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="{% url 'dashboard:warnings' %}">
+                                <i class="bi bi-bell-fill me-2"></i>预警管理
+                            </a>
+                        </li>
                     </ul>
 
                     <!-- 教学管理 -->
@@ -313,12 +318,20 @@
                                 <i class="bi bi-shield-lock me-2"></i>账户与安全
                             </a>
                         </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="{% url 'backups:storage_center' %}">
+                                <i class="bi bi-device-ssd me-2"></i>存储提醒与归档
+                            </a>
+                        </li>
                     </ul>
                 </div>
             </nav>
 
             <!-- 主内容区 -->
             <main class="col-md-10 ms-sm-auto main-content">
+                <div class="mt-3 d-none" id="pageParentBack">
+                    <button type="button" class="btn btn-sm btn-outline-secondary"><i class="bi bi-arrow-left me-1"></i>返回上一级</button>
+                </div>
                 <!-- 消息提示 -->
                 {% if messages %}
                 <div class="mt-3">
@@ -447,6 +460,50 @@
 
         initSidebarMenu(desktopMenu);
         initSidebarMenu(mobileMenu);
+
+        const parentBack = document.getElementById('pageParentBack');
+        const currentPath = window.location.pathname.replace(/\/+$/, '') || '/';
+        const navLinks = Array.from(desktopMenu.querySelectorAll('a.nav-link'));
+        const isNavigationPage = navLinks.some(function(link) {
+            return (new URL(link.href, window.location.origin).pathname.replace(/\/+$/, '') || '/') === currentPath;
+        });
+        if (parentBack && currentPath !== '/' && !isNavigationPage) {
+            let parentLink = null;
+            let parentLength = -1;
+            navLinks.forEach(function(link) {
+                const linkPath = new URL(link.href, window.location.origin).pathname.replace(/\/+$/, '') || '/';
+                if (linkPath !== '/' && currentPath.startsWith(linkPath + '/') && linkPath.length > parentLength) {
+                    parentLink = link;
+                    parentLength = linkPath.length;
+                }
+            });
+            parentBack.classList.remove('d-none');
+            parentBack.querySelector('button').addEventListener('click', function() {
+                const referrer = document.referrer ? new URL(document.referrer) : null;
+                if (referrer && referrer.origin === window.location.origin && referrer.pathname !== window.location.pathname) window.history.back();
+                else window.location.href = parentLink ? parentLink.href : '{% url "dashboard:index" %}';
+            });
+        }
+
+        const disciplineItem = document.getElementById('id_item');
+        const disciplinePoints = document.getElementById('id_points_deducted');
+        if (disciplineItem && disciplinePoints) disciplineItem.addEventListener('change', function() {
+            const option = this.options[this.selectedIndex];
+            if (option && option.value && option.dataset.points !== undefined) disciplinePoints.value = option.dataset.points;
+        });
+
+        if (/\/(create|edit|new)\//.test(window.location.pathname)) {
+            document.querySelectorAll('main form').forEach(function(form) {
+                const submit = form.querySelector('button[type="submit"], button:not([type]), input[type="submit"]');
+                if (!submit || form.textContent.indexOf('返回') !== -1) return;
+                const back = document.createElement('button');
+                back.type = 'button';
+                back.className = 'btn btn-outline-secondary me-2';
+                back.textContent = '返回';
+                back.addEventListener('click', function() { window.history.back(); });
+                submit.parentNode.insertBefore(back, submit);
+            });
+        }
     });
     </script>
     {% endif %}

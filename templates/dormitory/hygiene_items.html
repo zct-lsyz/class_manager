@@ -5,6 +5,7 @@
     <h4 class="mb-0"><i class="bi bi-clipboard-check me-2 text-primary"></i>卫生检查项目配置</h4>
     <a href="{% url 'dormitory:hygiene' %}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i> 返回卫生检查</a>
 </div>
+<div class="mb-3"><a href="{% url 'exports:option_template' 'dorm_hygiene' %}" class="btn btn-outline-success btn-sm">下载 Excel 模板</a><form method="post" enctype="multipart/form-data" action="{% url 'exports:option_import' 'dorm_hygiene' %}" class="d-inline-flex ms-2">{% csrf_token %}<input type="file" name="file" accept=".xlsx" class="form-control form-control-sm" required><button class="btn btn-success btn-sm ms-1 text-nowrap">批量导入</button></form></div>
 <div class="card p-3 mb-3">
     <form method="post" class="row g-2 align-items-end">
         {% csrf_token %}

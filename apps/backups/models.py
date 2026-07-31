@@ -62,3 +62,58 @@ class BackupRecord(BaseModel):
 
     def __str__(self):
         return f"{self.get_backup_type_display()} ({self.created_at:%Y-%m-%d %H:%M}) - {self.get_status_display()}"
+
+
+class StorageAlertRule(BaseModel):
+    CATEGORY_CHOICES = [
+        ("disk_free", "服务器剩余空间"),
+        ("dormitory", "宿舍管理照片"),
+        ("rewards", "奖惩照片"),
+        ("activities", "文体活动照片"),
+    ]
+    name = models.CharField("提醒名称", max_length=100)
+    category = models.CharField("提醒项", max_length=30, choices=CATEGORY_CHOICES)
+    threshold_mb = models.PositiveIntegerField("阈值(MB)", default=1024)
+    recipient_emails = models.TextField("收件邮箱")
+    is_active = models.BooleanField("启用", default=True)
+    last_notified_at = models.DateTimeField("最近提醒时间", null=True, blank=True)
+
+    class Meta:
+        verbose_name = "存储空间提醒"
+        verbose_name_plural = "存储空间提醒"
+        ordering = ["category", "pk"]
+
+
+class MediaArchiveExport(BaseModel):
+    modules = models.JSONField("导出模块", default=list)
+    file_path = models.CharField("压缩包路径", max_length=500)
+    file_size = models.PositiveBigIntegerField("压缩包大小(bytes)", default=0)
+    record_count = models.PositiveIntegerField("媒体关联数", default=0)
+    cleared_at = models.DateTimeField("清理时间", null=True, blank=True)
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL,
+        null=True, blank=True, verbose_name="操作人",
+    )
+
+    class Meta:
+        verbose_name = "媒体数据归档"
+        verbose_name_plural = "媒体数据归档"
+        ordering = ["-created_at"]
+
+
+class MediaArchiveImport(BaseModel):
+    STATUS_CHOICES = [("completed", "导入成功"), ("failed", "导入失败")]
+    file_names = models.JSONField("数据包文件", default=list)
+    package_count = models.PositiveIntegerField("数据包数量", default=0)
+    record_count = models.PositiveIntegerField("恢复媒体关联数", default=0)
+    status = models.CharField("状态", max_length=20, choices=STATUS_CHOICES, default="completed")
+    error_message = models.TextField("错误信息", blank=True, default="")
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL,
+        null=True, blank=True, verbose_name="操作人",
+    )
+
+    class Meta:
+        verbose_name = "媒体数据导入历史"
+        verbose_name_plural = "媒体数据导入历史"
+        ordering = ["-created_at"]

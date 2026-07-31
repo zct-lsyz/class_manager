@@ -100,6 +100,28 @@
 </div>
 {% endif %}
 
+{% if exam %}
+<div class="card mt-3">
+    <div class="card-header"><i class="bi bi-file-earmark-spreadsheet me-2"></i>整场考试多科 Excel 导入</div>
+    <div class="card-body">
+        <form method="post" action="{% url 'scores:score_import_wide' %}" enctype="multipart/form-data" class="row g-2 align-items-end">
+            {% csrf_token %}
+            <input type="hidden" name="exam_id" value="{{ exam.pk }}">
+            <div class="col-md-6">
+                <input type="file" name="file" class="form-control" accept=".xlsx" required>
+                <div class="form-text">兼容“姓名、总分、校/班排名、九科原始分/赋分”的宽表；优先导入赋分，也支持只凭唯一姓名匹配。</div>
+            </div>
+            <div class="col-md-3">
+                <a href="{% url 'scores:score_import_wide_template' %}?exam_id={{ exam.pk }}" class="btn btn-outline-primary btn-sm w-100"><i class="bi bi-download me-1"></i>下载九科宽表模板</a>
+            </div>
+            <div class="col-md-3">
+                <button type="submit" class="btn btn-success btn-sm w-100"><i class="bi bi-upload me-1"></i>导入整场成绩</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endif %}
+
 <script>
 // 输入成绩时自动将状态改为"正常"
 document.querySelectorAll('input[name^="score_"]').forEach(function(input) {

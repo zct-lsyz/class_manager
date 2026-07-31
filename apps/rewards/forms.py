@@ -49,6 +49,38 @@ class RewardRecordForm(forms.ModelForm):
         self.fields["description"].label = "奖惩说明"
 
 
+class BatchRewardRecordForm(forms.ModelForm):
+    students = forms.ModelMultipleChoiceField(
+        label="学生（可多选）", queryset=Student.objects.none(),
+        widget=forms.CheckboxSelectMultiple(attrs={"class": "list-unstyled"}),
+    )
+
+    class Meta:
+        model = RewardRecord
+        fields = ["date", "record_type", "item", "custom_name", "level", "points", "description", "certificate_photo"]
+        widgets = {
+            "date": forms.DateInput(attrs={"class": "form-control", "type": "date"}),
+            "record_type": forms.Select(attrs={"class": "form-select"}),
+            "item": forms.Select(attrs={"class": "form-select"}),
+            "custom_name": forms.TextInput(attrs={"class": "form-control"}),
+            "level": forms.Select(attrs={"class": "form-select"}),
+            "points": forms.NumberInput(attrs={"class": "form-control"}),
+            "description": forms.Textarea(attrs={"class": "form-control", "rows": 2}),
+            "certificate_photo": forms.FileInput(attrs={"class": "form-control"}),
+        }
+
+    def __init__(self, *args, current_class=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        students = Student.objects.filter(is_deleted=False)
+        items = RewardItem.objects.filter(is_active=True)
+        if current_class:
+            students = students.filter(school_class=current_class)
+            items = items.filter(school_class=current_class)
+        self.fields["students"].queryset = students.order_by("student_id")
+        self.fields["item"].queryset = items
+        self.fields["item"].required = False
+
+
 class PointRecordForm(forms.ModelForm):
     class Meta:
         model = PointRecord

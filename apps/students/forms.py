@@ -15,20 +15,20 @@ class StudentForm(forms.ModelForm):
         ]
         widgets = {
             "school_class": forms.Select(attrs={"class": "form-select"}),
-            "student_id": forms.TextInput(attrs={"class": "form-control", "placeholder": "如：2026001"}),
+            "student_id": forms.TextInput(attrs={"class": "form-control", "placeholder": "19位数字", "inputmode": "numeric", "pattern": "[0-9]{19}", "maxlength": "19"}),
             "name": forms.TextInput(attrs={"class": "form-control"}),
             "gender": forms.Select(attrs={"class": "form-select"}),
             "birth_date": forms.DateInput(attrs={"class": "form-control", "type": "date"}),
-            "height": forms.NumberInput(attrs={"class": "form-control", "placeholder": "cm"}),
+            "height": forms.NumberInput(attrs={"class": "form-control", "placeholder": "cm", "min": "50", "max": "250", "step": "1"}),
             "vision": forms.TextInput(attrs={"class": "form-control", "placeholder": "如：左眼5.0 右眼4.8"}),
             "seat_requirement": forms.TextInput(attrs={"class": "form-control", "placeholder": "如：需前排座位"}),
             "class_position": forms.TextInput(attrs={"class": "form-control"}),
             "dormitory": forms.TextInput(attrs={"class": "form-control"}),
             "bed_number": forms.TextInput(attrs={"class": "form-control"}),
             "primary_contact": forms.TextInput(attrs={"class": "form-control"}),
-            "primary_phone": forms.TextInput(attrs={"class": "form-control", "placeholder": "13800138000"}),
+            "primary_phone": forms.TextInput(attrs={"class": "form-control", "placeholder": "13800138000", "inputmode": "numeric", "pattern": "[0-9]{11}", "maxlength": "11"}),
             "secondary_contact": forms.TextInput(attrs={"class": "form-control"}),
-            "secondary_phone": forms.TextInput(attrs={"class": "form-control", "placeholder": "备用联系电话"}),
+            "secondary_phone": forms.TextInput(attrs={"class": "form-control", "placeholder": "备用联系电话", "inputmode": "numeric", "pattern": "[0-9]{11}", "maxlength": "11"}),
             "remarks": forms.Textarea(attrs={"class": "form-control", "rows": 3}),
             "sort_order": forms.NumberInput(attrs={"class": "form-control"}),
         }
@@ -77,9 +77,9 @@ class GuardianForm(forms.ModelForm):
         ]
         widgets = {
             "father_name": forms.TextInput(attrs={"class": "form-control"}),
-            "father_phone": forms.TextInput(attrs={"class": "form-control", "placeholder": "13800138000"}),
+            "father_phone": forms.TextInput(attrs={"class": "form-control", "placeholder": "13800138000", "inputmode": "numeric", "pattern": "[0-9]{11}", "maxlength": "11"}),
             "mother_name": forms.TextInput(attrs={"class": "form-control"}),
-            "mother_phone": forms.TextInput(attrs={"class": "form-control", "placeholder": "13800138000"}),
+            "mother_phone": forms.TextInput(attrs={"class": "form-control", "placeholder": "13800138000", "inputmode": "numeric", "pattern": "[0-9]{11}", "maxlength": "11"}),
             "other_guardian": forms.TextInput(attrs={"class": "form-control"}),
             "primary_contact": forms.Select(attrs={"class": "form-select"}),
             "home_address": forms.Textarea(attrs={"class": "form-control", "rows": 2}),

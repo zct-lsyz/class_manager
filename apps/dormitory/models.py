@@ -187,6 +187,23 @@ class DormHygieneCheck(BaseModel):
         return f"{self.room.room_number} - {self.date} - {self.total_score}分"
 
 
+class DormHygienePhoto(BaseModel):
+    """宿舍卫生检查的多张现场照片。"""
+    check_record = models.ForeignKey(
+        DormHygieneCheck, on_delete=models.CASCADE,
+        related_name="photos", verbose_name="检查记录",
+    )
+    image = models.ImageField("现场照片", upload_to="hygiene/%Y/%m/")
+    original_name = models.CharField("原文件名", max_length=255, blank=True, default="")
+    original_size = models.PositiveBigIntegerField("原文件大小(bytes)", default=0)
+    stored_size = models.PositiveBigIntegerField("存储大小(bytes)", default=0)
+
+    class Meta:
+        verbose_name = "卫生检查照片"
+        verbose_name_plural = "卫生检查照片"
+        ordering = ["pk"]
+
+
 class DormHygieneItemScore(BaseModel):
     """卫生检查项目得分"""
     check_record = models.ForeignKey(

@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><title>座位表 - {{ current_class.name }}</title>
+<style>
+@page { size:landscape; margin:12mm; }
+body { font-family:"Microsoft YaHei", sans-serif; color:#111827; }
+h1 { margin:0 0 4px; text-align:center; font-size:22px; }
+.subtitle { text-align:center; color:#6b7280; margin-bottom:14px; }
+table { border-collapse:collapse; margin:0 auto; table-layout:fixed; }
+td { width:100px; height:54px; border:1px solid #9ca3af; text-align:center; font-size:15px; font-weight:600; }
+.row-number { width:28px; color:#6b7280; font-size:12px; font-weight:400; }
+.aisle { width:18px; border:0; }
+.podium { width:320px; margin:16px auto 0; padding:8px; border:2px solid #6b7280; text-align:center; font-weight:600; }
+.actions { text-align:center; margin:16px; }
+@media print { .actions { display:none; } }
+</style></head><body>
+<h1>{{ current_class.name }}座位表</h1>
+<div class="subtitle">方案 v{{ plan.version|default:plan.pk }} · 第一排靠近讲台</div>
+<table>
+{% for row_num, row in grid.items %}<tr>
+    <td class="row-number">{{ row_num|add:1 }}</td>
+    {% for col_num, student in row.items %}<td>{% if student %}{{ student.name }}{% endif %}</td>{% if col_num|add:1 in aisle_positions %}<td class="aisle"></td>{% endif %}{% endfor %}
+    <td class="row-number">{{ row_num|add:1 }}</td>
+</tr>{% endfor %}
+</table>
+<div class="podium">讲台（教师视角）</div>
+<div class="actions"><button onclick="window.print()">打印或另存为 PDF</button></div>
+</body></html>

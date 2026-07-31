@@ -148,6 +148,18 @@ AI_EXAM_MAX_PAGES = int(os.environ.get("AI_EXAM_MAX_PAGES", 30))
 AI_EXAM_MAX_TEXT_CHARS = int(os.environ.get("AI_EXAM_MAX_TEXT_CHARS", 60000))
 AI_EXAM_OCR_LANG = os.environ.get("AI_EXAM_OCR_LANG", "chi_sim+eng")
 
+# 邮件发件账号只从环境变量读取，不写入数据库或备份。
+EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
+EMAIL_HOST = os.environ.get("SMTP_HOST", "")
+EMAIL_PORT = int(os.environ.get("SMTP_PORT", "587"))
+EMAIL_HOST_USER = os.environ.get("SMTP_USERNAME", "")
+EMAIL_HOST_PASSWORD = os.environ.get("SMTP_PASSWORD", "")
+EMAIL_USE_TLS = os.environ.get("SMTP_USE_TLS", "true").lower() in {"1", "true", "yes", "on"}
+EMAIL_USE_SSL = os.environ.get("SMTP_USE_SSL", "false").lower() in {"1", "true", "yes", "on"}
+if EMAIL_USE_SSL:
+    EMAIL_USE_TLS = False
+DEFAULT_FROM_EMAIL = os.environ.get("SMTP_FROM_EMAIL", EMAIL_HOST_USER or "noreply@localhost")
+
 # 文件类型白名单
 ALLOWED_UPLOAD_EXTENSIONS = [
     ".jpg", ".jpeg", ".png", ".gif", ".bmp",
