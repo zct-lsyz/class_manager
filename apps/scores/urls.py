@@ -25,6 +25,7 @@ urlpatterns = [
     path("analysis/external/<int:pk>/delete/", views.external_delete, name="external_delete"),
     path("analysis/student/<int:pk>/", views.student_analysis_detail, name="student_analysis_detail"),
     path("analysis/students/", views.class_student_overview, name="class_student_overview"),
+    path("analysis/grade-lines/<int:exam_id>/", views.grade_line_settings, name="grade_line_settings"),
     path("subjects/", views.subject_settings, name="subject_settings"),
     # 培优补差
     path("support/", support_views.support_list, name="support_list"),

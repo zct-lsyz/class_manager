@@ -74,7 +74,12 @@
                     <tr><td class="text-muted">视力情况</td><td>{{ student.vision|default:"未填写" }}</td></tr>
                     <tr><td class="text-muted">特殊座位需求</td><td>{{ student.seat_requirement|default:"无" }}</td></tr>
                     <tr><td class="text-muted">班级职务</td><td>{{ student.display_class_position|default:"无" }}</td></tr>
+                    <tr><td class="text-muted">家庭住址</td><td>{{ student.home_address|default:"未填写" }}</td></tr>
+                    <tr><td class="text-muted">是否团员</td><td>{% if student.is_league_member %}<span class="badge bg-danger">团员</span>{% else %}<span class="text-muted">否</span>{% endif %}</td></tr>
+                    <tr><td class="text-muted">是否住校</td><td>{% if student.is_boarder %}<span class="badge bg-primary">住校</span>{% else %}<span class="badge bg-secondary">走读</span>{% endif %}</td></tr>
+                    {% if student.is_boarder %}
                     <tr><td class="text-muted">宿舍 / 床位</td><td>{{ student.display_dormitory|default:"未分配" }} {% if student.display_bed_number %}/ {{ student.display_bed_number }}{% endif %}</td></tr>
+                    {% endif %}
                     <tr><td class="text-muted">主要联系人</td><td>{{ student.display_primary_contact|default:"未填写" }}</td></tr>
                     <tr><td class="text-muted">联系电话</td><td>{{ student.display_primary_phone|default:"未填写" }}</td></tr>
                     <tr><td class="text-muted">备用联系人</td><td>{{ student.secondary_contact|default:"未填写" }}</td></tr>
@@ -131,6 +136,56 @@
                     <div class="card-body"><canvas id="subjectRankChart" height="300"></canvas></div>
                 </div>
                 {% endif %}
+                <!-- 按考试查看成绩明细 -->
+                {% if student_exams %}
+                <h6 class="mt-3 text-muted">按考试查看成绩明细</h6>
+                <div class="mb-2">
+                    <select id="examDetailSelect" class="form-select form-select-sm" style="width:auto" onchange="showExamDetail(this.value)">
+                        <option value="">— 选择考试 —</option>
+                        {% for e in student_exams %}
+                        <option value="{{ e.pk }}" {% if exam_filter == e.pk|stringformat:'s' %}selected{% endif %}>{{ e.name }}（{{ e.date|date:"Y-m-d" }}）</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                {% for exam_id, detail in exam_score_detail.items %}
+                <div class="exam-detail-panel card card-body bg-light mb-2 p-2" id="examPanel{{ exam_id }}" style="display:{% if exam_filter == exam_id|stringformat:'s' %}block{% else %}none{% endif %}">
+                    <div class="mb-2">
+                        <strong>{{ detail.exam.name }}</strong>
+                        <span class="text-muted small ms-2">{{ detail.exam.date|date:"Y-m-d" }}</span>
+                        <span class="badge bg-primary ms-2">总分：{{ detail.total_score }}</span>
+                        <span class="badge bg-secondary ms-1">排名：第{{ detail.total_rank|default:"?" }}名</span>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="table table-sm table-bordered mb-0 bg-white">
+                            <thead class="table-light"><tr><th>科目</th><th>成绩</th><th>排名</th><th>排名变化</th></tr></thead>
+                            <tbody>
+                                {% for subj in detail.subjects %}
+                                <tr>
+                                    <td><strong>{{ subj.subject_name }}</strong></td>
+                                    <td>{{ subj.score|floatformat:1 }}</td>
+                                    <td>{{ subj.rank|default:"—" }}</td>
+                                    <td>
+                                        {% if subj.rank_change is None %}
+                                        <span class="text-muted">—</span>
+                                        {% elif subj.rank_change > 0 %}
+                                        <span class="text-success fw-bold">+{{ subj.rank_change }} ↑</span>
+                                        {% elif subj.rank_change < 0 %}
+                                        <span class="text-danger fw-bold">{{ subj.rank_change }} ↓</span>
+                                        {% else %}
+                                        <span class="text-muted">0 →</span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                {% empty %}
+                <div class="text-muted text-center py-2 mb-2"><small>暂无按考试整理的成绩明细</small></div>
+                {% endfor %}
+                {% endif %}
+
                 <h6 class="mt-3 text-muted">原始成绩记录</h6>
                 <div class="table-responsive"><table class="table table-sm"><thead><tr><th>日期</th><th>考试</th><th>科目</th><th>成绩</th><th>名次</th></tr></thead><tbody>
                     {% for item in scores %}<tr><td>{{ item.exam.date }}</td><td>{{ item.exam.name }}</td><td>{{ item.exam_subject.subject.name }}</td><td>{{ item.score|default_if_none:item.get_status_display }}</td><td>{{ item.rank|default:"-" }}</td></tr>{% empty %}<tr><td colspan="5" class="text-muted text-center">暂无成绩记录</td></tr>{% endfor %}
@@ -155,8 +210,79 @@
             <div class="tab-pane fade" id="comments">
                 <h6>评语</h6>
                 <ul class="list-group list-group-flush mb-3">{% for item in comments %}<li class="list-group-item px-0"><span class="text-muted me-2">{{ item.created_at|date:"Y-m-d" }}</span><strong>{{ item.get_comment_type_display }}</strong><div>{{ item.content|linebreaksbr }}</div></li>{% empty %}<li class="list-group-item text-muted px-0">暂无评语</li>{% endfor %}</ul>
-                <h6>谈话记录</h6>
-                <ul class="list-group list-group-flush">{% for item in conversations %}<li class="list-group-item px-0"><span class="text-muted me-2">{{ item.date }}</span><strong>{{ item.reason|default:"学生谈话" }}</strong><div>{{ item.main_content|linebreaksbr }}</div></li>{% empty %}<li class="list-group-item text-muted px-0">暂无谈话记录</li>{% endfor %}</ul>
+
+                <!-- 添加谈话记录按钮 -->
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <h6 class="mb-0">谈话记录</h6>
+                    <button type="button" class="btn btn-primary btn-sm" id="showConversationForm">
+                        <i class="bi bi-plus-lg me-1"></i>添加谈话记录
+                    </button>
+                </div>
+
+                <!-- 谈话记录表单（默认隐藏） -->
+                <div class="card card-body bg-light mb-3" id="conversationForm" style="display:none">
+                    <form method="post">
+                        {% csrf_token %}
+                        <input type="hidden" name="action" value="add_conversation">
+                        <div class="row g-2 mb-2">
+                            <div class="col-md-6">
+                                <label class="form-label small mb-1">关联考试（可选）</label>
+                                <select name="exam_id" class="form-select form-select-sm">
+                                    <option value="">不关联考试</option>
+                                    {% for e in student_exams %}<option value="{{ e.pk }}">{{ e.name }}（{{ e.date|date:"Y-m-d" }}）</option>{% endfor %}
+                                </select>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label small mb-1">日期</label>
+                                <input type="date" name="date" class="form-control form-control-sm" value="{% now 'Y-m-d' %}">
+                            </div>
+                        </div>
+                        <div class="mb-2">
+                            <label class="form-label small mb-1">谈话原因</label>
+                            <input type="text" name="reason" class="form-control form-control-sm" placeholder="如：期中成绩分析、学习态度沟通等">
+                        </div>
+                        <div class="mb-2">
+                            <label class="form-label small mb-1">主要内容</label>
+                            <textarea name="main_content" class="form-control form-control-sm" rows="3" id="conversationContent" placeholder="谈话主要内容..."></textarea>
+                            <div class="form-text">
+                                <button type="button" class="btn btn-sm btn-outline-secondary mt-1" id="startVoiceBtn" title="语音输入（需Chrome/Edge浏览器）">
+                                    <i class="bi bi-mic-fill me-1"></i>开始录音
+                                </button>
+                                <button type="button" class="btn btn-sm btn-outline-danger mt-1" id="stopVoiceBtn" style="display:none" title="停止录音">
+                                    <i class="bi bi-stop-fill me-1"></i>停止录音
+                                </button>
+                                <span id="voiceStatus" class="text-muted small ms-1"></span>
+                                <noscript><span class="text-warning small ms-2">⚠ 您的浏览器不支持语音输入，请手动输入文字。</span></noscript>
+                            </div>
+                        </div>
+                        <div class="mb-2">
+                            <label class="form-label small mb-1">后续措施</label>
+                            <textarea name="follow_up_actions" class="form-control form-control-sm" rows="2" placeholder="后续跟进措施（可选）"></textarea>
+                        </div>
+                        <div class="d-flex gap-2">
+                            <button type="submit" class="btn btn-primary btn-sm"><i class="bi bi-check-lg me-1"></i>保存谈话记录</button>
+                            <button type="button" class="btn btn-outline-secondary btn-sm" id="cancelConversationForm">取消</button>
+                        </div>
+                    </form>
+                </div>
+
+                <!-- 已有谈话记录列表 -->
+                <div class="mb-2">
+                    <select id="conversationExamFilter" class="form-select form-select-sm" style="width:auto" onchange="filterConversations(this.value)">
+                        <option value="">全部谈话</option>
+                        {% for e in student_exams %}
+                        <option value="exam_{{ e.pk }}">{{ e.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <ul class="list-group list-group-flush" id="conversationList">{% for item in conversations %}
+                    <li class="list-group-item px-0 conversation-item" data-exam="{% if item.exam_id %}exam_{{ item.exam_id }}{% endif %}">
+                        <span class="text-muted me-2 small">{{ item.date|date:"Y-m-d" }}</span>
+                        {% if item.exam %}<span class="badge bg-info me-1 small">{{ item.exam.name }}</span>{% endif %}
+                        <strong>{{ item.reason|default:"学生谈话" }}</strong>
+                        <div class="mt-1">{{ item.main_content|linebreaksbr }}</div>
+                        {% if item.follow_up_actions %}<div class="text-muted small mt-1"><i class="bi bi-arrow-right-circle me-1"></i>后续：{{ item.follow_up_actions|truncatechars:100 }}</div>{% endif %}
+                    </li>{% empty %}<li class="list-group-item text-muted px-0" id="noConversationMsg">暂无谈话记录</li>{% endfor %}</ul>
             </div>
 
             <div class="tab-pane fade" id="timeline">
@@ -274,4 +400,132 @@
 })();
 </script>
 {% endif %}
+
+<!-- 成绩明细切换 -->
+<script>
+function showExamDetail(examId) {
+    document.querySelectorAll('.exam-detail-panel').forEach(function(panel) {
+        panel.style.display = 'none';
+    });
+    if (examId) {
+        var panel = document.getElementById('examPanel' + examId);
+        if (panel) panel.style.display = 'block';
+    }
+}
+</script>
+
+<!-- 谈话记录表单切换 -->
+<script>
+(function() {
+    var showBtn = document.getElementById('showConversationForm');
+    var cancelBtn = document.getElementById('cancelConversationForm');
+    var form = document.getElementById('conversationForm');
+    if (showBtn && form) {
+        showBtn.addEventListener('click', function() {
+            form.style.display = 'block';
+            showBtn.style.display = 'none';
+        });
+    }
+    if (cancelBtn && form && showBtn) {
+        cancelBtn.addEventListener('click', function() {
+            form.style.display = 'none';
+            showBtn.style.display = '';
+        });
+    }
+})();
+</script>
+
+<!-- 谈话记录按考试筛选 -->
+<script>
+function filterConversations(value) {
+    document.querySelectorAll('.conversation-item').forEach(function(item) {
+        if (!value || item.getAttribute('data-exam') === value) {
+            item.style.display = '';
+        } else {
+            item.style.display = 'none';
+        }
+    });
+    // 更新"暂无记录"提示
+    var visible = document.querySelectorAll('.conversation-item[style*="display: none"], .conversation-item').length;
+    var hidden = document.querySelectorAll('.conversation-item[style="display: none"]').length;
+    var all = document.querySelectorAll('.conversation-item').length;
+    var msg = document.getElementById('noConversationMsg');
+    if (msg) {
+        msg.style.display = (all === hidden && all > 0) ? '' : 'none';
+    }
+}
+</script>
+
+<!-- 语音输入（Web Speech API） -->
+<script>
+(function() {
+    var startBtn = document.getElementById('startVoiceBtn');
+    var stopBtn = document.getElementById('stopVoiceBtn');
+    var statusEl = document.getElementById('voiceStatus');
+    var textarea = document.getElementById('conversationContent');
+    if (!startBtn || !textarea) return;
+
+    var SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+        startBtn.disabled = true;
+        startBtn.title = '您的浏览器不支持语音输入，请使用Chrome或Edge';
+        startBtn.classList.add('btn-outline-muted');
+        statusEl.textContent = '⚠ 浏览器不支持语音，请手动输入';
+        return;
+    }
+
+    var recognition = null;
+    var finalText = '';
+
+    startBtn.addEventListener('click', function() {
+        recognition = new SpeechRecognition();
+        recognition.lang = 'zh-CN';
+        recognition.interimResults = true;
+        recognition.continuous = true;
+
+        finalText = textarea.value;
+        if (finalText) finalText += '\n';
+
+        recognition.onresult = function(event) {
+            var interim = '';
+            for (var i = event.resultIndex; i < event.results.length; i++) {
+                if (event.results[i].isFinal) {
+                    finalText += event.results[i][0].transcript;
+                } else {
+                    interim += event.results[i][0].transcript;
+                }
+            }
+            textarea.value = finalText + interim;
+        };
+
+        recognition.onerror = function(event) {
+            statusEl.textContent = '识别出错：' + event.error;
+            stopRecording();
+        };
+
+        recognition.onend = function() {
+            stopRecording();
+        };
+
+        recognition.start();
+        startBtn.style.display = 'none';
+        stopBtn.style.display = '';
+        statusEl.textContent = '🔴 正在录音...';
+        statusEl.className = 'text-danger small ms-1';
+    });
+
+    stopBtn.addEventListener('click', function() {
+        if (recognition) recognition.stop();
+        stopRecording();
+    });
+
+    function stopRecording() {
+        startBtn.style.display = '';
+        stopBtn.style.display = 'none';
+        statusEl.textContent = '✅ 录音已停止，可继续编辑文字';
+        statusEl.className = 'text-success small ms-1';
+        recognition = null;
+    }
+})();
+</script>
 {% endblock %}

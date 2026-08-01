@@ -70,8 +70,18 @@
                     <button class="nav-section-title nav-section-toggle" type="button"><span>工作台</span><i class="bi bi-caret-right-fill nav-toggle-icon"></i></button>
                     <ul class="nav flex-column nav-section-menu">
                         <li class="nav-item">
-                            <a class="nav-link {% if request.resolver_match.app_name == 'dashboard' %}active{% endif %}" href="{% url 'dashboard:index' %}">
+                            <a class="nav-link {% if request.resolver_match.app_name == 'dashboard' and request.resolver_match.url_name == 'index' %}active{% endif %}" href="{% url 'dashboard:index' %}">
                                 <i class="bi bi-grid-1x2-fill me-2"></i>工作台首页
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link {% if request.resolver_match.app_name == 'todos' %}active{% endif %}" href="{% url 'todos:list' %}">
+                                <i class="bi bi-check2-square me-2"></i>待办事项
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link {% if request.resolver_match.app_name == 'dashboard' and request.resolver_match.url_name == 'countdown_list' %}active{% endif %}" href="{% url 'dashboard:countdown_list' %}">
+                                <i class="bi bi-hourglass-split me-2"></i>倒计时管理
                             </a>
                         </li>
                     </ul>

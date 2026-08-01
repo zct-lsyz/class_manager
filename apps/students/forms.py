@@ -9,7 +9,9 @@ class StudentForm(forms.ModelForm):
         fields = [
             "school_class", "student_id", "name", "gender",
             "birth_date", "height", "vision", "seat_requirement",
-            "class_position", "dormitory", "bed_number",
+            "class_position", "home_address",
+            "is_league_member", "is_boarder",
+            "dormitory", "bed_number",
             "primary_contact", "primary_phone", "secondary_contact",
             "secondary_phone", "remarks", "sort_order",
         ]
@@ -23,6 +25,9 @@ class StudentForm(forms.ModelForm):
             "vision": forms.TextInput(attrs={"class": "form-control", "placeholder": "如：左眼5.0 右眼4.8"}),
             "seat_requirement": forms.TextInput(attrs={"class": "form-control", "placeholder": "如：需前排座位"}),
             "class_position": forms.TextInput(attrs={"class": "form-control"}),
+            "home_address": forms.TextInput(attrs={"class": "form-control", "placeholder": "如：XX省XX市XX区XX路XX号"}),
+            "is_league_member": forms.CheckboxInput(attrs={"class": "form-check-input"}),
+            "is_boarder": forms.CheckboxInput(attrs={"class": "form-check-input", "data-toggle": "dormitory"}),
             "dormitory": forms.TextInput(attrs={"class": "form-control"}),
             "bed_number": forms.TextInput(attrs={"class": "form-control"}),
             "primary_contact": forms.TextInput(attrs={"class": "form-control"}),
@@ -42,6 +47,9 @@ class StudentForm(forms.ModelForm):
             "vision": "视力情况",
             "seat_requirement": "特殊座位需求",
             "class_position": "班级职务",
+            "home_address": "家庭住址",
+            "is_league_member": "是否团员",
+            "is_boarder": "是否住校",
             "dormitory": "宿舍",
             "bed_number": "床位",
             "primary_contact": "主要联系人",
@@ -63,6 +71,11 @@ class StudentForm(forms.ModelForm):
                 "primary_phone": self.instance.display_primary_phone,
             })
         self.fields["class_position"].disabled = True
+        # 宿舍/床位字段设为非必填，由是否住校控制
+        self.fields["dormitory"].required = False
+        self.fields["bed_number"].required = False
+        self.fields["is_league_member"].required = False
+        self.fields["is_boarder"].required = False
 
 
 class GuardianForm(forms.ModelForm):

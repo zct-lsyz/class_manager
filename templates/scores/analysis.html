@@ -4,42 +4,44 @@
 {% block content %}
 <h4 class="mt-3 mb-4"><i class="bi bi-bar-chart-fill me-2 text-primary"></i>成绩分析</h4>
 
+<!-- ===== 顶部筛选区域（响应式优化） ===== -->
 <form method="get" class="card p-3 mb-3">
     <div class="row g-2 align-items-end">
-        <div class="col-md-3"><label class="form-label small">考试</label>
-            <select name="exam_id" class="form-select" onchange="this.form.submit()">
+        <div class="col-md-3 col-lg-2">
+            <label class="form-label small mb-1">考试</label>
+            <select name="exam_id" class="form-select form-select-sm" onchange="this.form.submit()">
                 <option value="">选择考试</option>
                 {% for e in exams %}<option value="{{ e.pk }}" {% if exam and exam.pk == e.pk %}selected{% endif %}>{{ e.name }}</option>{% endfor %}
             </select>
         </div>
-        <div class="col-md-3"><label class="form-label small">学生趋势</label>
-            <select name="student_id" class="form-select" onchange="this.form.submit()">
+        <div class="col-md-3 col-lg-2">
+            <label class="form-label small mb-1">学生趋势</label>
+            <select name="student_id" class="form-select form-select-sm" onchange="this.form.submit()">
                 <option value="">选择学生</option>
                 {% for s in student_list %}<option value="{{ s.pk }}" {% if student_id == s.pk|stringformat:'s' %}selected{% endif %}>{{ s.name }}（{{ s.student_id }}）</option>{% endfor %}
             </select>
         </div>
-        <div class="col-md-2">{% if selected_student %}<a href="{% url 'scores:student_analysis_detail' selected_student.pk %}" class="btn btn-outline-primary w-100">个人详情</a>{% else %}<button type="button" class="btn btn-outline-secondary w-100" disabled>个人详情</button>{% endif %}</div>
-        <div class="col-md-2">
-            <a href="{% url 'scores:external_import' %}{% if exam %}?exam_id={{ exam.pk }}{% endif %}" class="btn btn-outline-success w-100">
-                <i class="bi bi-collection me-1"></i>导入其他班级
-            </a>
+        <div class="col-auto">
+            {% if selected_student %}<a href="{% url 'scores:student_analysis_detail' selected_student.pk %}" class="btn btn-outline-primary btn-sm">个人详情</a>{% else %}<button type="button" class="btn btn-outline-secondary btn-sm" disabled>个人详情</button>{% endif %}
         </div>
-        <div class="col-md-2">
-            <button type="button" class="btn btn-warning w-100" data-bs-toggle="collapse" data-bs-target="#topStudentPanel">
-                <i class="bi bi-trophy me-1"></i>优生筛选
-            </button>
-        </div>
-        <div class="col-md-2">
-            <button type="button" class="btn btn-info w-100" data-bs-toggle="collapse" data-bs-target="#rankChangePanel">
-                <i class="bi bi-arrow-up-down me-1"></i>名次进退
-            </button>
-        </div>
+    </div>
+    <div class="d-flex flex-wrap gap-2 mt-2">
+        <a href="{% url 'scores:external_import' %}{% if exam %}?exam_id={{ exam.pk }}{% endif %}" class="btn btn-outline-success btn-sm">
+            <i class="bi bi-collection me-1"></i>导入其他班级
+        </a>
+        <button type="button" class="btn btn-warning btn-sm" data-bs-toggle="collapse" data-bs-target="#topStudentPanel">
+            <i class="bi bi-trophy me-1"></i>优生筛选
+        </button>
+        <button type="button" class="btn btn-info btn-sm" data-bs-toggle="collapse" data-bs-target="#rankChangePanel">
+            <i class="bi bi-arrow-up-down me-1"></i>名次进退
+        </button>
         {% if exam %}
-        <div class="col-md-2">
-            <a href="{% url 'scores:class_student_overview' %}?exam_id={{ exam.pk }}" class="btn btn-outline-info w-100">
-                <i class="bi bi-people-fill me-1"></i>班级学生情况
-            </a>
-        </div>
+        <a href="{% url 'scores:class_student_overview' %}?exam_id={{ exam.pk }}" class="btn btn-outline-info btn-sm">
+            <i class="bi bi-people-fill me-1"></i>班级学生情况
+        </a>
+        <button type="button" class="btn btn-outline-teal btn-sm" data-bs-toggle="modal" data-bs-target="#gradeLineModal">
+            <i class="bi bi-sliders me-1"></i>设置本科线/合格线
+        </button>
         {% endif %}
     </div>
 </form>
@@ -76,8 +78,8 @@
                 </select>
             </div>
             <div class="col-md-8 d-flex align-items-end gap-2">
-                <button type="submit" class="btn btn-primary"><i class="bi bi-funnel me-1"></i>应用筛选</button>
-                <a href="{% url 'scores:analysis' %}?exam_id={{ exam.pk }}" class="btn btn-outline-secondary">清除筛选</a>
+                <button type="submit" class="btn btn-primary btn-sm"><i class="bi bi-funnel me-1"></i>应用筛选</button>
+                <a href="{% url 'scores:analysis' %}?exam_id={{ exam.pk }}" class="btn btn-outline-secondary btn-sm">清除筛选</a>
             </div>
         </form>
         <div class="small text-muted mt-2">
@@ -102,7 +104,7 @@
             <input type="hidden" name="combine_mode" value="{{ criteria.combine_mode|default:'any' }}">
             <div class="col-6 col-md-3">
                 <label class="form-label small">对比历史考试</label>
-                <select name="history_exam_id" class="form-select">
+                <select name="history_exam_id" class="form-select form-select-sm">
                     <option value="">-- 选择历史考试 --</option>
                     {% for e in all_exams_for_comparison %}
                         {% if not exam or e.pk != exam.pk %}
@@ -114,15 +116,15 @@
             </div>
             <div class="col-6 col-md-2">
                 <label class="form-label small">进步阈值（名次≥）</label>
-                <input type="number" name="rank_progress_threshold" class="form-control" min="1" value="{{ rank_progress_threshold|default:'' }}" placeholder="如 20">
+                <input type="number" name="rank_progress_threshold" class="form-control form-control-sm" min="1" value="{{ rank_progress_threshold|default:'' }}" placeholder="如 20">
             </div>
             <div class="col-6 col-md-2">
                 <label class="form-label small">退步阈值（名次≥）</label>
-                <input type="number" name="rank_decline_threshold" class="form-control" min="1" value="{{ rank_decline_threshold|default:'' }}" placeholder="如 20">
+                <input type="number" name="rank_decline_threshold" class="form-control form-control-sm" min="1" value="{{ rank_decline_threshold|default:'' }}" placeholder="如 20">
             </div>
             <div class="col-6 col-md-3 d-flex align-items-end gap-2">
-                <button type="submit" class="btn btn-primary"><i class="bi bi-search me-1"></i>筛选</button>
-                <a href="{% url 'scores:analysis' %}?exam_id={{ exam.pk }}" class="btn btn-outline-secondary">清除</a>
+                <button type="submit" class="btn btn-primary btn-sm"><i class="bi bi-search me-1"></i>筛选</button>
+                <a href="{% url 'scores:analysis' %}?exam_id={{ exam.pk }}" class="btn btn-outline-secondary btn-sm">清除</a>
             </div>
         </form>
 
@@ -165,6 +167,109 @@
         {% endif %}
     </div>
 </div>
+
+<!-- ===== 班级总成绩分析表 ===== -->
+{% if class_total_table %}
+<div class="card mb-3">
+    <div class="card-header d-flex flex-wrap justify-content-between align-items-center py-2">
+        <span><i class="bi bi-table me-2 text-primary"></i>{{ exam.name }} — 班级总成绩分析</span>
+        <div class="d-flex flex-wrap gap-2 mt-1 mt-md-0">
+            <select id="tableFilter" class="form-select form-select-sm" style="width:auto;">
+                <option value="all">全部学生</option>
+                <option value="weak">弱势学生</option>
+                <option value="excellent">优秀学生</option>
+            </select>
+            <select id="tableSort" class="form-select form-select-sm" style="width:auto;">
+                <option value="rank">按排名</option>
+                <option value="total_desc">总分 ↓</option>
+                <option value="total_asc">总分 ↑</option>
+                {% for es in exam_subjects %}
+                <option value="subject_{{ es.subject.name }}_desc">{{ es.subject.name }} ↓</option>
+                <option value="subject_{{ es.subject.name }}_asc">{{ es.subject.name }} ↑</option>
+                {% endfor %}
+            </select>
+        </div>
+    </div>
+    <div class="card-body p-0 table-responsive">
+        <table class="table table-bordered table-hover mb-0" id="classTotalTable">
+            <thead class="table-light">
+                <tr>
+                    <th class="text-center" style="min-width:50px">排名</th>
+                    <th style="min-width:70px">姓名</th>
+                    <th class="text-center" style="min-width:70px">总分</th>
+                    {% for es in exam_subjects %}
+                    <th class="text-center" style="min-width:85px">
+                        {{ es.subject.name }}
+                        {% with gl=grade_lines|get_item:es.pk %}
+                        {% if gl.undergraduate_line or gl.pass_line %}
+                        <br><small class="fw-normal text-muted">
+                            {% if gl.undergraduate_line %}本科:{{ gl.undergraduate_line }}{% endif %}
+                            {% if gl.pass_line %}{% if gl.undergraduate_line %} / {% endif %}合格:{{ gl.pass_line }}{% endif %}
+                        </small>
+                        {% endif %}
+                        {% endwith %}
+                    </th>
+                    {% endfor %}
+                    <th style="min-width:90px">弱势学科</th>
+                    <th class="text-center" style="min-width:65px">操作</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in class_total_table %}
+                <tr class="class-total-row" data-rank="{{ row.rank }}" data-total="{{ row.total_score }}"
+                    data-filter="{% if row.weak_subjects %}weak{% endif %}{% if row.total_score >= class_averages_total|default:0 %} excellent{% endif %}">
+                    <td class="text-center align-middle fw-bold
+                        {% if row.rank == 1 %}rank-gold{% elif row.rank == 2 %}rank-silver{% elif row.rank == 3 %}rank-bronze{% endif %}">
+                        {% if row.rank == 1 %}🥇1
+                        {% elif row.rank == 2 %}🥈2
+                        {% elif row.rank == 3 %}🥉3
+                        {% else %}{{ row.rank }}{% endif %}
+                    </td>
+                    <td class="align-middle">
+                        <a href="{% url 'students:detail' row.student.pk %}" class="text-decoration-none">{{ row.student.name }}</a>
+                    </td>
+                    <td class="text-center align-middle fw-bold">{{ row.total_score }}</td>
+                    {% for es in exam_subjects %}
+                    <td class="text-center align-middle" data-subject="{{ es.subject.name }}" data-score="
+                        {% with subj_data=row.subjects|get_item:es.subject.name %}
+                        {{ subj_data.score|default:'' }}
+                        {% endwith %}">
+                        {% with subj_data=row.subjects|get_item:es.subject.name %}
+                        {% if subj_data %}
+                        <span{% if subj_data.is_below_avg %} class="text-danger fw-bold"{% endif %}>{{ subj_data.score|floatformat:1 }}</span>
+                        {% if subj_data.grade_rank %}
+                        <span class="text-muted small"> / {{ subj_data.grade_rank }}</span>
+                        {% endif %}
+                        {% else %}
+                        <span class="text-muted">—</span>
+                        {% endif %}
+                        {% endwith %}
+                    </td>
+                    {% endfor %}
+                    <td class="align-middle">
+                        {% if row.weak_subjects %}
+                        {% for wsubj in row.weak_subjects %}
+                        <span class="badge subject-tag-{{ wsubj|escape }}" style="background:var(--sj-bg);color:var(--sj-fg);margin:1px">{{ wsubj }}</span>
+                        {% endfor %}
+                        {% else %}
+                        <span class="text-success small">无</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-center align-middle">
+                        <a href="{% url 'scores:student_analysis_detail' row.student.pk %}" class="btn btn-sm btn-outline-primary" title="查看成绩详情">
+                            <i class="bi bi-eye me-1"></i>详情
+                        </a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% if is_filtering %}
+    <div class="card-footer py-1"><span class="badge bg-warning text-dark">优生模式</span><small class="text-muted ms-2">以上数据已按优生条件筛选</small></div>
+    {% endif %}
+</div>
+{% endif %}
 
 <!-- ===== 本班整体统计表 ===== -->
 <div class="card mb-3">
@@ -356,7 +461,7 @@
                 </select>
             </div>
             <div class="col-md-3">
-                <button type="submit" class="btn btn-warning w-100" id="aiSubmitBtn">
+                <button type="submit" class="btn btn-warning w-100 btn-sm" id="aiSubmitBtn">
                     <i class="bi bi-stars me-1"></i>生成 AI 分析
                 </button>
             </div>
@@ -381,6 +486,55 @@
     </div>
 </div>
 
+<!-- ===== 本科线/合格线设置 Modal ===== -->
+<div class="modal fade" id="gradeLineModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="bi bi-sliders me-2 text-info"></i>设置本科线/合格线 — {{ exam.name }}</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="small text-muted mb-3">
+                    <i class="bi bi-info-circle me-1"></i>设置后自动显示在班级总成绩分析表对应科目表头。留空则不显示。
+                </div>
+                <form id="gradeLineForm">
+                    {% csrf_token %}
+                    <div class="table-responsive">
+                        <table class="table table-sm table-bordered mb-0">
+                            <thead class="table-light">
+                                <tr><th>科目</th><th>满分</th><th>本科线</th><th>合格线</th></tr>
+                            </thead>
+                            <tbody>
+                                {% for es in exam_subjects %}
+                                <tr>
+                                    <td class="align-middle"><strong>{{ es.subject.name }}</strong></td>
+                                    <td class="align-middle text-center text-muted">{{ es.full_score }}</td>
+                                    <td>
+                                        <input type="number" class="form-control form-control-sm" id="ug_{{ es.pk }}" placeholder="如 110" min="0" max="{{ es.full_score }}"
+                                            value="{% with gl=grade_lines|get_item:es.pk %}{{ gl.undergraduate_line|default:'' }}{% endwith %}">
+                                    </td>
+                                    <td>
+                                        <input type="number" class="form-control form-control-sm" id="pass_{{ es.pk }}" placeholder="如 90" min="0" max="{{ es.full_score }}"
+                                            value="{% with gl=grade_lines|get_item:es.pk %}{{ gl.pass_line|default:'' }}{% endwith %}">
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-primary btn-sm" id="saveGradeLines">
+                    <i class="bi bi-check-lg me-1"></i>保存
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script>
 // AI 分析类型联动
 const aiType = document.getElementById('aiType');
@@ -400,6 +554,97 @@ if (aiType) {
         aiSubmitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>分析中...';
     });
 }
+
+{% if exam %}
+// 本科线/合格线保存
+document.getElementById('saveGradeLines').addEventListener('click', function() {
+    const btn = this;
+    const data = {};
+    {% for es in exam_subjects %}
+    const ug{{ es.pk }} = document.getElementById('ug_{{ es.pk }}');
+    const pass{{ es.pk }} = document.getElementById('pass_{{ es.pk }}');
+    data['{{ es.pk }}'] = {
+        undergraduate_line: ug{{ es.pk }} ? ug{{ es.pk }}.value : null,
+        pass_line: pass{{ es.pk }} ? pass{{ es.pk }}.value : null
+    };
+    {% endfor %}
+
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>保存中...';
+    fetch('{% url "scores:grade_line_settings" exam.pk %}', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+        },
+        body: JSON.stringify(data)
+    }).then(function(r) { return r.json(); })
+    .then(function(result) {
+        if (result.success) {
+            location.reload();
+        } else {
+            alert('保存失败：' + (result.error || '未知错误'));
+            btn.disabled = false;
+            btn.innerHTML = '<i class="bi bi-check-lg me-1"></i>保存';
+        }
+    }).catch(function(err) {
+        alert('保存失败：' + err);
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-check-lg me-1"></i>保存';
+    });
+});
+{% endif %}
+
+// 班级总成绩表筛选和排序
+(function() {
+    const tableFilter = document.getElementById('tableFilter');
+    const tableSort = document.getElementById('tableSort');
+    const table = document.getElementById('classTotalTable');
+    if (!table || !tableFilter || !tableSort) return;
+
+    function applyFilterAndSort() {
+        const filterVal = tableFilter.value;
+        const sortVal = tableSort.value;
+        const tbody = table.querySelector('tbody');
+        const rows = Array.from(tbody.querySelectorAll('.class-total-row'));
+
+        // 筛选
+        rows.forEach(function(r) {
+            if (filterVal === 'all') {
+                r.style.display = '';
+            } else if (filterVal === 'weak') {
+                r.style.display = r.dataset.filter.includes('weak') ? '' : 'none';
+            } else if (filterVal === 'excellent') {
+                r.style.display = r.dataset.filter.includes('excellent') ? '' : 'none';
+            }
+        });
+
+        // 排序
+        const visible = rows.filter(function(r) { return r.style.display !== 'none'; });
+        if (sortVal === 'rank') {
+            visible.sort(function(a, b) { return parseInt(a.dataset.rank) - parseInt(b.dataset.rank); });
+        } else if (sortVal === 'total_desc') {
+            visible.sort(function(a, b) { return parseFloat(b.dataset.total) - parseFloat(a.dataset.total); });
+        } else if (sortVal === 'total_asc') {
+            visible.sort(function(a, b) { return parseFloat(a.dataset.total) - parseFloat(b.dataset.total); });
+        } else if (sortVal.startsWith('subject_')) {
+            var parts = sortVal.split('_');
+            var subj = parts[1];
+            var dir = parts[2];
+            visible.sort(function(a, b) {
+                var aCell = a.querySelector('td[data-subject="' + subj + '"]');
+                var bCell = b.querySelector('td[data-subject="' + subj + '"]');
+                var aVal = aCell ? parseFloat(aCell.dataset.score) || 0 : 0;
+                var bVal = bCell ? parseFloat(bCell.dataset.score) || 0 : 0;
+                return dir === 'desc' ? bVal - aVal : aVal - bVal;
+            });
+        }
+        visible.forEach(function(r) { tbody.appendChild(r); });
+    }
+
+    tableFilter.addEventListener('change', applyFilterAndSort);
+    tableSort.addEventListener('change', applyFilterAndSort);
+})();
 </script>
 
 <script>
@@ -504,4 +749,36 @@ new Chart(document.getElementById('trendChart'), {
 });
 {% endif %}
 </script>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+/* 排名特殊样式 */
+.rank-gold { background: linear-gradient(135deg, #fff9c4, #fff8e1); color: #f57f17; }
+.rank-silver { background: linear-gradient(135deg, #eceff1, #f5f5f5); color: #546e7a; }
+.rank-bronze { background: linear-gradient(135deg, #ffe0b2, #fff3e0); color: #bf360c; }
+
+/* 学科标签颜色 */
+.subject-tag-语文  { --sj-bg: #fce4ec; --sj-fg: #c62828; }
+.subject-tag-数学 { --sj-bg: #e3f2fd; --sj-fg: #1565c0; }
+.subject-tag-英语 { --sj-bg: #e8f5e9; --sj-fg: #2e7d32; }
+.subject-tag-物理 { --sj-bg: #f3e5f5; --sj-fg: #7b1fa2; }
+.subject-tag-化学 { --sj-bg: #fff3e0; --sj-fg: #e65100; }
+.subject-tag-生物 { --sj-bg: #e0f7fa; --sj-fg: #00838f; }
+.subject-tag-历史 { --sj-bg: #fffde7; --sj-fg: #f9a825; }
+.subject-tag-政治 { --sj-bg: #ffebee; --sj-fg: #c62828; }
+.subject-tag-地理 { --sj-bg: #efebe9; --sj-fg: #5d4037; }
+.subject-tag-日语 { --sj-bg: #eceff1; --sj-fg: #546e7a; }
+.subject-tag-信息 { --sj-bg: #e8eaf6; --sj-fg: #283593; }
+
+/* 青色按钮 */
+.btn-outline-teal { color: #00897b; border-color: #00897b; }
+.btn-outline-teal:hover { color: #fff; background-color: #00897b; border-color: #00897b; }
+
+/* 表格响应式优化 */
+@media (max-width: 768px) {
+    .stats-wide-table { font-size: 0.8rem; }
+    .stats-wide-table th, .stats-wide-table td { padding: 0.3rem 0.4rem; }
+}
+</style>
 {% endblock %}

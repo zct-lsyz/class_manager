@@ -1,5 +1,8 @@
-﻿from django.contrib import messages
+﻿import json
+
+from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.http import JsonResponse
 from django.shortcuts import render, redirect, get_object_or_404
 from django.core.paginator import Paginator
 from django.db.models import Avg, Max, Min, Count, Q, Sum
@@ -8,7 +11,7 @@ from django.db import transaction
 
 from apps.scores.models import (
     Exam, ExamSubject, Score, SupportPlan, SupportFollowUp,
-    ExternalClass, ExternalScore,
+    ExternalClass, ExternalScore, GradeLine,
 )
 from apps.scores.forms import ExamForm, ExamSubjectForm, ScoreForm, SupportPlanForm
 from apps.scores.analysis_services import (
@@ -513,6 +516,90 @@ def analysis(request):
             for ec in ext_classes
         )
 
+        # 4. 班级总成绩分析表
+        students = list(Student.objects.filter(
+            school_class=current_class, is_deleted=False,
+        ).order_by("sort_order", "student_id"))
+
+        # 各科班级平均分
+        class_averages = {}
+        for es in exam_subjects:
+            scores_qs = Score.objects.filter(
+                exam_subject=es, is_deleted=False, status="normal", score__isnull=False,
+            )
+            if is_filtering:
+                scores_qs = apply_criteria(list(scores_qs), criteria)
+            values = [float(s.score) for s in scores_qs if s.score is not None]
+            if values:
+                class_averages[es.subject.name] = round(sum(values) / len(values), 1)
+            else:
+                class_averages[es.subject.name] = 0
+
+        # 本科线/合格线
+        grade_lines = {}
+        for es in exam_subjects:
+            gl = GradeLine.objects.filter(exam_subject=es).first()
+            grade_lines[es.pk] = {
+                "undergraduate_line": gl.undergraduate_line if gl else None,
+                "pass_line": gl.pass_line if gl else None,
+            }
+
+        # 逐生构建
+        class_total_table = []
+        for student in students:
+            student_scores = {}
+            total = 0.0
+            has_any_score = False
+            weak_subjects = []
+            for es in exam_subjects:
+                score_obj = Score.objects.filter(
+                    exam_subject=es, student=student,
+                    is_deleted=False,
+                ).first()
+                if score_obj and score_obj.status == "normal" and score_obj.score is not None:
+                    has_any_score = True
+                    subject_name = es.subject.name
+                    score_val = float(score_obj.score)
+                    total += score_val
+                    avg = class_averages.get(subject_name, 0)
+                    is_below_avg = score_val < avg if avg > 0 else False
+                    if is_below_avg:
+                        weak_subjects.append(subject_name)
+                    # 级部排名：优先用 grade_rank，否则用班级 rank
+                    display_rank = score_obj.grade_rank if score_obj.grade_rank is not None else score_obj.rank
+                    student_scores[subject_name] = {
+                        "score": score_val,
+                        "grade_rank": display_rank,
+                        "is_below_avg": is_below_avg,
+                    }
+                else:
+                    # 缺考或无成绩
+                    student_scores[es.subject.name] = None
+
+            if not has_any_score:
+                continue
+
+            class_total_table.append({
+                "student": student,
+                "total_score": round(total, 1),
+                "subjects": student_scores,
+                "weak_subjects": weak_subjects,
+            })
+
+        # 按总分降序排名（并列跳名次）
+        class_total_table.sort(key=lambda x: -x["total_score"])
+        prev_total = None
+        for i, row in enumerate(class_total_table):
+            if row["total_score"] != prev_total:
+                row["rank"] = i + 1
+                prev_total = row["total_score"]
+            else:
+                row["rank"] = class_total_table[i - 1]["rank"]
+
+        # 班级总分平均（用于"优秀学生"筛选）
+        all_totals = [r["total_score"] for r in class_total_table]
+        class_averages_total = round(sum(all_totals) / len(all_totals), 1) if all_totals else 0
+
     # 名次进退筛选（对比历史考试，按总分排名变化）
     history_exam_id = request.GET.get("history_exam_id", "").strip()
     history_exam = get_object_or_404(
@@ -598,7 +685,75 @@ def analysis(request):
         "rank_progress_threshold": rank_progress_threshold,
         "rank_decline_threshold": rank_decline_threshold,
         "all_exams_for_comparison": exams,
+        # 班级总成绩分析表
+        "exam_subjects": exam_subjects if exam else [],
+        "class_total_table": class_total_table if exam else [],
+        "class_averages": class_averages if exam else {},
+        "class_averages_total": class_averages_total if exam else 0,
+        "grade_lines": grade_lines if exam else {},
     })
+
+
+@login_required
+def grade_line_settings(request, exam_id):
+    """本科线/合格线设置 —— GET 返回 JSON，POST 批量保存"""
+    current_class = get_current_class(request.user)
+    exam = get_object_or_404(
+        Exam, pk=exam_id, school_class=current_class, is_deleted=False,
+    )
+    exam_subjects = ExamSubject.objects.filter(exam=exam).select_related("subject").order_by("sort_order")
+
+    if request.method == "POST":
+        try:
+            data = json.loads(request.body)
+        except json.JSONDecodeError:
+            return JsonResponse({"success": False, "error": "无效的 JSON 数据"}, status=400)
+
+        saved_count = 0
+        for es in exam_subjects:
+            key = str(es.pk)
+            if key in data:
+                values = data[key]
+                undergraduate_line = values.get("undergraduate_line")
+                pass_line = values.get("pass_line")
+                # 验证
+                if undergraduate_line is not None and undergraduate_line != "":
+                    try:
+                        undergraduate_line = int(undergraduate_line)
+                    except (ValueError, TypeError):
+                        undergraduate_line = None
+                else:
+                    undergraduate_line = None
+                if pass_line is not None and pass_line != "":
+                    try:
+                        pass_line = int(pass_line)
+                    except (ValueError, TypeError):
+                        pass_line = None
+                else:
+                    pass_line = None
+
+                GradeLine.objects.update_or_create(
+                    exam_subject=es,
+                    defaults={
+                        "undergraduate_line": undergraduate_line,
+                        "pass_line": pass_line,
+                    },
+                )
+                saved_count += 1
+
+        messages.success(request, f"本科线/合格线已保存（{saved_count} 个科目）。")
+        return JsonResponse({"success": True, "saved": saved_count})
+
+    # GET: 返回当前设置的 JSON
+    grade_lines = {}
+    for es in exam_subjects:
+        gl = GradeLine.objects.filter(exam_subject=es).first()
+        grade_lines[str(es.pk)] = {
+            "subject_name": es.subject.name,
+            "undergraduate_line": gl.undergraduate_line if gl else None,
+            "pass_line": gl.pass_line if gl else None,
+        }
+    return JsonResponse(grade_lines)
 
 
 @login_required

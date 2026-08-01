@@ -54,6 +54,9 @@ class Student(BaseModel):
     class_position = models.CharField(
         "班级职务", max_length=100, blank=True, default=""
     )
+    home_address = models.CharField("家庭住址", max_length=200, blank=True, default="")
+    is_league_member = models.BooleanField("是否团员", default=False)
+    is_boarder = models.BooleanField("是否住校", default=True)
     dormitory = models.CharField("宿舍", max_length=100, blank=True, default="")
     bed_number = models.CharField("床位", max_length=50, blank=True, default="")
     primary_contact = models.CharField(

@@ -1,0 +1,154 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}倒计时管理 - 班级教学管理平台{% endblock %}
+
+{% block extra_head %}
+<style>
+  .cd-table { width: 100%; }
+  .cd-table th { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.5px; }
+  .cd-table td { vertical-align: middle; font-size: 0.9rem; }
+  .cd-days-badge {
+    display: inline-block;
+    min-width: 48px;
+    padding: 0.35em 0.65em;
+    border-radius: 20px;
+    font-weight: 700;
+    font-size: 0.85rem;
+    text-align: center;
+  }
+  .cd-days-far   { background: #e8f0fe; color: #1a73e8; }
+  .cd-days-near  { background: #fff3e0; color: #e65100; }
+  .cd-days-urgent { background: #fce4ec; color: #c62828; animation: pulse 1.5s ease-in-out infinite; }
+  .cd-days-today { background: #e6f7e6; color: #28a745; }
+  .cd-days-past  { background: #e9ecef; color: #6c757d; }
+  @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.7; } }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center flex-wrap mt-3 mb-3">
+  <h5 class="mb-0"><i class="bi bi-hourglass-split me-2 text-warning"></i>倒计时管理</h5>
+  <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#addCountdownModal">
+    <i class="bi bi-plus-lg me-1"></i>新增倒计时
+  </button>
+</div>
+
+<div class="card">
+  {% if countdowns %}
+  <div class="table-responsive">
+    <table class="table cd-table mb-0">
+      <thead>
+        <tr>
+          <th style="width:40%">名称</th>
+          <th>目标日期</th>
+          <th class="text-center">剩余天数</th>
+          <th style="width:120px" class="text-center">操作</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for cd in countdowns %}
+        <tr>
+          <td>
+            <strong>{{ cd.name }}</strong>
+          </td>
+          <td>{{ cd.target_date|date:"Y年m月d日" }}</td>
+          <td class="text-center">
+            {% if cd.days_remaining > 30 %}
+            <span class="cd-days-badge cd-days-far">{{ cd.days_remaining }} 天</span>
+            {% elif cd.days_remaining > 7 %}
+            <span class="cd-days-badge cd-days-far">{{ cd.days_remaining }} 天</span>
+            {% elif cd.days_remaining > 3 %}
+            <span class="cd-days-badge cd-days-near">{{ cd.days_remaining }} 天</span>
+            {% elif cd.days_remaining > 0 %}
+            <span class="cd-days-badge cd-days-urgent">{{ cd.days_remaining }} 天</span>
+            {% elif cd.days_remaining == 0 %}
+            <span class="cd-days-badge cd-days-today">今天</span>
+            {% else %}
+            <span class="cd-days-badge cd-days-past">已过期</span>
+            {% endif %}
+          </td>
+          <td class="text-center">
+            <button class="btn btn-sm btn-outline-primary me-1" title="编辑"
+                    data-bs-toggle="modal" data-bs-target="#editModal{{ cd.pk }}">
+              <i class="bi bi-pencil"></i>
+            </button>
+            <form method="post" action="{% url 'dashboard:countdown_delete' cd.pk %}" class="d-inline"
+                  onsubmit="return confirm('确定删除「{{ cd.name }}」？')">
+              {% csrf_token %}
+              <button type="submit" class="btn btn-sm btn-outline-danger" title="删除">
+                <i class="bi bi-trash"></i>
+              </button>
+            </form>
+          </td>
+        </tr>
+
+        <!-- 编辑弹窗 -->
+        <div class="modal fade" id="editModal{{ cd.pk }}" tabindex="-1">
+          <div class="modal-dialog modal-sm">
+            <div class="modal-content">
+              <form method="post" action="{% url 'dashboard:countdown_edit' cd.pk %}">
+                {% csrf_token %}
+                <div class="modal-header">
+                  <h6 class="modal-title">编辑倒计时</h6>
+                  <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                  <div class="mb-3">
+                    <label class="form-label small">倒计时名称</label>
+                    <input type="text" name="name" class="form-control" value="{{ cd.name }}" required maxlength="100">
+                  </div>
+                  <div class="mb-3">
+                    <label class="form-label small">目标日期</label>
+                    <input type="date" name="target_date" class="form-control" value="{{ cd.target_date|date:'Y-m-d' }}" required>
+                  </div>
+                </div>
+                <div class="modal-footer">
+                  <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">取消</button>
+                  <button type="submit" class="btn btn-sm btn-primary">保存</button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="text-center py-5 text-muted">
+    <i class="bi bi-hourglass" style="font-size:3rem;display:block;margin-bottom:1rem;"></i>
+    <p>暂无倒计时，点击"新增倒计时"添加。</p>
+  </div>
+  {% endif %}
+</div>
+
+<!-- 新增倒计时弹窗 -->
+<div class="modal fade" id="addCountdownModal" tabindex="-1">
+  <div class="modal-dialog modal-sm">
+    <div class="modal-content">
+      <form method="post" action="{% url 'dashboard:countdown_add' %}">
+        {% csrf_token %}
+        <div class="modal-header">
+          <h6 class="modal-title"><i class="bi bi-plus-circle me-2 text-primary"></i>新增倒计时</h6>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <div class="mb-3">
+            <label class="form-label small">倒计时名称 <span class="text-danger">*</span></label>
+            <input type="text" name="name" class="form-control" placeholder="如：期中考试、学考" required maxlength="100">
+          </div>
+          <div class="mb-3">
+            <label class="form-label small">目标日期 <span class="text-danger">*</span></label>
+            <input type="date" name="target_date" class="form-control" required>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">取消</button>
+          <button type="submit" class="btn btn-sm btn-primary">保存</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

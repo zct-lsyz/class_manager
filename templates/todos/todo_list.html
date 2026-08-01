@@ -1,0 +1,306 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}待办事项 - 班级教学管理平台{% endblock %}
+
+{% block extra_head %}
+<style>
+  .todo-color-bar {
+    width: 4px;
+    border-radius: 2px;
+    align-self: stretch;
+    margin-right: 0.75rem;
+    flex-shrink: 0;
+  }
+  .todo-row {
+    display: flex;
+    align-items: center;
+    padding: 0.65rem 1rem;
+    border-bottom: 1px solid #f0f0f0;
+    transition: background 0.15s;
+  }
+  .todo-row:hover { background: #fafbfc; }
+  .todo-row.completed {
+    opacity: 0.65;
+  }
+  .todo-row.completed .todo-title {
+    text-decoration: line-through;
+  }
+  .todo-check {
+    flex-shrink: 0;
+    margin-right: 0.75rem;
+  }
+  .todo-check input { width: 1.1rem; height: 1.1rem; cursor: pointer; accent-color: #1a73e8; }
+  .todo-body { flex: 1; min-width: 0; }
+  .todo-title { font-size: 0.9rem; font-weight: 500; color: #212529; }
+  .todo-meta { font-size: 0.75rem; color: #adb5bd; margin-top: 0.15rem; display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
+  .todo-meta i { font-size: 0.7rem; }
+  .todo-actions { flex-shrink: 0; margin-left: 0.5rem; display: flex; gap: 0.25rem; }
+  .priority-badge {
+    display: inline-block;
+    padding: 0.15em 0.5em;
+    border-radius: 10px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    line-height: 1.4;
+  }
+  .priority-high { background: #fce4ec; color: #c62828; }
+  .priority-medium { background: #fff3e0; color: #e65100; }
+  .priority-low { background: #e9ecef; color: #495057; }
+  .overdue-badge { background: #dc3545; color: #fff; padding: 0.1em 0.4em; border-radius: 3px; font-size: 0.65rem; font-weight: 600; }
+  .student-link { color: #1a73e8; text-decoration: none; font-weight: 500; }
+  .student-link:hover { text-decoration: underline; }
+  .section-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.75rem 1rem;
+    background: #f8f9fa;
+    border-bottom: 2px solid #e9ecef;
+    cursor: pointer;
+    user-select: none;
+  }
+  .section-header h6 { margin: 0; }
+  .empty-section {
+    text-align: center;
+    padding: 2rem 1rem;
+    color: #adb5bd;
+  }
+  .empty-section i { font-size: 2rem; display: block; margin-bottom: 0.5rem; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center flex-wrap mt-3 mb-3">
+  <h5 class="mb-0"><i class="bi bi-check2-square me-2 text-primary"></i>待办事项</h5>
+  <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#addTodoModal">
+    <i class="bi bi-plus-lg me-1"></i>新增任务
+  </button>
+</div>
+
+<!-- 筛选栏 -->
+<div class="filter-bar mb-3">
+  <form method="get" class="row g-2 align-items-center">
+    <div class="col-auto">
+      <input type="text" name="search" class="form-control form-control-sm" placeholder="搜索标题…" value="{{ filters.search }}">
+    </div>
+    <div class="col-auto">
+      <select name="priority" class="form-select form-select-sm" style="width:100px">
+        <option value="">全部优先级</option>
+        {% for val, label in priority_choices %}
+        <option value="{{ val }}" {% if filters.priority == val|stringformat:"s" %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-auto">
+      <select name="student" class="form-select form-select-sm" style="width:130px">
+        <option value="">全部学生</option>
+        {% for s in students %}
+        <option value="{{ s.pk }}" {% if filters.student == s.pk|stringformat:"s" %}selected{% endif %}>{{ s.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-auto">
+      <button type="submit" class="btn btn-sm btn-outline-primary"><i class="bi bi-funnel me-1"></i>筛选</button>
+      <a href="{% url 'todos:list' %}" class="btn btn-sm btn-outline-secondary"><i class="bi bi-x-circle"></i></a>
+    </div>
+  </form>
+</div>
+
+<div class="card">
+  <!-- 待办列表 -->
+  <div class="section-header" data-bs-toggle="collapse" data-bs-target="#activeSection">
+    <h6><i class="bi bi-list-ul me-2 text-primary"></i>待办列表 <span class="badge bg-primary rounded-pill ms-2">{{ active_todos|length }}</span></h6>
+    <i class="bi bi-chevron-down"></i>
+  </div>
+  <div class="collapse show" id="activeSection">
+    {% if active_todos %}
+    {% for todo in active_todos %}
+    <div class="todo-row">
+      <!-- 左侧颜色条 -->
+      <div class="todo-color-bar" style="background:{{ todo.priority_color }}"></div>
+      <!-- 复选框 -->
+      <form method="post" action="{% url 'todos:toggle' todo.pk %}" class="todo-check">
+        {% csrf_token %}
+        <input type="checkbox" onchange="this.form.submit()" title="标记完成">
+      </form>
+      <!-- 内容 -->
+      <div class="todo-body">
+        <div class="todo-title">{{ todo.title }}</div>
+        <div class="todo-meta">
+          <!-- 优先级 -->
+          <span class="priority-badge priority-{% if todo.priority == 1 %}high{% elif todo.priority == 2 %}medium{% else %}low{% endif %}">
+            {{ todo.priority_label }}
+          </span>
+          <!-- 截止时间 -->
+          {% if todo.deadline %}
+          <span>
+            <i class="bi bi-clock me-1"></i>{{ todo.deadline|date:"Y-m-d H:i" }}
+            {% if todo.is_overdue %}<span class="overdue-badge ms-1">逾期</span>{% endif %}
+          </span>
+          {% endif %}
+          <!-- 关联学生 -->
+          {% if todo.student %}
+          <span>
+            <i class="bi bi-person me-1"></i>
+            <a href="{% url 'students:detail' todo.student.pk %}" class="student-link">{{ todo.student.name }}</a>
+          </span>
+          {% endif %}
+        </div>
+      </div>
+      <!-- 操作按钮 -->
+      <div class="todo-actions">
+        <button class="btn btn-sm text-primary p-0" title="编辑" data-bs-toggle="modal" data-bs-target="#editTodoModal{{ todo.pk }}">
+          <i class="bi bi-pencil"></i>
+        </button>
+        <form method="post" action="{% url 'todos:delete' todo.pk %}" class="d-inline" onsubmit="return confirm('确定删除「{{ todo.title }}」？')">
+          {% csrf_token %}
+          <button type="submit" class="btn btn-sm text-danger p-0" title="删除"><i class="bi bi-trash"></i></button>
+        </form>
+      </div>
+    </div>
+
+    <!-- 编辑弹窗 -->
+    <div class="modal fade" id="editTodoModal{{ todo.pk }}" tabindex="-1">
+      <div class="modal-dialog">
+        <div class="modal-content">
+          <form method="post" action="{% url 'todos:edit' todo.pk %}">
+            {% csrf_token %}
+            <div class="modal-header">
+              <h6 class="modal-title">编辑待办</h6>
+              <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+              <div class="mb-3">
+                <label class="form-label small">任务标题</label>
+                <input type="text" name="title" class="form-control" value="{{ todo.title }}" required maxlength="200">
+              </div>
+              <div class="row g-2 mb-3">
+                <div class="col-6">
+                  <label class="form-label small">优先级</label>
+                  <select name="priority" class="form-select">
+                    <option value="1" {% if todo.priority == 1 %}selected{% endif %}>高</option>
+                    <option value="2" {% if todo.priority == 2 %}selected{% endif %}>中</option>
+                    <option value="3" {% if todo.priority == 3 %}selected{% endif %}>低</option>
+                  </select>
+                </div>
+                <div class="col-6">
+                  <label class="form-label small">截止时间</label>
+                  <input type="datetime-local" name="deadline" class="form-control" value="{{ todo.deadline|date:'Y-m-d' }}T{{ todo.deadline|date:'H:i' }}">
+                </div>
+              </div>
+              <div class="mb-3">
+                <label class="form-label small">关联学生</label>
+                <select name="student" class="form-select">
+                  <option value="">不关联</option>
+                  {% for s in students %}
+                  <option value="{{ s.pk }}" {% if todo.student_id == s.pk %}selected{% endif %}>{{ s.name }}</option>
+                  {% endfor %}
+                </select>
+              </div>
+            </div>
+            <div class="modal-footer">
+              <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">取消</button>
+              <button type="submit" class="btn btn-sm btn-primary">保存</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+    {% else %}
+    <div class="empty-section">
+      <i class="bi bi-check2-all"></i>
+      <p>暂无待办事项</p>
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- 已完成列表 -->
+  <div class="section-header" data-bs-toggle="collapse" data-bs-target="#completedSection">
+    <h6><i class="bi bi-check2-all me-2 text-success"></i>已完成 <span class="badge bg-success rounded-pill ms-2">{{ completed_todos|length }}</span></h6>
+    <i class="bi bi-chevron-down"></i>
+  </div>
+  <div class="collapse" id="completedSection">
+    {% if completed_todos %}
+    {% for todo in completed_todos %}
+    <div class="todo-row completed">
+      <div class="todo-color-bar" style="background:#28a745"></div>
+      <form method="post" action="{% url 'todos:toggle' todo.pk %}" class="todo-check">
+        {% csrf_token %}
+        <input type="checkbox" checked onchange="this.form.submit()" title="恢复待办">
+      </form>
+      <div class="todo-body">
+        <div class="todo-title">{{ todo.title }}</div>
+        <div class="todo-meta">
+          {% if todo.student %}
+          <span><i class="bi bi-person me-1"></i>{{ todo.student.name }}</span>
+          {% endif %}
+          <span><i class="bi bi-check-circle me-1"></i>{{ todo.completed_at|date:"Y-m-d H:i" }}</span>
+        </div>
+      </div>
+      <div class="todo-actions">
+        <form method="post" action="{% url 'todos:delete' todo.pk %}" class="d-inline" onsubmit="return confirm('确定删除？')">
+          {% csrf_token %}
+          <button type="submit" class="btn btn-sm text-danger p-0" title="删除"><i class="bi bi-trash"></i></button>
+        </form>
+      </div>
+    </div>
+    {% endfor %}
+    {% else %}
+    <div class="empty-section">
+      <i class="bi bi-inbox"></i>
+      <p>暂无已完成事项</p>
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+<!-- 新增待办弹窗 -->
+<div class="modal fade" id="addTodoModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <form method="post" action="{% url 'todos:add' %}">
+        {% csrf_token %}
+        <div class="modal-header">
+          <h6 class="modal-title"><i class="bi bi-plus-circle me-2 text-primary"></i>新增任务</h6>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <div class="mb-3">
+            <label class="form-label small">任务标题 <span class="text-danger">*</span></label>
+            <input type="text" name="title" class="form-control" placeholder="请输入任务标题" required maxlength="200">
+          </div>
+          <div class="row g-2 mb-3">
+            <div class="col-6">
+              <label class="form-label small">优先级</label>
+              <select name="priority" class="form-select">
+                <option value="1">高</option>
+                <option value="2" selected>中</option>
+                <option value="3">低</option>
+              </select>
+            </div>
+            <div class="col-6">
+              <label class="form-label small">截止时间</label>
+              <input type="datetime-local" name="deadline" class="form-control">
+            </div>
+          </div>
+          <div class="mb-3">
+            <label class="form-label small">关联学生</label>
+            <select name="student" class="form-select">
+              <option value="">不关联</option>
+              {% for s in students %}
+              <option value="{{ s.pk }}">{{ s.name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">取消</button>
+          <button type="submit" class="btn btn-sm btn-primary">保存</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

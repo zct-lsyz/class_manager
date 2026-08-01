@@ -265,6 +265,28 @@ def validate_student_info(data_rows):
                 errors.append({"row": idx, "field": "身高(cm)", "value": height, "error": "身高必须为50至250之间的整数"})
                 continue
 
+        # 是否团员
+        league_raw = str(row.get("是否团员", "") or "").strip()
+        is_league_member = False
+        if league_raw in ("是", "1", "true", "True", "yes", "Yes"):
+            is_league_member = True
+        elif league_raw and league_raw not in ("否", "0", "false", "False", "no", "No"):
+            errors.append({"row": idx, "field": "是否团员", "value": league_raw, "error": "只能填写「是」或「否」"})
+            continue
+
+        # 是否住校
+        boarder_raw = str(row.get("是否住校", "") or "").strip()
+        is_boarder = True  # 默认住校
+        if boarder_raw in ("否", "0", "false", "False", "no", "No"):
+            is_boarder = False
+        elif boarder_raw and boarder_raw not in ("是", "1", "true", "True", "yes", "Yes"):
+            errors.append({"row": idx, "field": "是否住校", "value": boarder_raw, "error": "只能填写「是」或「否」"})
+            continue
+
+        # 宿舍/床位：不住校时允许为空
+        dormitory = str(row.get("宿舍", "") or "").strip()
+        bed_number = str(row.get("床位", "") or "").strip()
+
         valid_rows.append({
             "row": idx,
             "student_id": student_id or None,
@@ -275,8 +297,11 @@ def validate_student_info(data_rows):
             "vision": str(row.get("视力", "") or "").strip(),
             "seat_requirement": str(row.get("座位需求", "") or "").strip(),
             "class_position": str(row.get("职务", "") or "").strip(),
-            "dormitory": str(row.get("宿舍", "") or "").strip(),
-            "bed_number": str(row.get("床位", "") or "").strip(),
+            "home_address": str(row.get("家庭住址", "") or "").strip(),
+            "is_league_member": is_league_member,
+            "is_boarder": is_boarder,
+            "dormitory": dormitory,
+            "bed_number": bed_number,
             "primary_contact": str(row.get("联系人关系", "") or "").strip(),
             "primary_phone": phone,
             "secondary_contact": str(row.get("备用联系人关系", "") or "").strip(),
@@ -307,12 +332,15 @@ def import_student_info(valid_rows, school_class):
             vision=item["vision"],
             seat_requirement=item["seat_requirement"],
             class_position=item["class_position"],
+            home_address=item.get("home_address", ""),
+            is_league_member=item.get("is_league_member", False),
+            is_boarder=item.get("is_boarder", True),
             dormitory=item["dormitory"],
             bed_number=item["bed_number"],
             primary_contact=item["primary_contact"],
             primary_phone=item["primary_phone"],
-            secondary_contact=item["secondary_contact"],
-            secondary_phone=item["secondary_phone"],
+            secondary_contact=item.get("secondary_contact", ""),
+            secondary_phone=item.get("secondary_phone", ""),
             remarks=item["remarks"],
         )
         created += 1

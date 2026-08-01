@@ -31,7 +31,6 @@
                             {{ form.gender }}
                         </div>
                     </div>
-                    <div class="form-text mb-3">班级职务由“班委名单”汇总；宿舍床位和联系人可在这里直接录入，也可在对应管理页面继续完善。</div>
                     <div class="row">
                         <div class="col-md-4 mb-3">
                             <label class="form-label small">{{ form.school_class.label }}</label>
@@ -47,6 +46,37 @@
                             {% if form.height.errors %}<div class="text-danger small">{{ form.height.errors.0 }}</div>{% endif %}
                         </div>
                     </div>
+                    <!-- 家庭住址 -->
+                    <div class="mb-3">
+                        <label class="form-label small">{{ form.home_address.label }}</label>
+                        {{ form.home_address }}
+                    </div>
+                    <!-- 是否团员 / 是否住校 -->
+                    <div class="row mb-3">
+                        <div class="col-md-4">
+                            <div class="form-check">
+                                {{ form.is_league_member }}
+                                <label class="form-check-label small" for="{{ form.is_league_member.id_for_label }}">{{ form.is_league_member.label }}</label>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="form-check">
+                                {{ form.is_boarder }}
+                                <label class="form-check-label small" for="{{ form.is_boarder.id_for_label }}">{{ form.is_boarder.label }}</label>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- 宿舍 / 床位 — 只有住校时显示 -->
+                    <div class="row" id="dormitoryFields">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label small">{{ form.dormitory.label }}</label>
+                            {{ form.dormitory }}
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label small">{{ form.bed_number.label }}</label>
+                            {{ form.bed_number }}
+                        </div>
+                    </div>
                     <div class="row">
                         <div class="col-md-6 mb-3">
                             <label class="form-label small">{{ form.vision.label }}</label>
@@ -58,19 +88,12 @@
                         </div>
                     </div>
                     <div class="row">
-                        <div class="col-md-4 mb-3">
+                        <div class="col-md-6 mb-3">
                             <label class="form-label small">{{ form.class_position.label }}</label>
                             {{ form.class_position }}
                         </div>
-                        <div class="col-md-4 mb-3">
-                            <label class="form-label small">{{ form.dormitory.label }}</label>
-                            {{ form.dormitory }}
-                        </div>
-                        <div class="col-md-4 mb-3">
-                            <label class="form-label small">{{ form.bed_number.label }}</label>
-                            {{ form.bed_number }}
-                        </div>
                     </div>
+                    <div class="form-text mb-3">班级职务由"班委名单"自动汇总；联系人信息也可在家长联系方式页面继续完善。</div>
                     <div class="row">
                         <div class="col-md-6 mb-3">
                             <label class="form-label small">{{ form.primary_contact.label }}</label>
@@ -111,4 +134,24 @@
         </div>
     </div>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function() {
+    var boarderCheck = document.getElementById('{{ form.is_boarder.id_for_label }}');
+    var dormFields = document.getElementById('dormitoryFields');
+
+    function toggleDormitory() {
+        if (dormFields) {
+            dormFields.style.display = boarderCheck && boarderCheck.checked ? '' : 'none';
+        }
+    }
+
+    if (boarderCheck && dormFields) {
+        boarderCheck.addEventListener('change', toggleDormitory);
+        toggleDormitory();  // 初始状态
+    }
+})();
+</script>
 {% endblock %}

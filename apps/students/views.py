@@ -3,11 +3,12 @@ from django.contrib.auth.decorators import login_required
 from django.shortcuts import render, redirect, get_object_or_404
 from django.core.paginator import Paginator
 from django.db.models import Q, Sum
+from django.utils import timezone
 
 from apps.students.models import Student, Guardian
 from apps.students.forms import StudentForm, GuardianForm
 from apps.classes.utils import get_current_class
-from apps.classes.models import SchoolClass
+from apps.classes.models import SchoolClass, Semester
 from apps.audit.models import OperationLog
 
 
@@ -155,6 +156,34 @@ def student_detail(request, pk):
     """学生详情/综合档案"""
     student = get_object_or_404(Student, pk=pk, is_deleted=False)
     guardian = Guardian.objects.filter(student=student, is_deleted=False).first()
+
+    # === 处理谈话记录 POST ===
+    if request.method == "POST" and request.POST.get("action") == "add_conversation":
+        from apps.communications.models import StudentConversation
+        from apps.scores.models import Exam
+        current_class = get_current_class(request.user)
+        current_semester = Semester.objects.filter(
+            school_class=current_class, is_current=True,
+        ).first() if current_class else None
+
+        exam_id = request.POST.get("exam_id", "").strip()
+        conv = StudentConversation(
+            school_class=student.school_class,
+            semester=current_semester,
+            student=student,
+            exam=Exam.objects.filter(pk=exam_id).first() if exam_id else None,
+            date=request.POST.get("date", "") or timezone.localdate(),
+            reason=request.POST.get("reason", "").strip(),
+            main_content=request.POST.get("main_content", "").strip(),
+            follow_up_actions=request.POST.get("follow_up_actions", "").strip(),
+        )
+        if not conv.main_content:
+            messages.error(request, "谈话主要内容不能为空。")
+        else:
+            conv.save()
+            messages.success(request, "谈话记录已保存，已同步到成长时间线。")
+        return redirect("students:detail", pk=student.pk)
+
     from apps.attendance.models import AttendanceRecord
     from apps.comments.models import StudentComment
     from apps.communications.models import StudentConversation
@@ -263,6 +292,71 @@ def student_detail(request, pk):
         exam_chart["subjects"] = subject_series
         exam_chart["all_subjects"] = sorted(all_subjects)
 
+    # ===== 按考试的成绩明细（用于成绩Tab表格） =====
+    exam_score_detail = {}
+    student_exams = []
+    if student.school_class:
+        student_exams = list(Exam.objects.filter(
+            school_class=student.school_class, is_deleted=False,
+        ).order_by("-date"))
+        # 构建每个考试该学生的科目成绩 + 排名变化
+        prev_exam_ranks = {}  # {subject_name: rank} 上一次考试的排名
+        for exam in reversed(student_exams):  # 从早到晚遍历以计算排名变化
+            own_scores = list(Score.objects.filter(
+                exam=exam, student=student,
+                is_deleted=False,
+            ).select_related("exam_subject__subject").order_by("exam_subject__sort_order"))
+            if not own_scores:
+                continue
+            subjects_data = []
+            total_score = 0.0
+            has_valid_scores = False
+            for s in own_scores:
+                subj_name = s.exam_subject.subject.name
+                if s.status == "normal" and s.score is not None:
+                    has_valid_scores = True
+                    score_val = float(s.score)
+                    total_score += score_val
+                    current_rank = s.rank
+                    # 对比上次该科目排名
+                    prev_rank = prev_exam_ranks.get(subj_name)
+                    if prev_rank is not None and current_rank is not None:
+                        rank_change = prev_rank - current_rank  # 正值=进步
+                    else:
+                        rank_change = None
+                    prev_exam_ranks[subj_name] = current_rank
+                    subjects_data.append({
+                        "subject_name": subj_name,
+                        "score": score_val,
+                        "rank": current_rank,
+                        "rank_change": rank_change,
+                    })
+
+            if not has_valid_scores:
+                continue
+
+            # 计算总分排名
+            total_rank = None
+            all_totals = Score.objects.filter(
+                exam=exam, status="normal", score__isnull=False, is_deleted=False,
+            ).values("student_id").annotate(total=Sum("score")).order_by("-total")
+            current_r = 0
+            prev_total = None
+            for position, row in enumerate(all_totals, 1):
+                if row["total"] != prev_total:
+                    current_r = position
+                    prev_total = row["total"]
+                if row["student_id"] == student.pk:
+                    total_rank = current_r
+                    break
+
+            exam_score_detail[exam.pk] = {
+                "exam": exam,
+                "subjects": subjects_data,
+                "total_score": round(total_score, 1),
+                "total_rank": total_rank,
+            }
+
     return render(request, "students/student_detail.html", {
         "student": student,
         "guardian": guardian,
@@ -275,6 +369,9 @@ def student_detail(request, pk):
         "conversations": conversations,
         "timeline": timeline[:100],
         "exam_chart": exam_chart,
+        "exam_score_detail": exam_score_detail,
+        "student_exams": student_exams,
+        "exam_filter": request.GET.get("exam_id", ""),
     })
 
 

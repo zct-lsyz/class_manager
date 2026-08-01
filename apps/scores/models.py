@@ -252,6 +252,23 @@ class ExternalScore(BaseModel):
     def __str__(self):
         return f"{self.external_class} - {self.exam_subject.subject.name}: {self.score}"
 
+class GradeLine(BaseModel):
+    """本科线/合格线设置，与考试科目关联"""
+    exam_subject = models.OneToOneField(
+        ExamSubject, on_delete=models.CASCADE,
+        related_name="grade_line", verbose_name="考试科目",
+    )
+    undergraduate_line = models.IntegerField("本科线", null=True, blank=True)
+    pass_line = models.IntegerField("合格线", null=True, blank=True)
+
+    class Meta:
+        verbose_name = "本科线/合格线"
+        verbose_name_plural = "本科线/合格线"
+
+    def __str__(self):
+        return f"{self.exam_subject} — 本科线:{self.undergraduate_line} / 合格线:{self.pass_line}"
+
+
 # ====== AI 成绩分析模型 ======
 from apps.scores.ai_models import AIAnalysisConfig, AIAnalysisRecord, AIExamAnalysisSource, AIQuestionWeakness
 

@@ -27,6 +27,11 @@ class StudentConversation(BaseModel):
         Student, on_delete=models.CASCADE,
         related_name="conversations", verbose_name="学生",
     )
+    exam = models.ForeignKey(
+        "scores.Exam", on_delete=models.SET_NULL,
+        null=True, blank=True, verbose_name="关联考试",
+        related_name="conversations",
+    )
     date = models.DateField("日期")
     location = models.CharField("地点", max_length=100, blank=True, default="")
     reason = models.TextField("谈话原因", blank=True, default="")
