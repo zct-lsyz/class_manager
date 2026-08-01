@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+{% block title %}导入其他班级成绩{% endblock %}
+{% block content %}
+<h4 class="mt-3 mb-3"><i class="bi bi-bar-chart-fill me-2 text-primary"></i>导入其他班级成绩（用于多班对比）</h4>
+<a href="{% url 'scores:analysis' %}" class="btn btn-outline-secondary btn-sm mb-3">返回成绩分析</a>
+
+<div class="card mb-3">
+    <div class="card-header py-2">1. 选择考试</div>
+    <div class="card-body">
+        <form method="get" action="{% url 'scores:external_import' %}" class="row g-2 align-items-end">
+            <div class="col-md-4">
+                <label class="form-label small">考试</label>
+                <select name="exam_id" class="form-select" onchange="this.form.submit()">
+                    <option value="">-- 请选择考试 --</option>
+                    {% for e in exams %}
+                    <option value="{{ e.pk }}" {% if exam and e.pk == exam.pk %}selected{% endif %}>{{ e.name }}（{{ e.date }}）</option>
+                    {% endfor %}
+                </select>
+            </div>
+        </form>
+    </div>
+</div>
+
+{% if exam %}
+<div class="card mb-3">
+    <div class="card-header py-2">2. 下载模板并填写</div>
+    <div class="card-body">
+        <p class="small text-muted mb-2">
+            考试「{{ exam.name }}」共 {{ exam_subjects|length }} 个科目。下载模板后，按每个科目填写其他班级学生的成绩与名次。
+        </p>
+        <a href="{% url 'scores:external_import_template' %}?exam_id={{ exam.pk }}" class="btn btn-outline-primary btn-sm">
+            <i class="bi bi-download me-1"></i>下载导入模板
+        </a>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header py-2">3. 上传其他班级成绩</div>
+    <div class="card-body">
+        <form method="post" enctype="multipart/form-data" class="row g-3">
+            {% csrf_token %}
+            <input type="hidden" name="exam_id" value="{{ exam.pk }}">
+            <div class="col-md-4">
+                <label class="form-label small">班级名称（必填）</label>
+                <input type="text" name="class_name" class="form-control" placeholder="如：3班 / 5班">
+            </div>
+            <div class="col-md-4">
+                <label class="form-label small">学校名称（可选）</label>
+                <input type="text" name="school_name" class="form-control" placeholder="如同一学校可留空">
+            </div>
+            <div class="col-md-4">
+                <label class="form-label small">Excel 文件</label>
+                <input type="file" name="file" class="form-control" accept=".xlsx,.xls" required>
+            </div>
+            <div class="col-12">
+                <button type="submit" class="btn btn-primary"><i class="bi bi-upload me-1"></i>导入</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endif %}
+
+<div class="card mt-3">
+    <div class="card-header py-2"><i class="bi bi-collection me-2"></i>已导入的对比班级</div>
+    <div class="card-body p-0">
+        <table class="table table-hover mb-0">
+            <thead><tr><th>班级名称</th><th>学校</th><th>操作</th></tr></thead>
+            <tbody>
+                {% for ec in external_classes %}
+                <tr>
+                    <td>{{ ec.name }}</td>
+                    <td>{{ ec.school_name|default:"—" }}</td>
+                    <td>
+                        <form method="post" action="{% url 'scores:external_delete' ec.pk %}" class="d-inline" onsubmit="return confirm('确认删除该对比班级及其成绩？')">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i> 删除</button>
+                        </form>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="3" class="text-muted text-center">暂无导入的对比班级</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

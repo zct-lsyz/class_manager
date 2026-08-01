@@ -6,9 +6,19 @@ from django.db.models import Avg, Max, Min, Count, Q, Sum
 from django.utils import timezone
 from django.db import transaction
 
-from apps.scores.models import Exam, ExamSubject, Score, SupportPlan, SupportFollowUp
+from apps.scores.models import (
+    Exam, ExamSubject, Score, SupportPlan, SupportFollowUp,
+    ExternalClass, ExternalScore,
+)
 from apps.scores.forms import ExamForm, ExamSubjectForm, ScoreForm, SupportPlanForm
+from apps.scores.analysis_services import (
+    compute_score_stats,
+    apply_criteria,
+    build_comparison_data,
+    import_external_scores,
+)
 from apps.classes.subjects import Subject
+from apps.classes.decorators import require_current_class
 from apps.classes.models import SchoolClass, Semester
 from apps.audit.services import soft_delete
 from apps.audit.models import OperationLog
@@ -19,6 +29,7 @@ WIDE_SCORE_COLUMNS = [
     ("语文", ["语文赋分", "语文原始", "语文"], 150),
     ("数学", ["数学赋分", "数学原始", "数学"], 150),
     ("英语", ["英语赋分", "外语赋分", "英语原始", "外语原始", "英语", "外语"], 150),
+    ("日语", ["日语赋分", "日语原始", "日语"], 150),
     ("物理", ["物理赋分", "物理原始", "物理"], 100),
     ("化学", ["化学赋分", "化学原始", "化学"], 100),
     ("生物", ["生物赋分", "生物原始", "生物"], 100),
@@ -26,6 +37,74 @@ WIDE_SCORE_COLUMNS = [
     ("历史", ["历史赋分", "历史原始", "历史"], 100),
     ("地理", ["地理赋分", "地理原始", "地理"], 100),
 ]
+
+RANK_KEYWORDS = ("名次", "排名", "校名", "班名")
+
+
+def _parse_rank(value):
+    """解析名次值，空值或非法值返回 None。"""
+    if value in (None, ""):
+        return None
+    try:
+        return int(float(value))
+    except (TypeError, ValueError, OverflowError):
+        return None
+
+
+def _wide_match_columns(header_map, subject_name, score_aliases):
+    """灵活匹配某科目在表头中的各列（分数 + 三种名次）。
+
+    匹配规则：
+      - 分数列：优先精确命中别名（赋分 > 原始 > 科目名）；否则只要表头包含科目名即算匹配
+      - 班名次：表头含「班名次」/「班名」，或含通用「名次/排名」
+      - 级名次：表头含「级名次」/「级部名次」
+      - 市名次：表头含「市名次」
+    任一列缺失均允许（如某考试没有市名次、没有赋分）。
+
+    返回 (score_header, class_rank_header, grade_rank_header, city_rank_header)，均可能为 None。
+    """
+    score_header = None
+    class_rank_header = None
+    grade_rank_header = None
+    city_rank_header = None
+
+    # 1. 分数列精确匹配（按优先级）
+    for alias in score_aliases:
+        if alias in header_map:
+            score_header = alias
+            break
+
+    # 2. 遍历表头，识别该科目的名次列与分数兜底
+    for header_text in header_map:
+        if not header_text:
+            continue
+        if subject_name in ("英语", "外语"):
+            belongs = ("外语" in header_text) or ("英语" in header_text)
+        else:
+            belongs = subject_name in header_text
+        if not belongs:
+            continue
+
+        if any(kw in header_text for kw in RANK_KEYWORDS):
+            if "班名次" in header_text or header_text.endswith("班名"):
+                if class_rank_header is None:
+                    class_rank_header = header_text
+            elif "级名次" in header_text or "级部名次" in header_text:
+                if grade_rank_header is None:
+                    grade_rank_header = header_text
+            elif "市名次" in header_text:
+                if city_rank_header is None:
+                    city_rank_header = header_text
+            elif class_rank_header is None:
+                # 通用「名次/排名」列默认视为班名次
+                class_rank_header = header_text
+            continue
+
+        # 3. 分数列兜底：表头包含科目名且不是名次列
+        if score_header is None:
+            score_header = header_text
+
+    return score_header, class_rank_header, grade_rank_header, city_rank_header
 
 
 def get_client_ip(request):
@@ -328,7 +407,7 @@ def score_delete(request, pk):
 
 @login_required
 def analysis(request):
-    """成绩分析"""
+    """成绩分析：完整统计 + 多班对比 + 优生筛选"""
     current_class = SchoolClass.objects.filter(is_current=True).first()
     current_semester = Semester.objects.filter(
         school_class=current_class, is_current=True,
@@ -340,48 +419,45 @@ def analysis(request):
         Exam, pk=exam_id, school_class=current_class, is_deleted=False,
     ) if exam_id else None
 
+    # 优生筛选条件
+    criteria = {}
+    if request.GET.get("score_threshold"):
+        criteria["score_threshold"] = request.GET["score_threshold"]
+    if request.GET.get("class_rank_threshold"):
+        criteria["class_rank_threshold"] = request.GET["class_rank_threshold"]
+    if request.GET.get("grade_rank_threshold"):
+        criteria["grade_rank_threshold"] = request.GET["grade_rank_threshold"]
+    if request.GET.get("city_rank_threshold"):
+        criteria["city_rank_threshold"] = request.GET["city_rank_threshold"]
+    criteria["combine_mode"] = request.GET.get("combine_mode", "any")
+    is_filtering = any(
+        k in criteria and criteria[k] for k in
+        ("score_threshold", "class_rank_threshold", "grade_rank_threshold", "city_rank_threshold")
+    )
+
     analysis_data = {}
     rank_distribution = {}
     rank_chart_type = "bar"
+    comparison_classes = []
+    comparison_table = []
+    comparison_chart = {}
     if exam:
-        for es in ExamSubject.objects.filter(exam=exam).select_related("subject"):
-            scores_qs = Score.objects.filter(exam_subject=es, is_deleted=False)
-            normal_scores = scores_qs.filter(status="normal", score__isnull=False)
-            stats = normal_scores.aggregate(
-                avg=Avg("score"), max=Max("score"), min=Min("score"), count=Count("id")
-            )
-            total_students = normal_scores.count()
-            pass_count = normal_scores.filter(score__gte=es.full_score * 0.6).count()
-            excellent_count = normal_scores.filter(score__gte=es.full_score * 0.85).count()
+        exam_subjects = list(ExamSubject.objects.filter(exam=exam).select_related("subject"))
 
-            # 分数段分布
-            bands = {"0-59%": 0, "60-69%": 0, "70-79%": 0, "80-89%": 0, "90-100%": 0}
-            for s in normal_scores:
-                v = float(s.score) if s.score is not None else None
-                if v is None:
-                    continue
-                ratio = v / es.full_score if es.full_score else 0
-                if ratio < 0.6:
-                    bands["0-59%"] += 1
-                elif ratio < 0.7:
-                    bands["60-69%"] += 1
-                elif ratio < 0.8:
-                    bands["70-79%"] += 1
-                elif ratio < 0.9:
-                    bands["80-89%"] += 1
-                else:
-                    bands["90-100%"] += 1
-
+        # 1. 本班各科统计（含中位数/方差/位次）
+        for es in exam_subjects:
+            scores = list(Score.objects.filter(
+                exam_subject=es, is_deleted=False, status="normal", score__isnull=False,
+            ))
+            if is_filtering:
+                scores = apply_criteria(scores, criteria)
+            stats = compute_score_stats(scores, es.full_score)
             analysis_data[es.subject.name] = {
                 "full_score": es.full_score,
-                "avg": round(stats["avg"], 1) if stats["avg"] else 0,
-                "max": stats["max"],
-                "min": stats["min"],
-                "pass_rate": round(pass_count / total_students * 100, 1) if total_students > 0 else 0,
-                "excellent_rate": round(excellent_count / total_students * 100, 1) if total_students > 0 else 0,
-                "bands": bands,
+                **stats,
             }
 
+        # 2. 总分排名分布（按原始全部成绩）
         total_scores = list(Score.objects.filter(
             exam=exam, status="normal", score__isnull=False, is_deleted=False,
         ).values("student_id").annotate(total=Sum("score")).order_by("-total"))
@@ -393,6 +469,17 @@ def analysis(request):
                 previous_total = row["total"]
             rank_distribution[str(current_rank)] = rank_distribution.get(str(current_rank), 0) + 1
         rank_chart_type = "line" if len(rank_distribution) > 12 else "bar"
+
+        # 3. 多班对比
+        ext_classes, comparison_table, comparison_chart = build_comparison_data(
+            exam, exam_subjects, current_class,
+            criteria=criteria if is_filtering else None,
+        )
+        comparison_classes = [{"id": None, "name": "本班", "school_name": ""}]
+        comparison_classes.extend(
+            {"id": ec.pk, "name": ec.name, "school_name": ec.school_name}
+            for ec in ext_classes
+        )
 
     # 学生个人趋势
     student_id = request.GET.get("student_id", "")
@@ -432,11 +519,89 @@ def analysis(request):
         "student_list": Student.objects.filter(
             school_class=current_class, is_deleted=False
         ).order_by("student_id") if current_class else [],
+        # 优生筛选
+        "criteria": criteria, "is_filtering": is_filtering,
+        # 多班对比
+        "comparison_classes": comparison_classes,
+        "comparison_table": comparison_table,
+        "comparison_chart": comparison_chart,
         # AI 分析配置状态
         "ai_config": _get_ai_config(current_class),
         "ai_subjects": _get_ai_subjects(exam),
         "latest_ai_result": _get_latest_ai_result(current_class, exam),
     })
+
+
+@login_required
+@require_current_class
+def external_import(request):
+    """导入其他班级成绩用于多班对比。"""
+    current_class = SchoolClass.objects.filter(is_current=True).first()
+    exam_id = request.GET.get("exam_id", "") or request.POST.get("exam_id", "")
+    exam = get_object_or_404(
+        Exam, pk=exam_id, school_class=current_class, is_deleted=False,
+    ) if exam_id else None
+
+    if request.method == "POST":
+        if exam is None:
+            messages.error(request, "请先选择要对比的考试。")
+            return redirect("scores:analysis")
+        uploaded = request.FILES.get("file")
+        class_name = request.POST.get("class_name", "").strip()
+        school_name = request.POST.get("school_name", "").strip()
+        if not uploaded:
+            messages.error(request, "请选择要上传的 Excel 文件。")
+            return redirect("scores:external_import")
+        exam_subjects = list(ExamSubject.objects.filter(exam=exam).select_related("subject"))
+        try:
+            external_class, created = import_external_scores(
+                uploaded, current_class, exam, class_name, school_name, exam_subjects,
+            )
+        except ValueError as exc:
+            messages.error(request, str(exc))
+            return redirect("scores:external_import")
+        OperationLog.objects.create(
+            user=request.user, action="batch_import", module="scores",
+            object_repr=external_class.name,
+            detail=f"导入外部班级成绩 {created} 条（考试：{exam.name}）",
+            ip_address=get_client_ip(request), success=True,
+        )
+        messages.success(request, f"「{external_class.name}」导入成功，共 {created} 条成绩。")
+        return redirect(f"{request.path}?exam_id={exam.pk}")
+
+    external_classes = ExternalClass.objects.filter(school_class=current_class) if current_class else []
+    return render(request, "scores/external_import.html", {
+        "exams": Exam.objects.filter(school_class=current_class, is_deleted=False).order_by("-date") if current_class else [],
+        "exam": exam,
+        "external_classes": external_classes,
+        "exam_subjects": list(ExamSubject.objects.filter(exam=exam).select_related("subject")) if exam else [],
+    })
+
+
+@login_required
+def external_import_template(request):
+    """下载外部班级成绩导入模板。"""
+    from apps.exports.templates_services import external_class_template
+    exam_id = request.GET.get("exam_id", "")
+    current_class = SchoolClass.objects.filter(is_current=True).first()
+    exam = get_object_or_404(
+        Exam, pk=exam_id, school_class=current_class, is_deleted=False,
+    ) if exam_id else None
+    return external_class_template(exam)
+
+
+@login_required
+def external_delete(request, pk):
+    """删除导入的外部对比班级。"""
+    current_class = SchoolClass.objects.filter(is_current=True).first()
+    external_class = get_object_or_404(
+        ExternalClass, pk=pk, school_class=current_class,
+    )
+    if request.method == "POST":
+        name = external_class.name
+        external_class.delete()
+        messages.info(request, f"外部对比班级「{name}」已删除。")
+    return redirect("scores:analysis")
 
 
 @login_required
@@ -762,23 +927,35 @@ def score_import_wide(request):
     header_map = {}
     for index, row in enumerate(rows[:10]):
         candidate = {_excel_text(value): col for col, value in enumerate(row) if _excel_text(value)}
-        subject_hits = sum(any(alias in candidate for alias in aliases) for _name, aliases, _full in WIDE_SCORE_COLUMNS)
+        subject_hits = 0
+        for _name, aliases, _full in WIDE_SCORE_COLUMNS:
+            score_col, *_rest = _wide_match_columns(candidate, _name, aliases)
+            if score_col:
+                subject_hits += 1
         if ("姓名" in candidate or "学号" in candidate) and subject_hits:
             header_index = index
             header_map = candidate
             break
     if header_index is None:
-        messages.error(request, "未找到有效表头：至少需要「姓名」或「学号」，并包含一个九科成绩列。")
+        messages.error(request, "未找到有效表头：至少需要「姓名」或「学号」，并包含一个成绩列。")
         return redirect(f"/scores/entry/?exam_id={exam.pk}")
 
     subject_columns = []
+    matched_subject_names = []
     for sort_order, (subject_name, aliases, full_score) in enumerate(WIDE_SCORE_COLUMNS, 1):
-        matched = next((alias for alias in aliases if alias in header_map), None)
-        if matched:
-            subject_columns.append((
-                _wide_exam_subject(exam, subject_name, full_score, sort_order),
-                header_map[matched], matched,
-            ))
+        score_col, class_rank_col, grade_rank_col, city_rank_col = _wide_match_columns(
+            header_map, subject_name, aliases,
+        )
+        if not score_col:
+            continue
+        subject_columns.append((
+            _wide_exam_subject(exam, subject_name, full_score, sort_order),
+            header_map[score_col], score_col,
+            header_map[class_rank_col] if class_rank_col else None,
+            header_map[grade_rank_col] if grade_rank_col else None,
+            header_map[city_rank_col] if city_rank_col else None,
+        ))
+        matched_subject_names.append(subject_name)
 
     students = list(Student.objects.filter(school_class=current_class, is_deleted=False))
     student_id_map = {student.student_id: student for student in students}
@@ -808,8 +985,10 @@ def score_import_wide(request):
                     skipped.append(f"第{row_number}行未匹配学生：{student_id or name}")
                 continue
 
-            for exam_subject, column_index, column_name in subject_columns:
+            for (exam_subject, column_index, column_name,
+                 class_rank_idx, grade_rank_idx, city_rank_idx) in subject_columns:
                 raw_score = row[column_index] if column_index < len(row) else None
+                # 成绩为空视为缺考/无成绩，跳过（但不影响其他科）
                 if raw_score is None or _excel_text(raw_score) == "":
                     continue
                 try:
@@ -820,22 +999,29 @@ def score_import_wide(request):
                 if score_value < 0 or score_value > exam_subject.full_score:
                     skipped.append(f"第{row_number}行「{column_name}」须在0至{exam_subject.full_score}之间")
                     continue
+                class_rank = _parse_rank(row[class_rank_idx]) if class_rank_idx is not None and class_rank_idx < len(row) else None
+                grade_rank = _parse_rank(row[grade_rank_idx]) if grade_rank_idx is not None and grade_rank_idx < len(row) else None
+                city_rank = _parse_rank(row[city_rank_idx]) if city_rank_idx is not None and city_rank_idx < len(row) else None
                 Score.objects.update_or_create(
                     exam_subject=exam_subject, student=student,
                     defaults={
-                        "exam": exam, "score": score_value, "status": "normal", "is_deleted": False,
+                        "exam": exam, "score": score_value, "status": "normal",
+                        "rank": class_rank, "grade_rank": grade_rank,
+                        "city_rank": city_rank, "is_deleted": False,
                     },
                 )
                 imported += 1
                 imported_students.add(student.pk)
 
-        for exam_subject, _column_index, _column_name in subject_columns:
-            _update_ranks(exam_subject)
+        # 仅在文件未提供「班名次」列时才自动计算班级名次，避免覆盖导入的官方名次
+        for exam_subject, _column_index, _column_name, class_rank_idx, *_rest in subject_columns:
+            if class_rank_idx is None:
+                _update_ranks(exam_subject)
 
     OperationLog.objects.create(
         user=request.user, action="batch_import", module="scores",
         object_repr=f"{exam.name} - 多科成绩",
-        detail=f"参考宽表导入：{len(imported_students)}名学生，{imported}条成绩，{len(skipped)}项跳过",
+        detail=f"宽表导入：{len(imported_students)}名学生，{imported}条成绩，{len(skipped)}项跳过；匹配科目：{'、'.join(matched_subject_names) or '无'}",
         ip_address=get_client_ip(request), success=True,
     )
     if skipped:
@@ -855,14 +1041,13 @@ def score_import_wide_template(request):
     current_class = SchoolClass.objects.filter(is_current=True).first()
     workbook = Workbook()
     sheet = workbook.active
-    sheet.title = "九科成绩导入"
-    headers = [
-        "姓名", "学号", "总分原始", "总分赋分", "校名", "班名", "语数外", "三科校名", "三科班名",
-        "语文", "语文校名", "语文班名", "数学", "数学校名", "数学班名", "外语", "外语校名", "外语班名",
-        "物理原始", "物理赋分", "物理校名", "物理班名", "化学原始", "化学赋分", "化学校名", "化学班名",
-        "生物原始", "生物赋分", "生物校名", "生物班名", "政治原始", "政治赋分", "政治校名", "政治班名",
-        "历史原始", "历史赋分", "历史校名", "历史班名", "地理原始", "地理赋分", "地理校名", "地理班名",
-    ]
+    sheet.title = "成绩导入"
+    headers = ["姓名", "学号"]
+    for subject_name, _aliases, _full in WIDE_SCORE_COLUMNS:
+        headers.extend([
+            f"{subject_name}赋分", f"{subject_name}原始",
+            f"{subject_name}班名次", f"{subject_name}级名次", f"{subject_name}市名次",
+        ])
     sheet.append(headers)
     for student in Student.objects.filter(school_class=current_class, is_deleted=False).order_by("student_id") if current_class else []:
         sheet.append([student.name, student.student_id])
@@ -878,8 +1063,10 @@ def score_import_wide_template(request):
         sheet.column_dimensions[sheet.cell(1, column).column_letter].width = 12
     note_sheet = workbook.create_sheet("填写说明")
     note_sheet.append(["说明"])
-    note_sheet.append(["可直接粘贴参考成绩表；系统优先读取“赋分”，没有赋分列时读取“原始”或科目名列。"])
-    note_sheet.append(["姓名或学号至少填写一项；同名学生必须填写学号。总分、校名、班名等统计列用于留存原表结构，不重复写入单科成绩。"])
+    note_sheet.append(["本模板为参考格式。上传时系统会自动匹配表头，只要你的表格表头包含科目名（如“语文赋分”“数学”“英语”）即可，不要求与本模板完全一致。"])
+    note_sheet.append(["并非所有列都必须填写：没有赋分的考试可留空“赋分”列；没有市名次的考试可留空“市名次”列；某科缺考的学生该科成绩留空即可。"])
+    note_sheet.append(["姓名或学号至少填写一项；同名学生必须填写学号。班名次/级名次/市名次为可选项，填了才会写入对应排名字段。"])
+    note_sheet.append(["英语与日语为二选一科目：选修日语的学生填日语列，选修英语的学生填英语列，另一列留空。"])
     note_sheet.column_dimensions["A"].width = 110
 
     response = HttpResponse(content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")

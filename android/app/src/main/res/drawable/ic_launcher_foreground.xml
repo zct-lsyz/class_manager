@@ -1,0 +1,16 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- 白色帽徽 -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M54,32 L24,44 L54,56 L84,44 Z" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M24,56 L84,56 L84,63 L24,63 Z" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M54,56 L54,72 L48,84 L60,84 Z" />
+</vector>

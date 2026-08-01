@@ -1,0 +1,228 @@
+{% extends "base.html" %}
+{% block title %}手动调整值日排班{% endblock %}
+{% block content %}
+<h4 class="mt-3 mb-3"><i class="bi bi-brush me-2 text-primary"></i>智能值日</h4>
+
+{% include "duty/_step_indicator.html" with step=3 labels="配置任务与人数,自动生成排班,手动调整,确认存档" %}
+
+<div class="card">
+    <div class="card-header py-2 d-flex flex-wrap justify-content-between align-items-center">
+        <span><i class="bi bi-arrows-move me-2"></i>第 3 步：手动调整分工（{{ roster.name }}）</span>
+        <span class="badge bg-light text-dark">桌面端：拖拽学生块调整；手机端：点选学生块再点目标格子</span>
+    </div>
+    <div class="card-body">
+        <form method="post" id="adjustForm">
+            {% csrf_token %}
+            <div class="roster-grid-wrap table-responsive">
+                <table class="table table-bordered mb-0 roster-grid-table align-middle">
+                    <thead>
+                        <tr>
+                            <th class="roster-day-col">日期</th>
+                            {% for rt in roster_tasks %}
+                            <th class="text-center roster-task-col">
+                                {{ rt.task.name }}
+                                <div class="text-muted fw-normal small">需 {{ rt.people_count }} 人</div>
+                            </th>
+                            {% endfor %}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for day in days %}
+                        <tr class="roster-day-row">
+                            <td class="text-center roster-day-cell fw-bold">{{ day.date_label }}</td>
+                            {% for task in day.tasks %}
+                            <td class="roster-cell" data-day="{{ day.day_index }}" data-task="{{ task.rt.pk }}" data-max="{{ task.max_count }}">
+                                <div class="roster-cell-count text-muted small">
+                                    <span class="cell-current-count">{{ task.students|length }}</span>/{{ task.max_count }}
+                                </div>
+                                <div class="roster-student-list d-flex flex-wrap gap-1">
+                                    {% for student in task.students %}
+                                    <span class="student-block student-{{ student.gender }}" draggable="true" data-student-id="{{ student.pk }}" data-day="{{ day.day_index }}" data-task="{{ task.rt.pk }}">
+                                        {{ student.name }}
+                                    </span>
+                                    {% endfor %}
+                                </div>
+                                <input type="hidden" name="cell_{{ day.day_index }}_{{ task.rt.pk }}" class="roster-cell-input"
+                                       value="{% for student in task.students %}{% if not forloop.first %},{% endif %}{{ student.pk }}{% endfor %}">
+                            </td>
+                            {% endfor %}
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="card mt-3">
+                <div class="card-header py-2"><i class="bi bi-inbox me-2"></i>未分配学生池（可将学生拖入或点选后放入格子）</div>
+                <div class="card-body">
+                    <div class="d-flex flex-wrap gap-1" id="unassignedPool">
+                        {% for student in unassigned %}
+                        <span class="student-block student-{{ student.gender }}" draggable="true" data-student-id="{{ student.pk }}" data-pool="1">
+                            {{ student.name }}
+                        </span>
+                        {% empty %}
+                        <span class="text-muted small">全部学生均已分配。</span>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+
+            <div class="mt-4 d-flex flex-wrap gap-2 justify-content-between">
+                <a href="{% url 'duty:smart_duty_generate' %}" class="btn btn-outline-secondary">
+                    <i class="bi bi-arrow-left me-1"></i>返回重新生成
+                </a>
+                <button type="submit" class="btn btn-primary">
+                    <i class="bi bi-check-lg me-1"></i>保存调整并继续
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function() {
+    const form = document.getElementById('adjustForm');
+    let dragged = null;
+    let selected = null;
+
+    // 更新格子人数与隐藏字段
+    function syncCell(cell) {
+        const list = cell.querySelector('.roster-student-list');
+        const blocks = list.querySelectorAll('.student-block');
+        const countEl = cell.querySelector('.cell-current-count');
+        const input = cell.querySelector('.roster-cell-input');
+        const max = parseInt(cell.dataset.max);
+        countEl.textContent = blocks.length;
+        countEl.className = blocks.length >= max ? 'text-danger' : 'text-muted';
+        input.value = Array.from(blocks).map(function(b) { return b.dataset.studentId; }).join(',');
+    }
+
+    // 创建学生块
+    function makeBlock(studentId, gender, name) {
+        const span = document.createElement('span');
+        span.className = 'student-block student-' + (gender || 'male');
+        span.draggable = true;
+        span.dataset.studentId = studentId;
+        span.textContent = name;
+        span.addEventListener('dragstart', onDragStart);
+        span.addEventListener('click', onClickSelect);
+        return span;
+    }
+
+    // 从格子取出一个学生块（放到池中）
+    function removeFromCell(cell, block) {
+        block.remove();
+        const gender = block.className.includes('female') ? 'female' : 'male';
+        const pool = document.getElementById('unassignedPool');
+        const emptyText = pool.querySelector('.text-muted');
+        if (emptyText) emptyText.remove();
+        const nb = makeBlock(block.dataset.studentId, gender, block.textContent);
+        nb.dataset.pool = '1';
+        pool.appendChild(nb);
+        syncCell(cell);
+    }
+
+    function onDragStart(e) {
+        dragged = this;
+        this.classList.add('dragging');
+        e.dataTransfer && e.dataTransfer.setData('text/plain', this.dataset.studentId);
+    }
+
+    function onClickSelect(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (selected === this) {
+            selected.classList.remove('selected');
+            selected = null;
+            return;
+        }
+        if (selected) selected.classList.remove('selected');
+        selected = this;
+        this.classList.add('selected');
+    }
+
+    // 将一个学生块放入格子（处理同一天冲突与满员）
+    function placeInCell(block, cell) {
+        const day = cell.dataset.day;
+        const max = parseInt(cell.dataset.max);
+        const current = cell.querySelectorAll('.student-block').length;
+        if (current >= max) {
+            alert('该任务当天已满员。');
+            return false;
+        }
+        // 同一天已在其他格子 → 移除
+        if (block.dataset.day && block.dataset.day !== day) {
+            const oldCell = document.querySelector('.roster-cell[data-day="' + block.dataset.day + '"][data-task="' + block.dataset.task + '"]');
+            if (oldCell) removeFromCell(oldCell, block);
+        }
+        // 若来自池中
+        if (block.dataset.pool) {
+            block.removeAttribute('data-pool');
+        }
+        block.removeAttribute('data-day');
+        block.removeAttribute('data-task');
+        block.dataset.day = day;
+        block.dataset.task = cell.dataset.task;
+        const list = cell.querySelector('.roster-student-list');
+        const emptyText = list.querySelector('.text-muted');
+        if (emptyText) emptyText.remove();
+        list.appendChild(block);
+        syncCell(cell);
+        return true;
+    }
+
+    // 拖拽放置
+    document.querySelectorAll('.roster-cell').forEach(function(cell) {
+        cell.addEventListener('dragover', function(e) {
+            e.preventDefault();
+            if (dragged) cell.classList.add('drop-target');
+        });
+        cell.addEventListener('dragleave', function() { cell.classList.remove('drop-target'); });
+        cell.addEventListener('drop', function(e) {
+            e.preventDefault();
+            cell.classList.remove('drop-target');
+            if (dragged) {
+                placeInCell(dragged, cell);
+                dragged.classList.remove('dragging');
+                dragged = null;
+            }
+        });
+    });
+
+    const pool = document.getElementById('unassignedPool');
+    if (pool) {
+        pool.addEventListener('dragover', function(e) { e.preventDefault(); pool.classList.add('drop-target'); });
+        pool.addEventListener('dragleave', function() { pool.classList.remove('drop-target'); });
+        pool.addEventListener('drop', function(e) {
+            e.preventDefault();
+            pool.classList.remove('drop-target');
+            if (dragged) {
+                const cell = dragged.closest('.roster-cell');
+                if (cell) removeFromCell(cell, dragged);
+                dragged.classList.remove('dragging');
+                dragged = null;
+            }
+        });
+    }
+
+    // 点击放置模式（移动端回退）
+    document.querySelectorAll('.roster-cell').forEach(function(cell) {
+        cell.addEventListener('click', function(e) {
+            if (!selected || e.target.closest('.student-block')) return;
+            const ok = placeInCell(selected, cell);
+            if (ok) { selected.classList.remove('selected'); selected = null; }
+        });
+    });
+
+    // 初始化各格子和块
+    document.querySelectorAll('.student-block').forEach(function(b) {
+        b.addEventListener('dragstart', onDragStart);
+        b.addEventListener('dragend', function() { this.classList.remove('dragging'); });
+        b.addEventListener('click', onClickSelect);
+    });
+    document.querySelectorAll('.roster-cell').forEach(syncCell);
+})();
+</script>
+{% endblock %}

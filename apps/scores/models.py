@@ -106,6 +106,8 @@ class Score(BaseModel):
         default="normal",
     )
     rank = models.IntegerField("班级名次", null=True, blank=True)
+    grade_rank = models.IntegerField("级部/年级名次", null=True, blank=True)
+    city_rank = models.IntegerField("市名次", null=True, blank=True)
     remarks = models.TextField("备注", blank=True, default="")
     is_deleted = models.BooleanField("已删除", default=False)
 
@@ -201,6 +203,54 @@ class SupportFollowUp(BaseModel):
 
     def __str__(self):
         return f"{self.plan.student.name} - {self.date}"
+
+
+class ExternalClass(BaseModel):
+    """外部班级（用于多班成绩对比，导入其他班成绩时创建）"""
+    school_class = models.ForeignKey(
+        SchoolClass, on_delete=models.CASCADE,
+        related_name="external_comparisons", verbose_name="所属班级",
+    )
+    name = models.CharField("班级名称", max_length=100)
+    school_name = models.CharField("学校名称", max_length=200, blank=True, default="")
+
+    class Meta:
+        verbose_name = "外部对比班级"
+        verbose_name_plural = "外部对比班级"
+        ordering = ["school_name", "name"]
+
+    def __str__(self):
+        prefix = f"{self.school_name} " if self.school_name else ""
+        return f"{prefix}{self.name}"
+
+
+class ExternalScore(BaseModel):
+    """外部班级的单科成绩（脱敏，仅用于统计对比）"""
+    external_class = models.ForeignKey(
+        ExternalClass, on_delete=models.CASCADE,
+        related_name="scores", verbose_name="外部班级",
+    )
+    exam = models.ForeignKey(
+        Exam, on_delete=models.CASCADE,
+        related_name="external_scores", verbose_name="考试",
+    )
+    exam_subject = models.ForeignKey(
+        ExamSubject, on_delete=models.CASCADE,
+        related_name="external_scores", verbose_name="考试科目",
+    )
+    student_label = models.CharField("学生标识", max_length=50, blank=True, default="")
+    score = models.FloatField("分数", null=True, blank=True)
+    class_rank = models.IntegerField("班级名次", null=True, blank=True)
+    grade_rank = models.IntegerField("级部名次", null=True, blank=True)
+    city_rank = models.IntegerField("市名次", null=True, blank=True)
+
+    class Meta:
+        verbose_name = "外部班级成绩"
+        verbose_name_plural = "外部班级成绩"
+        ordering = ["external_class", "exam_subject", "student_label"]
+
+    def __str__(self):
+        return f"{self.external_class} - {self.exam_subject.subject.name}: {self.score}"
 
 # ====== AI 成绩分析模型 ======
 from apps.scores.ai_models import AIAnalysisConfig, AIAnalysisRecord, AIExamAnalysisSource, AIQuestionWeakness

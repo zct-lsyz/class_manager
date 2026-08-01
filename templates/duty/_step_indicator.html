@@ -1,0 +1,15 @@
+{% load static %}
+<div class="step-indicator mb-4" id="smartDutyStepIndicator">
+    {% for label in labels %}
+    <div class="step-item {% if forloop.counter == step %}active{% elif forloop.counter < step %}done{% endif %}">
+        <div class="step-circle">
+            {% if forloop.counter < step %}
+            <i class="bi bi-check-lg"></i>
+            {% else %}
+            {{ forloop.counter }}
+            {% endif %}
+        </div>
+        <div class="step-label">{{ label }}</div>
+    </div>
+    {% endfor %}
+</div>

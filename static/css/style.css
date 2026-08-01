@@ -398,3 +398,193 @@ a {
 .mobile-bottom-nav a:active {
     color: #1a73e8 !important;
 }
+
+/* ===== 学生块（座位/值日共用） ===== */
+.student-block {
+    position: relative;
+    box-sizing: border-box;
+    min-width: 112px;
+    max-width: 100%;
+    padding: 6px 10px;
+    border: 1px solid transparent;
+    border-radius: 8px;
+    color: #1f2937;
+    cursor: grab;
+    text-align: center;
+    line-height: 1.25;
+    display: inline-block;
+    font-size: 0.85rem;
+}
+.student-male {
+    background: #dbeafe;
+    border-color: #93c5fd;
+}
+.student-female {
+    background: #fce7f3;
+    border-color: #f9a8d4;
+}
+.student-block.dragging {
+    opacity: 0.5;
+}
+.student-block.selected {
+    outline: 2px solid #1a73e8;
+    outline-offset: 1px;
+    box-shadow: 0 0 0 4px rgba(26, 115, 232, 0.15);
+}
+.roster-cell.drop-target,
+#unassignedPool.drop-target {
+    background-color: #e8f0fe;
+    outline: 2px dashed #1a73e8;
+    outline-offset: -2px;
+}
+
+/* ===== 智能值日步骤指示器 ===== */
+.step-indicator {
+    display: flex;
+    gap: 0.25rem;
+    padding: 0.75rem 0;
+}
+.step-item {
+    flex: 1;
+    text-align: center;
+    position: relative;
+}
+.step-item:not(:last-child)::after {
+    content: "";
+    position: absolute;
+    top: 16px;
+    left: calc(50% + 22px);
+    width: calc(100% - 44px);
+    height: 2px;
+    background: #dee2e6;
+}
+.step-item.done:not(:last-child)::after {
+    background: #28a745;
+}
+.step-circle {
+    width: 32px;
+    height: 32px;
+    margin: 0 auto 4px;
+    border-radius: 50%;
+    background: #e9ecef;
+    color: #6c757d;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.85rem;
+    font-weight: 600;
+    position: relative;
+    z-index: 1;
+}
+.step-item.active .step-circle {
+    background: #1a73e8;
+    color: #fff;
+    box-shadow: 0 0 0 4px rgba(26, 115, 232, 0.2);
+}
+.step-item.done .step-circle {
+    background: #28a745;
+    color: #fff;
+}
+.step-label {
+    font-size: 0.7rem;
+    color: #6c757d;
+}
+.step-item.active .step-label {
+    color: #1a73e8;
+    font-weight: 600;
+}
+
+/* ===== 值日表网格 ===== */
+.roster-grid-table th,
+.roster-grid-table td {
+    min-width: 96px;
+}
+.roster-day-col {
+    min-width: 120px !important;
+}
+.roster-cell {
+    min-height: 72px;
+    border-radius: 4px;
+    transition: background-color 0.15s;
+    position: relative;
+    padding: 4px !important;
+}
+.roster-cell-count {
+    font-size: 0.7rem;
+}
+.roster-student-list {
+    min-height: 28px;
+}
+
+/* ===== 值日任务标签 ===== */
+.duty-tab-list .nav-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+}
+.duty-tab-close {
+    cursor: pointer;
+    font-size: 1rem;
+    line-height: 1;
+    opacity: 0.6;
+}
+.duty-tab-close:hover {
+    opacity: 1;
+    color: #dc3545;
+}
+.duty-tab-pane {
+    background: #fff;
+    border: 1px solid #dee2e6;
+    border-top: 0;
+    border-radius: 0 0 8px 8px;
+    padding: 0 1rem;
+    margin-bottom: 1rem;
+}
+
+/* ===== 移动端值日表 ===== */
+@media (max-width: 767.98px) {
+    .step-circle {
+        width: 26px;
+        height: 26px;
+        font-size: 0.75rem;
+    }
+    .step-item:not(:last-child)::after {
+        top: 13px;
+        left: calc(50% + 18px);
+        width: calc(100% - 36px);
+    }
+    .step-label {
+        font-size: 0.6rem;
+    }
+    .student-block {
+        min-width: 64px;
+        font-size: 0.75rem;
+        padding: 4px 8px;
+    }
+    .roster-day-col {
+        min-width: 84px !important;
+    }
+    .duty-tab-pane .col-md-6,
+    .duty-tab-pane .col-md-3 {
+        margin-bottom: 0.5rem;
+    }
+}
+
+/* ===== 成绩分析宽统计表 ===== */
+.stats-wide-table th,
+.stats-wide-table td {
+    font-size: 0.8rem;
+    white-space: nowrap;
+    padding: 0.45rem 0.5rem;
+}
+.stats-wide-table th {
+    background: #f8f9fa;
+    text-align: center;
+}
+.stats-wide-table td {
+    text-align: center;
+}
+.stats-wide-table td:first-child {
+    text-align: left;
+    font-weight: 600;
+}

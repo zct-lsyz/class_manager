@@ -39,7 +39,10 @@ class Student(BaseModel):
         null=True, blank=True,
         related_name="students", verbose_name="班级",
     )
-    student_id = models.CharField("学号", max_length=20, unique=True, validators=[student_id_validator])
+    student_id = models.CharField(
+        "学号", max_length=20,
+        null=True, blank=True, unique=True, validators=[student_id_validator],
+    )
     name = models.CharField("姓名", max_length=50)
     gender = models.CharField("性别", max_length=10, choices=GENDER_CHOICES)
     birth_date = models.DateField("出生日期", null=True, blank=True)
@@ -74,7 +77,7 @@ class Student(BaseModel):
         ordering = ["sort_order", "student_id"]
 
     def __str__(self):
-        return f"{self.name} ({self.student_id})"
+        return f"{self.name} ({self.student_id})" if self.student_id else self.name
 
     @property
     def display_class_position(self):

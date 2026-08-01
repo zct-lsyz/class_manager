@@ -1,0 +1,264 @@
+{% extends "base.html" %}
+{% block title %}智能值日配置{% endblock %}
+{% block content %}
+<h4 class="mt-3 mb-3"><i class="bi bi-brush me-2 text-primary"></i>智能值日</h4>
+
+{% include "duty/_step_indicator.html" with step=1 labels="配置任务与人数,自动生成排班,手动调整,确认存档" %}
+
+<div class="card">
+    <div class="card-header py-2"><i class="bi bi-sliders me-2"></i>第 1 步：配置值日任务与人数</div>
+    <div class="card-body">
+        <form method="post" id="smartDutyForm">
+            {% csrf_token %}
+
+            <div class="row g-3 mb-3">
+                <div class="col-md-4">
+                    <label class="form-label small">方案名称</label>
+                    <input type="text" name="name" class="form-control" value="第{{ today|date:"W" }}周值日表" placeholder="如：第5周值日表">
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label small">开始日期</label>
+                    <input type="date" name="date_start" class="form-control" value="{{ today|date:"Y-m-d" }}" required>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label small">天数</label>
+                    <input type="number" name="day_count" class="form-control" value="5" min="1" max="7">
+                </div>
+                <div class="col-md-2 d-flex align-items-end">
+                    <span class="badge bg-light text-dark py-2 px-3 w-100 text-start">
+                        <i class="bi bi-people me-1"></i>班级 {{ student_count }} 人
+                    </span>
+                </div>
+            </div>
+
+            <label class="form-label small">值日任务（点击标签旁的 × 可移除；「+」可添加自定义任务）</label>
+            <div class="mb-2">
+                <ul class="nav nav-pills duty-tab-list flex-wrap" id="dutyTab" role="tablist">
+                    {% for task in tasks %}
+                    <li class="nav-item duty-tab-item" data-task-id="{{ task.pk }}">
+                        <button class="nav-link {% if forloop.first %}active{% endif %}" data-bs-toggle="tab" data-bs-target="#task-pane-{{ task.pk }}" type="button" role="tab">
+                            {{ task.name }}
+                            <span class="duty-tab-close ms-1" title="移除" data-remove-tab>&times;</span>
+                        </button>
+                    </li>
+                    {% endfor %}
+                    <li class="nav-item">
+                        <button class="nav-link duty-add-tab text-success" type="button" id="addDutyTab">
+                            <i class="bi bi-plus-lg me-1"></i>添加任务
+                        </button>
+                    </li>
+                </ul>
+            </div>
+
+            <div class="tab-content">
+                {% for task in tasks %}
+                <div class="tab-pane fade {% if forloop.first %}show active{% endif %} duty-tab-pane" id="task-pane-{{ task.pk }}" role="tabpanel">
+                    <div class="row g-3 align-items-center py-3">
+                        <div class="col-md-6">
+                            <label class="form-label small">任务名称</label>
+                            <input type="text" class="form-control duty-task-name" value="{{ task.name }}" {% if task.pk %}readonly{% endif %}>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label small">所需人数</label>
+                            <input type="number" class="form-control duty-task-count" value="{{ task.default_people_count }}" min="1" max="10">
+                        </div>
+                        <div class="col-md-3 d-flex align-items-center">
+                            <span class="text-muted small">每人每天只分配一项任务</span>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+                <div class="tab-pane fade duty-tab-pane" id="task-pane-new" role="tabpanel">
+                    <div class="row g-3 align-items-center py-3">
+                        <div class="col-md-6">
+                            <label class="form-label small">新任务名称（如：擦窗台、整理讲台）</label>
+                            <input type="text" class="form-control duty-task-name" id="newTaskName" placeholder="输入自定义任务名称">
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label small">所需人数</label>
+                            <input type="number" class="form-control duty-task-count" value="1" min="1" max="10">
+                        </div>
+                        <div class="col-md-3 d-flex align-items-center">
+                            <button type="button" class="btn btn-success btn-sm" id="confirmNewTask"><i class="bi bi-check-lg"></i> 确认添加</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <template id="dutyTaskTemplate">
+                <li class="nav-item duty-tab-item" data-task-id="">
+                    <button class="nav-link" data-bs-toggle="tab" data-bs-target="#task-pane-custom" type="button" role="tab">
+                        <span class="duty-tab-label">新任务</span>
+                        <span class="duty-tab-close ms-1" title="移除" data-remove-tab>&times;</span>
+                    </button>
+                </li>
+            </template>
+
+            <div class="mt-3 d-flex flex-wrap gap-3 align-items-center">
+                <div class="alert alert-info py-2 mb-0" role="alert">
+                    每天共需 <strong id="totalPeople" class="text-primary">0</strong> 人 / 班级 {{ student_count }} 人
+                    <span id="totalHint" class="ms-2 small"></span>
+                </div>
+            </div>
+
+            <div class="mt-4 text-end">
+                <button type="submit" class="btn btn-primary btn-lg" id="nextStepBtn" disabled>
+                    <i class="bi bi-arrow-right me-1"></i>下一步：自动生成
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function() {
+    const form = document.getElementById('smartDutyForm');
+    const studentCount = parseInt('{{ student_count }}');
+    const totalEl = document.getElementById('totalPeople');
+    const totalHint = document.getElementById('totalHint');
+    const nextBtn = document.getElementById('nextStepBtn');
+    const addTabBtn = document.getElementById('addDutyTab');
+    const newTaskName = document.getElementById('newTaskName');
+    const confirmNewTask = document.getElementById('confirmNewTask');
+    const tabList = document.getElementById('dutyTab');
+    const template = document.getElementById('dutyTaskTemplate');
+
+    // 收集所有任务并返回数组
+    function collectTasks() {
+        const tasks = [];
+        document.querySelectorAll('.duty-tab-item').forEach(function(item) {
+            const paneId = item.querySelector('button').getAttribute('data-bs-target').replace('#', '');
+            const pane = document.getElementById(paneId);
+            if (!pane) return;
+            const nameInput = pane.querySelector('.duty-task-name');
+            const countInput = pane.querySelector('.duty-task-count');
+            const name = (nameInput.value || '').trim();
+            const count = Math.max(1, parseInt(countInput.value) || 1);
+            if (!name) return;
+            tasks.push({ id: item.dataset.taskId || '', name: name, count: count });
+        });
+        return tasks;
+    }
+
+    function recalculate() {
+        const tasks = collectTasks();
+        const total = tasks.reduce(function(sum, t) { return sum + t.count; }, 0);
+        totalEl.textContent = total;
+        if (total === 0) {
+            totalHint.textContent = '请至少配置一项任务';
+            totalHint.className = 'ms-2 small text-danger';
+            nextBtn.disabled = true;
+            return;
+        }
+        if (total > studentCount) {
+            totalHint.textContent = '超出班级人数，需减少人数或任务';
+            totalHint.className = 'ms-2 small text-danger';
+            nextBtn.disabled = true;
+        } else {
+            totalHint.textContent = '可生成';
+            totalHint.className = 'ms-2 small text-success';
+            nextBtn.disabled = false;
+        }
+    }
+
+    // 移除任务标签
+    function removeTab(tabItem) {
+        const btn = tabItem.querySelector('button');
+        const paneId = btn.getAttribute('data-bs-target');
+        const pane = document.getElementById(paneId.replace('#', ''));
+        const wasActive = btn.classList.contains('active');
+        tabItem.remove();
+        if (pane) pane.remove();
+        if (wasActive) {
+            const firstTab = tabList.querySelector('.duty-tab-item button');
+            if (firstTab) {
+                new bootstrap.Tab(firstTab).show();
+            } else {
+                new bootstrap.Tab(addTabBtn).show();
+            }
+        }
+        recalculate();
+    }
+
+    document.querySelectorAll('[data-remove-tab]').forEach(function(close) {
+        close.addEventListener('click', function(e) {
+            e.stopPropagation();
+            e.preventDefault();
+            removeTab(close.closest('.duty-tab-item'));
+        });
+    });
+
+    // 添加自定义任务
+    function addCustomTask() {
+        const name = (newTaskName.value || '').trim();
+        if (!name) { alert('请输入任务名称'); return; }
+        const item = template.content.cloneNode(true).firstElementChild;
+        item.dataset.taskId = '';
+        item.querySelector('.duty-tab-label').textContent = name;
+        tabList.insertBefore(item, addTabBtn.closest('li'));
+
+        const count = Math.max(1, parseInt(document.querySelector('#task-pane-new .duty-task-count').value) || 1);
+        const pane = document.createElement('div');
+        pane.className = 'tab-pane fade duty-tab-pane';
+        pane.id = 'task-pane-custom';
+        pane.innerHTML =
+            '<div class="row g-3 align-items-center py-3">' +
+            '<div class="col-md-6"><label class="form-label small">任务名称</label><input type="text" class="form-control duty-task-name" value="' + name + '"></div>' +
+            '<div class="col-md-3"><label class="form-label small">所需人数</label><input type="number" class="form-control duty-task-count" value="' + count + '" min="1" max="10"></div>' +
+            '<div class="col-md-3 d-flex align-items-center"><span class="text-muted small">每人每天只分配一项任务</span></div>' +
+            '</div>';
+        document.querySelector('.tab-content').appendChild(pane);
+        item.querySelector('button').setAttribute('data-bs-target', '#task-pane-custom');
+
+        item.querySelector('.duty-tab-close').addEventListener('click', function(e) {
+            e.stopPropagation();
+            e.preventDefault();
+            removeTab(item);
+        });
+        pane.addEventListener('input', recalculate);
+        newTaskName.value = '';
+        new bootstrap.Tab(item.querySelector('button')).show();
+        recalculate();
+    }
+    addTabBtn.addEventListener('click', function() { new bootstrap.Tab(document.querySelector('#task-pane-new')).show(); });
+    confirmNewTask.addEventListener('click', addCustomTask);
+
+    // 表单提交前同步隐藏输入
+    form.addEventListener('submit', function(e) {
+        const tasks = collectTasks();
+        if (tasks.length === 0) {
+            e.preventDefault();
+            alert('请至少配置一项任务');
+            return;
+        }
+        const total = tasks.reduce(function(sum, t) { return sum + t.count; }, 0);
+        if (total > studentCount) {
+            e.preventDefault();
+            alert('每天所需总人数超过班级人数，请减少人数或任务');
+            return;
+        }
+        // 移除旧的隐藏字段
+        form.querySelectorAll('.duty-sync-input').forEach(function(el) { el.remove(); });
+        tasks.forEach(function(t) {
+            const idIn = document.createElement('input');
+            idIn.type = 'hidden'; idIn.className = 'duty-sync-input'; idIn.name = 'task_pks[]'; idIn.value = t.id;
+            const nameIn = document.createElement('input');
+            nameIn.type = 'hidden'; nameIn.className = 'duty-sync-input'; nameIn.name = 'names[]'; nameIn.value = t.name;
+            const countIn = document.createElement('input');
+            countIn.type = 'hidden'; countIn.className = 'duty-sync-input'; countIn.name = 'counts[]'; countIn.value = t.count;
+            form.appendChild(idIn);
+            form.appendChild(nameIn);
+            form.appendChild(countIn);
+        });
+    });
+
+    // 初始统计
+    document.querySelectorAll('.duty-tab-pane').forEach(function(pane) {
+        pane.addEventListener('input', recalculate);
+    });
+    recalculate();
+})();
+</script>
+{% endblock %}

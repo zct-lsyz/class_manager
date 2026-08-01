@@ -20,6 +20,9 @@ urlpatterns = [
     path("entry/import-wide/", views.score_import_wide, name="score_import_wide"),
     path("entry/template-wide/", views.score_import_wide_template, name="score_import_wide_template"),
     path("analysis/", views.analysis, name="analysis"),
+    path("analysis/external/import/", views.external_import, name="external_import"),
+    path("analysis/external/template/", views.external_import_template, name="external_import_template"),
+    path("analysis/external/<int:pk>/delete/", views.external_delete, name="external_delete"),
     path("analysis/student/<int:pk>/", views.student_analysis_detail, name="student_analysis_detail"),
     path("subjects/", views.subject_settings, name="subject_settings"),
     # 培优补差

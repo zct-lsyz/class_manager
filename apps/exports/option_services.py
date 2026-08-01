@@ -11,7 +11,7 @@ HEADERS = {
     "reward": ["名称", "默认分值", "分类", "启用", "排序"],
     "dorm_hygiene": ["名称", "满分", "默认扣分", "启用", "排序"],
     "attendance_reason": ["名称", "启用", "排序"],
-    "duty_task": ["名称", "区域", "启用", "排序"],
+    "duty_task": ["名称", "区域", "默认人数", "启用", "排序"],
     "homework_status": ["名称", "积极状态", "启用", "排序"],
 }
 
@@ -35,7 +35,7 @@ def option_template_response(category):
         "reward": ["主动帮助同学", 1, "品德", "是", 0],
         "dorm_hygiene": ["地面", 10, 1, "是", 0],
         "attendance_reason": ["交通拥堵", "是", 0],
-        "duty_task": ["擦黑板", "讲台", "是", 0],
+        "duty_task": ["擦黑板", "讲台", 1, "是", 0],
         "homework_status": ["待订正", "否", "是", 0],
     }
     sheet.append(examples[category])
@@ -77,7 +77,11 @@ def import_options(category, uploaded, school_class):
             AttendanceReason.objects.update_or_create(school_class=school_class, name=name, defaults={"is_active": _bool(values[1]), "sort_order": int(values[2] or 0)})
         elif category == "duty_task":
             from apps.duty.models import DutyTask
-            DutyTask.objects.update_or_create(school_class=school_class, name=name, defaults={"area": str(values[1] or ""), "is_active": _bool(values[2]), "sort_order": int(values[3] or 0)})
+            try:
+                default_count = max(1, int(values[2] or 1))
+            except (TypeError, ValueError):
+                default_count = 1
+            DutyTask.objects.update_or_create(school_class=school_class, name=name, defaults={"area": str(values[1] or ""), "default_people_count": default_count, "is_active": _bool(values[3]), "sort_order": int(values[4] or 0)})
         elif category == "homework_status":
             from apps.homework.models import HomeworkStatus
             HomeworkStatus.objects.update_or_create(school_class=school_class, name=name, defaults={"is_positive": _bool(values[1], False), "is_active": _bool(values[2]), "sort_order": int(values[3] or 0)})

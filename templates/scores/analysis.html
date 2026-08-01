@@ -6,39 +6,193 @@
 
 <form method="get" class="card p-3 mb-3">
     <div class="row g-2 align-items-end">
-        <div class="col-md-4"><label class="form-label small">考试</label>
+        <div class="col-md-3"><label class="form-label small">考试</label>
             <select name="exam_id" class="form-select" onchange="this.form.submit()">
                 <option value="">选择考试</option>
                 {% for e in exams %}<option value="{{ e.pk }}" {% if exam and exam.pk == e.pk %}selected{% endif %}>{{ e.name }}</option>{% endfor %}
             </select>
         </div>
-        <div class="col-md-4"><label class="form-label small">学生趋势</label>
+        <div class="col-md-3"><label class="form-label small">学生趋势</label>
             <select name="student_id" class="form-select" onchange="this.form.submit()">
                 <option value="">选择学生</option>
                 {% for s in student_list %}<option value="{{ s.pk }}" {% if student_id == s.pk|stringformat:'s' %}selected{% endif %}>{{ s.name }}（{{ s.student_id }}）</option>{% endfor %}
             </select>
         </div>
         <div class="col-md-2">{% if selected_student %}<a href="{% url 'scores:student_analysis_detail' selected_student.pk %}" class="btn btn-outline-primary w-100">个人详情</a>{% else %}<button type="button" class="btn btn-outline-secondary w-100" disabled>个人详情</button>{% endif %}</div>
+        <div class="col-md-2">
+            <a href="{% url 'scores:external_import' %}{% if exam %}?exam_id={{ exam.pk }}{% endif %}" class="btn btn-outline-success w-100">
+                <i class="bi bi-collection me-1"></i>导入其他班级
+            </a>
+        </div>
+        <div class="col-md-2">
+            <button type="button" class="btn btn-warning w-100" data-bs-toggle="collapse" data-bs-target="#topStudentPanel">
+                <i class="bi bi-trophy me-1"></i>优生筛选
+            </button>
+        </div>
     </div>
 </form>
 
 {% if exam %}
+<!-- ===== 优生筛选面板 ===== -->
+<div class="card mb-3 collapse {% if is_filtering %}show{% endif %}" id="topStudentPanel">
+    <div class="card-header py-2"><i class="bi bi-trophy me-2 text-warning"></i>优生筛选条件</div>
+    <div class="card-body">
+        <form method="get" class="row g-3">
+            <input type="hidden" name="exam_id" value="{{ exam.pk }}">
+            {% if student_id %}<input type="hidden" name="student_id" value="{{ student_id }}">{% endif %}
+            <div class="col-6 col-md-3">
+                <label class="form-label small">分数 ≥</label>
+                <input type="number" name="score_threshold" class="form-control" min="0" value="{{ criteria.score_threshold|default:'' }}" placeholder="如 130">
+            </div>
+            <div class="col-6 col-md-3">
+                <label class="form-label small">班名次 ≤</label>
+                <input type="number" name="class_rank_threshold" class="form-control" min="1" value="{{ criteria.class_rank_threshold|default:'' }}" placeholder="如 10">
+            </div>
+            <div class="col-6 col-md-3">
+                <label class="form-label small">级部名次 ≤</label>
+                <input type="number" name="grade_rank_threshold" class="form-control" min="1" value="{{ criteria.grade_rank_threshold|default:'' }}" placeholder="如 100">
+            </div>
+            <div class="col-6 col-md-3">
+                <label class="form-label small">市名次 ≤</label>
+                <input type="number" name="city_rank_threshold" class="form-control" min="1" value="{{ criteria.city_rank_threshold|default:'' }}" placeholder="如 500">
+            </div>
+            <div class="col-md-4">
+                <label class="form-label small">条件组合方式</label>
+                <select name="combine_mode" class="form-select">
+                    <option value="any" {% if criteria.combine_mode == 'any' %}selected{% endif %}>满足任一条件即算优生</option>
+                    <option value="all" {% if criteria.combine_mode == 'all' %}selected{% endif %}>需同时满足所有填写的条件</option>
+                </select>
+            </div>
+            <div class="col-md-8 d-flex align-items-end gap-2">
+                <button type="submit" class="btn btn-primary"><i class="bi bi-funnel me-1"></i>应用筛选</button>
+                <a href="{% url 'scores:analysis' %}?exam_id={{ exam.pk }}" class="btn btn-outline-secondary">清除筛选</a>
+            </div>
+        </form>
+        <div class="small text-muted mt-2">
+            <i class="bi bi-info-circle me-1"></i>
+            优生条件按每个科目单独判断：某学生在某个科目满足条件，即计入该科目（及对应班级对比）的统计。
+            {% if is_filtering %}<span class="text-danger">当前已开启优生筛选，以下统计均基于筛选后的优生数据。</span>{% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- ===== 本班整体统计表 ===== -->
 <div class="card mb-3">
-    <div class="card-header">{{ exam.name }} 成绩统计</div>
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <span>{{ exam.name }} 班级整体成绩分析（按科目）</span>
+        {% if is_filtering %}<span class="badge bg-warning text-dark">优生模式</span>{% endif %}
+    </div>
     <div class="card-body p-0 table-responsive">
-        <table class="table mb-0">
-            <thead><tr><th>科目</th><th>满分</th><th>均分</th><th>最高</th><th>最低</th><th>及格率</th><th>优秀率</th></tr></thead>
+        <table class="table table-bordered mb-0 stats-wide-table">
+            <thead>
+                <tr>
+                    <th>科目</th><th>满分</th><th>人数</th>
+                    <th>平均分</th><th>中位数</th><th>方差</th><th>最高分</th><th>最低分</th>
+                    <th>及格率</th><th>优秀率</th>
+                    <th>最高班名次</th><th>最低班名次</th>
+                    <th>最高级部名次</th><th>最低级部名次</th>
+                    <th>最高市名次</th><th>最低市名次</th>
+                </tr>
+            </thead>
             <tbody>
             {% for name, data in analysis_data.items %}
-            <tr><td><strong>{{ name }}</strong></td><td>{{ data.full_score }}</td><td>{{ data.avg }}</td><td>{{ data.max }}</td><td>{{ data.min }}</td><td>{{ data.pass_rate }}%</td><td>{{ data.excellent_rate }}%</td></tr>
-            {% empty %}<tr><td colspan="7" class="text-muted text-center">暂无数据</td></tr>
+            <tr>
+                <td><strong>{{ name }}</strong></td>
+                <td>{{ data.full_score }}</td>
+                <td>{{ data.count }}</td>
+                <td>{{ data.avg }}</td>
+                <td>{% if data.median %}{{ data.median }}{% else %}—{% endif %}</td>
+                <td>{% if data.variance %}{{ data.variance }}{% else %}—{% endif %}</td>
+                <td>{{ data.max|default:"—" }}</td>
+                <td>{{ data.min|default:"—" }}</td>
+                <td>{{ data.pass_rate }}%</td>
+                <td>{{ data.excellent_rate }}%</td>
+                <td>{{ data.max_class_rank|default:"—" }}</td>
+                <td>{{ data.min_class_rank|default:"—" }}</td>
+                <td>{{ data.max_grade_rank|default:"—" }}</td>
+                <td>{{ data.min_grade_rank|default:"—" }}</td>
+                <td>{{ data.max_city_rank|default:"—" }}</td>
+                <td>{{ data.min_city_rank|default:"—" }}</td>
+            </tr>
+            {% empty %}<tr><td colspan="16" class="text-muted text-center">暂无数据</td></tr>
             {% endfor %}
             </tbody>
         </table>
     </div>
 </div>
 
-{% if analysis_data %}
+{% if comparison_classes %}
+<!-- ===== 多班对比 ===== -->
+<div class="card mb-3">
+    <div class="card-header py-2"><i class="bi bi-collection me-2 text-success"></i>多班成绩对比（本班 vs 外部班级）
+        {% if is_filtering %}<span class="badge bg-warning text-dark ms-1">优生模式</span>{% endif %}
+    </div>
+    <div class="card-body">
+        <div class="row g-2 align-items-end mb-2">
+            <div class="col-md-4">
+                <label class="form-label small">对比指标</label>
+                <select id="compareMetricSelect" class="form-select form-select-sm">
+                    <option value="avg">平均分</option>
+                    <option value="variance">方差</option>
+                    <option value="max">最高分</option>
+                    <option value="min">最低分</option>
+                    <option value="max_class_rank">最高班名次</option>
+                    <option value="min_class_rank">最低班名次</option>
+                    <option value="max_grade_rank">最高级部名次</option>
+                    <option value="min_grade_rank">最低级部名次</option>
+                    <option value="max_city_rank">最高市名次</option>
+                    <option value="min_city_rank">最低市名次</option>
+                </select>
+            </div>
+        </div>
+        <canvas id="compareChart" height="220"></canvas>
+    </div>
+</div>
+
+<div class="card mb-3">
+    <div class="card-header py-2">各科多班对比明细</div>
+    <div class="card-body p-0 table-responsive">
+        <table class="table table-bordered mb-0 stats-wide-table">
+            <thead>
+                <tr>
+                    <th rowspan="2">科目</th><th rowspan="2">满分</th>
+                    {% for cc in comparison_classes %}
+                    <th class="text-center" colspan="6">{{ cc.name }}
+                        <small class="fw-normal">{% if cc.school_name %}{{ cc.school_name }}{% elif cc.id %}{% else %}{% endif %}</small>
+                    </th>
+                    {% endfor %}
+                </tr>
+                <tr>
+                    {% for cc in comparison_classes %}
+                    <th>人数</th><th>均分</th><th>方差</th><th>最高</th><th>最低</th><th>最高班名次</th>
+                    {% endfor %}
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in comparison_table %}
+                <tr>
+                    <td><strong>{{ row.subject }}</strong></td>
+                    <td>{{ row.full_score }}</td>
+                    {% for cc in comparison_classes %}
+                    {% if cc.id %}
+                    {% with key="ext_"|add:cc.id %}{% with stats=row.classes|get_item:key %}{% include "scores/_comparison_cells.html" %}{% endwith %}{% endwith %}
+                    {% else %}
+                    {% with key="own" %}{% with stats=row.classes|get_item:key %}{% include "scores/_comparison_cells.html" %}{% endwith %}{% endwith %}
+                    {% endif %}
+                    {% endfor %}
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% else %}
+<div class="alert alert-light border text-muted small">
+    <i class="bi bi-info-circle me-1"></i>
+    尚未导入其他班级成绩。点击上方「导入其他班级」，可导入多个班级并在同一图表中与本班对比平均分、方差、最高/最低分与名次。
+</div>
+{% endif %}
+
 <div class="row">
     <!-- 各科均分柱状图 -->
     <div class="col-md-6">
@@ -64,7 +218,8 @@
 
 {% if rank_distribution %}{{ rank_distribution|json_script:"rank-distribution-data" }}{% endif %}
 {{ band_chart_data|json_script:"band-chart-data" }}
-{% endif %}
+{% if comparison_chart %}{{ comparison_chart|json_script:"comparison-chart-data" }}{% endif %}
+{{ comparison_classes|json_script:"comparison-classes-data" }}
 
 {% if student_trend %}
 <div class="card mt-3">
@@ -190,6 +345,52 @@ const bandChart = new Chart(document.getElementById('bandChart'), {
     options: { responsive: true, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { precision: 0 } } } }
 });
 bandSubjectSelect.addEventListener('change', function() { bandChart.data.datasets[0].data = currentBandData(); bandChart.update(); });
+{% endif %}
+
+{% if comparison_chart %}
+// 多班对比图
+const compareData = JSON.parse(document.getElementById('comparison-chart-data').textContent);
+const classColors = ['#1a73e8', '#28a745', '#f57c00', '#7c3aed', '#dc3545', '#00acc1', '#f9a825', '#5e35b1'];
+const metricLabels = {
+    'avg': '平均分', 'variance': '方差', 'max': '最高分', 'min': '最低分',
+    'max_class_rank': '最高班名次', 'min_class_rank': '最低班名次',
+    'max_grade_rank': '最高级部名次', 'min_grade_rank': '最低级部名次',
+    'max_city_rank': '最高市名次', 'min_city_rank': '最低市名次'
+};
+const compareMetricSelect = document.getElementById('compareMetricSelect');
+const subjectNames = Object.keys(compareData['avg']);
+let compareChart = null;
+function buildCompareChart() {
+    const metric = compareMetricSelect.value;
+    const datasets = [];
+    // 本班
+    const ownValues = subjectNames.map(s => compareData[metric][s].own);
+    datasets.push({ label: '本班', data: ownValues, backgroundColor: classColors[0] });
+    // 外部班级
+    const extKeys = Object.keys(compareData[metric][subjectNames[0]]).filter(k => k.startsWith('ext_'));
+    extKeys.forEach((key, i) => {
+        datasets.push({
+            label: key.replace('ext_', '') + '班',
+            data: subjectNames.map(s => compareData[metric][s][key]),
+            backgroundColor: classColors[(i + 1) % classColors.length]
+        });
+    });
+    if (compareChart) compareChart.destroy();
+    compareChart = new Chart(document.getElementById('compareChart'), {
+        type: 'bar',
+        data: { labels: subjectNames, datasets: datasets },
+        options: {
+            responsive: true,
+            plugins: {
+                legend: { position: 'bottom' },
+                title: { display: true, text: '各科' + metricLabels[metric] + '对比' }
+            },
+            scales: { y: { beginAtZero: true } }
+        }
+    });
+}
+compareMetricSelect.addEventListener('change', buildCompareChart);
+buildCompareChart();
 {% endif %}
 
 {% if rank_distribution %}

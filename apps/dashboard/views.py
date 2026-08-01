@@ -3,6 +3,7 @@ import logging
 from django.contrib.auth.decorators import login_required
 import logging
 
+from django.http import JsonResponse
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib import messages
 from django.utils import timezone
@@ -278,3 +279,92 @@ def warning_detail(request, pk):
         if value >= rule.threshold:
             details.append({"rule": rule, "events": events, "value": value})
     return render(request, "dashboard/warning_detail.html", {"student": student, "details": details})
+
+
+@login_required
+def api_notifications(request):
+    """供 Android App 后台轮询的轻量通知接口。"""
+    today = timezone.localdate()
+    current_class = SchoolClass.objects.filter(is_current=True).first()
+
+    result = {
+        "ok": True,
+        "timestamp": today.isoformat(),
+        "has_current_class": bool(current_class),
+        "today_duty": None,
+        "warning_count": 0,
+        "warnings": [],
+        "today_backup_alert": False,
+    }
+
+    # 今日值日
+    if current_class:
+        try:
+            from apps.duty.models import DutyRoster, DutyRosterEntry, DutyRosterTask
+            roster = DutyRoster.objects.filter(
+                school_class=current_class, status="active", is_current=True,
+                date_start__lte=today, date_end__gte=today,
+            ).first()
+            if roster:
+                day_index = (today - roster.date_start).days
+                if 0 <= day_index < roster.day_count:
+                    roster_tasks = list(
+                        DutyRosterTask.objects.filter(roster=roster)
+                        .select_related("task").order_by("sort_order", "pk")
+                    )
+                    entries = list(
+                        DutyRosterEntry.objects.filter(
+                            roster=roster, day_index=day_index,
+                        ).select_related("student", "task").order_by("task__sort_order", "sort_order")
+                    )
+                    by_task = {}
+                    for entry in entries:
+                        by_task.setdefault(entry.task_id, []).append(entry.student.name)
+                    summary = []
+                    for rt in roster_tasks:
+                        names = by_task.get(rt.task_id, [])
+                        if names:
+                            summary.append(f"{rt.task.name}：{'、'.join(names)}")
+                    result["today_duty"] = {
+                        "roster_name": roster.name,
+                        "summary": "；".join(summary) if summary else "今日无排班",
+                    }
+        except Exception:
+            pass
+
+    # 预警
+    if current_class:
+        try:
+            from apps.attendance.models import WarningRule
+            from apps.students.models import Student
+            from apps.students.history_services import get_student_events
+            rules = WarningRule.objects.filter(school_class=current_class, is_active=True)
+            students = Student.objects.filter(school_class=current_class, is_deleted=False)
+            warning_count = 0
+            warning_items = []
+            for student in students:
+                for rule in rules:
+                    events = _warning_events(student, rule)
+                    value = len(events) if rule.unit == "count" else sum(
+                        abs(event["points"]) for event in events if event["points"] < 0
+                    )
+                    if value >= rule.threshold:
+                        warning_count += 1
+                        warning_items.append(f"{student.name}({rule.name})")
+                        break
+            result["warning_count"] = warning_count
+            result["warnings"] = warning_items[:20]
+        except Exception:
+            pass
+
+    # 备份失败提醒
+    try:
+        from apps.backups.models import BackupRecord
+        failed = BackupRecord.objects.filter(
+            status="failed", created_at__date=today,
+        ).count()
+        result["today_backup_alert"] = failed > 0
+    except Exception:
+        pass
+
+    return JsonResponse(result)

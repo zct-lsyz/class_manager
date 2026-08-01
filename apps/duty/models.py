@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.db import models
 from django.utils import timezone
 
@@ -21,6 +22,7 @@ class DutyTask(BaseModel):
     )
     name = models.CharField("任务名称", max_length=100)
     area = models.CharField("值日区域", max_length=100, blank=True, default="")
+    default_people_count = models.PositiveSmallIntegerField("默认值日人数", default=1)
     is_active = models.BooleanField("启用", default=True)
     sort_order = models.IntegerField("排序", default=0)
 
@@ -118,3 +120,89 @@ class DutyMemberTask(BaseModel):
         verbose_name = "成员值日任务"
         verbose_name_plural = "成员值日任务"
         unique_together = ["group", "student"]
+
+
+class DutyRoster(BaseModel):
+    """智能值日方案（一次完整的自动排班）"""
+    STATUS_CHOICES = [
+        ("draft", "草稿"),
+        ("active", "已生效"),
+        ("archived", "已归档"),
+    ]
+    school_class = models.ForeignKey(
+        SchoolClass, on_delete=models.CASCADE,
+        related_name="duty_rosters", verbose_name="班级",
+    )
+    semester = models.ForeignKey(
+        Semester, on_delete=models.SET_NULL,
+        null=True, blank=True, verbose_name="学期",
+    )
+    name = models.CharField("方案名称", max_length=100)
+    date_start = models.DateField("开始日期")
+    date_end = models.DateField("结束日期")
+    day_count = models.PositiveSmallIntegerField("值日天数")
+    status = models.CharField(
+        "状态", max_length=20, choices=STATUS_CHOICES, default="draft",
+    )
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL,
+        null=True, blank=True, verbose_name="创建人",
+    )
+    is_current = models.BooleanField("当前方案", default=True)
+
+    class Meta:
+        verbose_name = "值日方案"
+        verbose_name_plural = "值日方案"
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return self.name
+
+
+class DutyRosterTask(BaseModel):
+    """方案内每项任务的人数配置"""
+    roster = models.ForeignKey(
+        DutyRoster, on_delete=models.CASCADE,
+        related_name="roster_tasks", verbose_name="值日方案",
+    )
+    task = models.ForeignKey(
+        DutyTask, on_delete=models.CASCADE,
+        related_name="roster_configs", verbose_name="值日任务",
+    )
+    people_count = models.PositiveSmallIntegerField("所需人数", default=1)
+    sort_order = models.IntegerField("排序", default=0)
+
+    class Meta:
+        verbose_name = "方案任务配置"
+        verbose_name_plural = "方案任务配置"
+        ordering = ["sort_order", "pk"]
+        unique_together = ["roster", "task"]
+
+    def __str__(self):
+        return f"{self.roster.name} - {self.task.name}"
+
+
+class DutyRosterEntry(BaseModel):
+    """方案内学生-任务-天分配记录"""
+    roster = models.ForeignKey(
+        DutyRoster, on_delete=models.CASCADE,
+        related_name="entries", verbose_name="值日方案",
+    )
+    task = models.ForeignKey(
+        DutyTask, on_delete=models.CASCADE,
+        related_name="roster_entries", verbose_name="值日任务",
+    )
+    student = models.ForeignKey(
+        Student, on_delete=models.CASCADE,
+        related_name="duty_roster_entries", verbose_name="学生",
+    )
+    day_index = models.PositiveSmallIntegerField("第几天")
+    sort_order = models.IntegerField("组内排序", default=0)
+
+    class Meta:
+        verbose_name = "方案分配记录"
+        verbose_name_plural = "方案分配记录"
+        unique_together = ["roster", "task", "student", "day_index"]
+
+    def __str__(self):
+        return f"{self.roster.name} D{self.day_index} {self.task.name} - {self.student.name}"

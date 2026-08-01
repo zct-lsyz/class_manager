@@ -54,18 +54,16 @@ def validate_students(data_rows):
         name = str(row.get("姓名", "") or "").strip()
         gender = str(row.get("性别", "") or "").strip()
 
-        # 必填检查
-        if not student_id:
-            errors.append({"row": idx, "field": "学号", "value": student_id, "error": "学号不能为空"})
-            continue
-        if not STUDENT_ID_RE.match(student_id):
-            errors.append({"row": idx, "field": "学号", "value": student_id, "error": "学号必须为19位纯数字"})
-            continue
+        # 必填：姓名
         if not name:
             errors.append({"row": idx, "field": "姓名", "value": name, "error": "姓名不能为空"})
             continue
-        # 学号重复
-        if student_id in existing_ids:
+        # 学号格式（非空时校验；为空则允许导入，后续可补录）
+        if student_id and not STUDENT_ID_RE.match(student_id):
+            errors.append({"row": idx, "field": "学号", "value": student_id, "error": "学号必须为19位纯数字"})
+            continue
+        # 学号重复（非空时校验）
+        if student_id and student_id in existing_ids:
             errors.append({"row": idx, "field": "学号", "value": student_id, "error": f"学号 {student_id} 已存在"})
             continue
         # 性别
@@ -94,7 +92,7 @@ def validate_students(data_rows):
 
         valid_rows.append({
             "row": idx,
-            "student_id": student_id,
+            "student_id": student_id or None,
             "name": name,
             "gender": "male" if gender == "男" else "female",
             "birth_date": row.get("出生日期", "") or None,
@@ -108,7 +106,8 @@ def validate_students(data_rows):
             "primary_phone": str(row.get("联系电话", "") or "").strip(),
             "remarks": str(row.get("备注", "") or "").strip(),
         })
-        existing_ids.add(student_id)
+        if student_id:
+            existing_ids.add(student_id)
 
     return valid_rows, errors
 

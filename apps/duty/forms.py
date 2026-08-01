@@ -6,10 +6,13 @@ from apps.students.models import Student
 class DutyTaskForm(forms.ModelForm):
     class Meta:
         model = DutyTask
-        fields = ["name", "area", "is_active", "sort_order"]
+        fields = ["name", "area", "default_people_count", "is_active", "sort_order"]
         widgets = {
             "name": forms.TextInput(attrs={"class": "form-control"}),
             "area": forms.TextInput(attrs={"class": "form-control"}),
+            "default_people_count": forms.NumberInput(
+                attrs={"class": "form-control", "min": 1, "max": 10}
+            ),
             "is_active": forms.CheckboxInput(attrs={"class": "form-check-input"}),
             "sort_order": forms.NumberInput(attrs={"class": "form-control"}),
         }

@@ -85,20 +85,20 @@ def students_template():
     examples = [
         ["2026010100000000001", "张三", "男", "2010-03-15", 175, "左5.0 右4.8",
          "需前排座位", "班长", "1号楼 101", "01", "张先生", "13800138000", "示例行，请删除"],
-        ["2026010100000000002", "李四", "女", "2010-07-22", 162, "",
+        ["", "李四", "女", "2010-07-22", 162, "",
          "", "", "", "", "", "", ""],
     ]
     notes = [
         "填写说明：",
-        "1. 红色表头（学号、姓名、性别）为必填项；",
+        "1. 红色表头（姓名、性别）为必填项，「学号」允许留空，导入后可再补录；",
         "2. 「性别」只能填写：男 或 女；",
         "3. 「出生日期」格式：2010-03-15；",
         "4. 「联系电话」为11位手机号，将默认脱敏显示；",
-        "5. 学号必须为19位纯数字且唯一，重复学号的行会被跳过；",
+        "5. 学号若填写，必须为19位纯数字且唯一，重复学号的行会被跳过；",
         "6. 身高填写50至250之间的整数（单位：厘米）；",
         "7. 导入前请先删除示例行。",
     ]
-    _write_sheet(ws, headers, examples, notes, [14, 10, 8, 12, 10, 18, 16, 12, 16, 8, 12, 14, 20], required_cols=[1, 2, 3])
+    _write_sheet(ws, headers, examples, notes, [14, 10, 8, 12, 10, 18, 16, 12, 16, 8, 12, 14, 20], required_cols=[2, 3])
     return _build_response(wb, "students_import_template.xlsx")
 
 
@@ -148,6 +148,32 @@ def score_import_template(exam_subject=None):
     ]
     _write_sheet(ws, headers, examples, notes, [15, 12, 10, 12], required_cols=[1, 3])
     return _build_response(wb, "score_import_template.xlsx")
+
+
+def external_class_template(exam):
+    """外部班级成绩导入模板（用于多班对比）。"""
+    from apps.scores.models import ExamSubject
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "外部班级成绩"
+
+    headers = ["学生标识"]
+    for es in ExamSubject.objects.filter(exam=exam).select_related("subject").order_by("sort_order"):
+        subject_name = es.subject.name
+        headers.extend([subject_name, f"{subject_name}班名次", f"{subject_name}级名次", f"{subject_name}市名次"])
+
+    examples = [["张三", 95, 1, 10, 50, 88, 3, 25, 120]]
+    notes = [
+        "填写说明：",
+        f"1. 表头已按考试「{exam.name}」的科目生成，请勿修改表头；",
+        "2. 「学生标识」可填学生姓名或编号（仅用于区分，可脱敏）；",
+        "3. 每个科目后的「班名次/级名次/市名次」列可留空（没有就不填）；",
+        "4. 只填写有数据列的科目即可，其余列留空；",
+        "5. 导入前请先删除示例行。",
+    ]
+    col_widths = [14] + [12, 12, 12, 12] * ((len(headers) - 1) // 4)
+    _write_sheet(ws, headers, examples, notes, col_widths)
+    return _build_response(wb, f"external_{exam.pk}_template.xlsx")
 
 
 def sample_students_data_file():

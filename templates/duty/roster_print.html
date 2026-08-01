@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="zh-hans">
+<head>
+<meta charset="UTF-8">
+<title>{{ class_name }} 值日生表</title>
+<style>
+    @page { size: landscape; margin: 12mm; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: "Microsoft YaHei", "SimHei", sans-serif; color: #212529; }
+    .print-header { text-align: center; margin-bottom: 12px; }
+    .print-header h1 { font-size: 22px; margin-bottom: 4px; }
+    .print-header .sub { font-size: 14px; color: #555; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { border: 1px solid #333; padding: 6px 8px; text-align: center; vertical-align: middle; font-size: 13px; }
+    th { background: #e8f0fe; font-size: 14px; }
+    .day-cell { font-weight: bold; width: 120px; background: #f5f7fa; }
+    .actions { text-align: center; margin-bottom: 12px; }
+    .actions button { padding: 8px 24px; font-size: 15px; cursor: pointer; }
+    @media print {
+        .actions { display: none; }
+    }
+</style>
+</head>
+<body>
+<div class="actions">
+    <button onclick="window.print()">🖨️ 打印 / 另存为 PDF</button>
+</div>
+<div class="print-header">
+    <h1>{{ class_name }} 值日生表</h1>
+    <div class="sub">{{ roster.name }} &nbsp;|&nbsp; {{ roster.date_start }} ~ {{ roster.date_end }}</div>
+</div>
+<table>
+    <thead>
+        <tr>
+            <th>日期</th>
+            {% for rt in roster_tasks %}
+            <th>{{ rt.task.name }}<br><small style="font-weight:normal">（{{ rt.people_count }} 人）</small></th>
+            {% endfor %}
+        </tr>
+    </thead>
+    <tbody>
+        {% for day in days %}
+        <tr>
+            <td class="day-cell">{{ day.date_label }}</td>
+            {% for task in day.tasks %}
+            <td>
+                {% for student in task.students %}{{ student.name }}{% if not forloop.last %}、{% endif %}{% empty %}—{% endfor %}
+            </td>
+            {% endfor %}
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+</body>
+</html>

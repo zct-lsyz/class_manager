@@ -99,8 +99,8 @@ def collect_module_data(module, current_class):
             queryset = DutyTask.objects.all()
             if current_class:
                 queryset = queryset.filter(school_class=current_class)
-            rows = [[item.name, item.area, item.is_active, item.sort_order] for item in queryset]
-            return _result(rows, ["任务", "区域", "启用", "排序"], "值日任务", "duty_tasks.xlsx")
+            rows = [[item.name, item.area, item.default_people_count, item.is_active, item.sort_order] for item in queryset]
+            return _result(rows, ["任务", "区域", "默认人数", "启用", "排序"], "值日任务", "duty_tasks.xlsx")
         if module == "duty_groups":
             queryset = DutyGroup.objects.select_related("leader").prefetch_related("members", "tasks")
             if current_class:
