@@ -28,8 +28,8 @@ class EmailVerificationToken(models.Model):
 
     @classmethod
     def create_for_user(cls, user, device_id, device_name, purpose="device_verify", ttl_minutes=10):
-        """生成一个验证令牌并返回 token 字符串。"""
-        token = secrets.token_hex(16)
+        """生成一个验证令牌并返回 6 位数字验证码。"""
+        token = str(secrets.randbelow(900000) + 100000)
         cls.objects.create(
             user=user,
             token=token,
