@@ -1,4 +1,4 @@
-import logging
+﻿import logging
 
 from django.contrib.auth.decorators import login_required
 import logging
@@ -8,6 +8,7 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib import messages
 from django.utils import timezone
 
+from apps.classes.utils import get_current_class
 from apps.classes.models import SchoolClass, Semester
 from apps.classes.decorators import require_current_class
 
@@ -31,7 +32,7 @@ def index(request):
     today = timezone.localdate()
 
     # 当前班级和学期
-    current_class = SchoolClass.objects.filter(is_current=True).first()
+    current_class = get_current_class(request.user)
     current_semester = Semester.objects.filter(
         school_class=current_class, is_current=True,
     ).first() if current_class else None
@@ -246,7 +247,7 @@ def index(request):
 def warnings(request):
     from apps.attendance.models import WarningRule
     from apps.students.models import Student
-    current_class = SchoolClass.objects.filter(is_current=True).first()
+    current_class = get_current_class(request.user)
     if request.method == "POST":
         try:
             threshold = int(request.POST.get("threshold", "2"))
@@ -304,7 +305,7 @@ def warning_detail(request, pk):
 def api_notifications(request):
     """供 Android App 后台轮询的轻量通知接口。"""
     today = timezone.localdate()
-    current_class = SchoolClass.objects.filter(is_current=True).first()
+    current_class = get_current_class(request.user)
 
     result = {
         "ok": True,

@@ -1,4 +1,4 @@
-from django.contrib.auth.models import User
+﻿from django.contrib.auth.models import User
 from django.test import TestCase
 from django.urls import reverse
 
@@ -15,7 +15,7 @@ class SeatingFeatureTests(TestCase):
     def setUp(self):
         self.user = User.objects.create_user("seat-manager", password="test-password")
         self.client.force_login(self.user)
-        self.school_class = SchoolClass.objects.create(name="高一(1)班", is_current=True)
+        self.school_class = SchoolClass.objects.create(created_by=self.user, name="高一(1)班", is_current=True)
         self.semester = Semester.objects.create(
             school_class=self.school_class, academic_year="2026-2027",
             semester_type="first", is_current=True,

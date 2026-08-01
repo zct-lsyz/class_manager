@@ -1,4 +1,4 @@
-from django.contrib import messages
+﻿from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.shortcuts import render, redirect, get_object_or_404
 from django.core.paginator import Paginator
@@ -6,6 +6,7 @@ from django.utils import timezone
 
 from apps.discipline.models import ConfigurableItem, ClassroomDisciplineRecord, DormDisciplineRecord
 from apps.discipline.forms import ConfigurableItemForm, ClassroomDisciplineForm, DormDisciplineForm
+from apps.classes.utils import get_current_class
 from apps.classes.models import SchoolClass, Semester
 from apps.classes.decorators import require_current_class
 from apps.audit.services import soft_delete
@@ -22,7 +23,7 @@ def get_client_ip(request):
 @require_current_class
 def classroom_items(request):
     """课堂纪律条目配置"""
-    current_class = SchoolClass.objects.filter(is_current=True).first()
+    current_class = get_current_class(request.user)
     items = ConfigurableItem.objects.filter(
         school_class=current_class, module="classroom_discipline"
     ) if current_class else []
@@ -49,7 +50,7 @@ def classroom_items(request):
 @login_required
 def classroom_list(request):
     """课堂纪律列表"""
-    current_class = SchoolClass.objects.filter(is_current=True).first()
+    current_class = get_current_class(request.user)
     records = ClassroomDisciplineRecord.objects.filter(
         school_class=current_class, is_deleted=False
     ).select_related("student", "item").order_by("-date") if current_class else []
@@ -65,7 +66,7 @@ def classroom_list(request):
 @require_current_class
 def classroom_create(request):
     """登记课堂纪律"""
-    current_class = SchoolClass.objects.filter(is_current=True).first()
+    current_class = get_current_class(request.user)
     current_semester = Semester.objects.filter(
         school_class=current_class, is_current=True,
     ).first()
@@ -134,7 +135,7 @@ def classroom_follow_up(request, pk):
 @require_current_class
 def dorm_items(request):
     """宿舍纪律条目配置"""
-    current_class = SchoolClass.objects.filter(is_current=True).first()
+    current_class = get_current_class(request.user)
     items = ConfigurableItem.objects.filter(
         school_class=current_class, module="dorm_discipline"
     ) if current_class else []
@@ -161,7 +162,7 @@ def dorm_items(request):
 @login_required
 def dorm_list(request):
     """宿舍纪律列表"""
-    current_class = SchoolClass.objects.filter(is_current=True).first()
+    current_class = get_current_class(request.user)
     records = DormDisciplineRecord.objects.filter(
         school_class=current_class, is_deleted=False
     ).select_related("student", "item", "dorm_room").order_by("-date") if current_class else []
@@ -176,7 +177,7 @@ def dorm_list(request):
 @require_current_class
 def dorm_create(request):
     """登记宿舍纪律"""
-    current_class = SchoolClass.objects.filter(is_current=True).first()
+    current_class = get_current_class(request.user)
     current_semester = Semester.objects.filter(
         school_class=current_class, is_current=True,
     ).first()
@@ -242,7 +243,7 @@ def dorm_follow_up(request, pk):
 @login_required
 def item_edit(request, pk):
     """编辑课堂或宿舍纪律条目。"""
-    current_class = SchoolClass.objects.filter(is_current=True).first()
+    current_class = get_current_class(request.user)
     item = get_object_or_404(
         ConfigurableItem, pk=pk, school_class=current_class
     )
@@ -271,7 +272,7 @@ def item_edit(request, pk):
 @login_required
 def item_delete(request, pk):
     """删除可配置条目"""
-    current_class = SchoolClass.objects.filter(is_current=True).first()
+    current_class = get_current_class(request.user)
     item = get_object_or_404(ConfigurableItem, pk=pk, school_class=current_class)
     module = item.module
     if request.method == "POST":

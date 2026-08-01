@@ -1,4 +1,4 @@
-"""原卷小分表分析服务测试。"""
+﻿"""原卷小分表分析服务测试。"""
 import json
 import tempfile
 from pathlib import Path
@@ -16,7 +16,9 @@ from apps.students.models import Student
 class ExamScoreSheetTests(TestCase):
 
     def setUp(self):
-        self.school_class = SchoolClass.objects.create(name="高一(1)班", is_current=True)
+        from django.contrib.auth import get_user_model
+        self.user = get_user_model().objects.create_user(username="test-exam", password="pass")
+        self.school_class = SchoolClass.objects.create(created_by=self.user, name="高一(1)班", is_current=True)
         Student.objects.create(
             school_class=self.school_class, student_id="2026001", name="张三", gender="male",
         )

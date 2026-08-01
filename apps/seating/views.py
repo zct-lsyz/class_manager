@@ -1,4 +1,4 @@
-from django.contrib import messages
+﻿from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.shortcuts import render, redirect, get_object_or_404
 from django.core.paginator import Paginator
@@ -8,6 +8,7 @@ from django.utils import timezone
 
 from apps.seating.models import ClassroomLayout, SeatPlan, SeatAssignment
 from apps.seating.forms import ClassroomLayoutForm, SeatPlanForm
+from apps.classes.utils import get_current_class
 from apps.classes.models import SchoolClass, Semester
 from apps.students.models import Student
 from apps.audit.models import OperationLog
@@ -39,7 +40,7 @@ def _build_grid(layout, assignments):
 @login_required
 def index(request):
     """座位表 - 可视化排座"""
-    current_class = SchoolClass.objects.filter(is_current=True).first()
+    current_class = get_current_class(request.user)
     if current_class:
         rotate_due_plans(school_class=current_class)
     current_plan = SeatPlan.objects.filter(
@@ -87,7 +88,7 @@ def index(request):
 @login_required
 def layout_settings(request):
     """教室布局设置"""
-    current_class = SchoolClass.objects.filter(is_current=True).first()
+    current_class = get_current_class(request.user)
     layouts = ClassroomLayout.objects.filter(school_class=current_class) if current_class else []
     current_layout = layouts.filter(is_current=True).first() if current_class else None
 
@@ -122,7 +123,7 @@ def layout_settings(request):
 @login_required
 def plan_create(request):
     """创建新座位方案"""
-    current_class = SchoolClass.objects.filter(is_current=True).first()
+    current_class = get_current_class(request.user)
     if not current_class:
         messages.error(request, "请先设置当前班级。")
         return redirect("seating:index")
@@ -162,7 +163,7 @@ def plan_activate(request, pk):
 @transaction.atomic
 def save_plan(request):
     """保存座位分配"""
-    current_class = SchoolClass.objects.filter(is_current=True).first()
+    current_class = get_current_class(request.user)
     plan = SeatPlan.objects.filter(school_class=current_class, is_active=True).first()
     if not plan:
         messages.error(request, "请先创建座位方案。")
@@ -217,7 +218,7 @@ def save_plan(request):
 @transaction.atomic
 def auto_arrange(request):
     """按用户优先级执行确定性智能排座。"""
-    current_class = SchoolClass.objects.filter(is_current=True).first()
+    current_class = get_current_class(request.user)
     plan = SeatPlan.objects.filter(school_class=current_class, is_active=True).first()
     if not plan or not plan.layout:
         messages.error(request, "请先创建座位方案并关联教室布局。")
@@ -272,7 +273,7 @@ def auto_arrange(request):
 @login_required
 def print_plan(request):
     """打印当前座位表，仅显示学生姓名。"""
-    current_class = SchoolClass.objects.filter(is_current=True).first()
+    current_class = get_current_class(request.user)
     plan = SeatPlan.objects.filter(school_class=current_class, is_active=True).select_related("layout").first()
     if not plan or not plan.layout:
         messages.error(request, "暂无可打印的座位方案。")

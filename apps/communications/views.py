@@ -1,10 +1,11 @@
-from django.contrib import messages
+﻿from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.shortcuts import render, redirect, get_object_or_404
 from django.core.paginator import Paginator
 
 from apps.communications.models import StudentConversation, HomeSchoolContact, ConcernRecord
 from apps.communications.forms import ConversationForm, HomeSchoolContactForm, ConcernRecordForm
+from apps.classes.utils import get_current_class
 from apps.classes.models import SchoolClass, Semester
 from apps.classes.decorators import require_current_class
 from apps.audit.services import soft_delete
@@ -13,7 +14,7 @@ from apps.audit.services import soft_delete
 @login_required
 def conversations(request):
     """学生谈话列表"""
-    current_class = SchoolClass.objects.filter(is_current=True).first()
+    current_class = get_current_class(request.user)
     records = StudentConversation.objects.filter(
         school_class=current_class, is_deleted=False
     ).select_related("student").order_by("-date") if current_class else []
@@ -29,7 +30,7 @@ def conversations(request):
 @require_current_class
 def conversation_create(request):
     """新建谈话记录"""
-    current_class = SchoolClass.objects.filter(is_current=True).first()
+    current_class = get_current_class(request.user)
     current_semester = Semester.objects.filter(
         school_class=current_class, is_current=True,
     ).first()
@@ -66,7 +67,7 @@ def conversation_delete(request, pk):
 @login_required
 def home_school(request):
     """家校沟通列表"""
-    current_class = SchoolClass.objects.filter(is_current=True).first()
+    current_class = get_current_class(request.user)
     records = HomeSchoolContact.objects.filter(
         school_class=current_class, is_deleted=False
     ).select_related("student").order_by("-contact_date") if current_class else []
@@ -82,7 +83,7 @@ def home_school(request):
 @require_current_class
 def home_school_create(request):
     """新建家校沟通"""
-    current_class = SchoolClass.objects.filter(is_current=True).first()
+    current_class = get_current_class(request.user)
     current_semester = Semester.objects.filter(
         school_class=current_class, is_current=True,
     ).first()
@@ -107,7 +108,7 @@ def home_school_create(request):
 @login_required
 def concerns(request):
     """重点关注列表"""
-    current_class = SchoolClass.objects.filter(is_current=True).first()
+    current_class = get_current_class(request.user)
     records = ConcernRecord.objects.filter(
         school_class=current_class
     ).select_related("student").order_by("-created_at") if current_class else []
@@ -129,7 +130,7 @@ def concerns(request):
 @require_current_class
 def concern_create(request):
     """新建重点关注"""
-    current_class = SchoolClass.objects.filter(is_current=True).first()
+    current_class = get_current_class(request.user)
     current_semester = Semester.objects.filter(
         school_class=current_class, is_current=True,
     ).first()

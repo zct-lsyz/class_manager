@@ -1,9 +1,10 @@
-from django.contrib import messages
+﻿from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.shortcuts import render, redirect, get_object_or_404
 from django.utils import timezone
 from django.db.models import Q
 
+from apps.classes.utils import get_current_class
 from apps.classes.models import (
     SchoolClass, Semester, CommitteeRole, CommitteeMember, StudyGroup,
     CourseScheduleEntry, CoursePeriod,
@@ -25,8 +26,8 @@ def get_client_ip(request):
 @login_required
 def settings(request):
     """班级与学期设置"""
-    classes = SchoolClass.objects.all()
-    semesters = Semester.objects.select_related("school_class").all()
+    classes = SchoolClass.objects.filter(created_by=request.user)
+    semesters = Semester.objects.select_related("school_class").filter(school_class__created_by=request.user)
 
     class_form = SchoolClassForm()
     semester_form = SemesterForm()
@@ -47,10 +48,12 @@ def class_create(request):
     if request.method == "POST":
         form = SchoolClassForm(request.POST)
         if form.is_valid():
-            cls = form.save()
-            # 如果设为当前班级，清除其他班级的 current 标志
+            cls = form.save(commit=False)
+            cls.created_by = request.user
+            cls.save()
+            # 如果设为当前班级，清除同一用户其他班级的 current 标志
             if cls.is_current:
-                SchoolClass.objects.exclude(pk=cls.pk).update(is_current=False)
+                SchoolClass.objects.filter(created_by=request.user).exclude(pk=cls.pk).update(is_current=False)
             messages.success(request, f"班级「{cls.name}」创建成功。")
             OperationLog.objects.create(
                 user=request.user, action="create", module="classes",
@@ -150,7 +153,7 @@ def semester_archive(request, pk):
 @login_required
 def committee_list(request):
     """班委名单"""
-    current_class = SchoolClass.objects.filter(is_current=True).first()
+    current_class = get_current_class(request.user)
     current_semester = Semester.objects.filter(
         school_class=current_class, is_current=True,
     ).first() if current_class else None
@@ -174,7 +177,7 @@ def committee_list(request):
 @require_current_class
 def committee_role_create(request):
     """新增班委职务"""
-    current_class = SchoolClass.objects.filter(is_current=True).first()
+    current_class = get_current_class(request.user)
     if request.method == "POST":
         name = request.POST.get("name", "").strip()
         description = request.POST.get("description", "").strip()
@@ -192,7 +195,7 @@ def committee_role_create(request):
 @require_current_class
 def committee_member_create(request):
     """任命班委"""
-    current_class = SchoolClass.objects.filter(is_current=True).first()
+    current_class = get_current_class(request.user)
     current_semester = Semester.objects.filter(
         school_class=current_class, is_current=True,
     ).first()
@@ -225,7 +228,7 @@ def committee_member_create(request):
 @login_required
 def committee_member_remove(request, pk):
     """卸任班委"""
-    current_class = SchoolClass.objects.filter(is_current=True).first()
+    current_class = get_current_class(request.user)
     member = get_object_or_404(
         CommitteeMember, pk=pk, role__school_class=current_class,
     )
@@ -251,7 +254,7 @@ def _sync_student_positions(student):
 @login_required
 def study_groups(request):
     """学习小组"""
-    current_class = SchoolClass.objects.filter(is_current=True).first()
+    current_class = get_current_class(request.user)
     groups = StudyGroup.objects.filter(
         school_class=current_class, is_active=True
     ).select_related("leader").prefetch_related("members") if current_class else []
@@ -272,7 +275,7 @@ def study_groups(request):
 @require_current_class
 def study_group_create(request):
     """创建学习小组"""
-    current_class = SchoolClass.objects.filter(is_current=True).first()
+    current_class = get_current_class(request.user)
     current_semester = Semester.objects.filter(
         school_class=current_class, is_current=True,
     ).first()
@@ -311,7 +314,7 @@ def study_group_delete(request, pk):
 @require_current_class
 def course_schedule(request):
     """课程表"""
-    current_class = SchoolClass.objects.filter(is_current=True).first()
+    current_class = get_current_class(request.user)
     current_semester = Semester.objects.filter(
         school_class=current_class, is_current=True,
     ).first() if current_class else None

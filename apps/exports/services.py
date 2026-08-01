@@ -1,4 +1,4 @@
-"""
+﻿"""
 通用导出服务
 支持：Excel(.xlsx)、CSV、JSON、ZIP打包导出
 """
@@ -102,9 +102,10 @@ def make_full_export_zip(module_files, filename_prefix, current_class=None):
     全量导出打包 ZIP
     module_files: [(zip内路径, file内容bytes, 记录数), ...]
     """
+    from apps.classes.utils import get_current_class
     from apps.classes.models import SchoolClass, Semester
 
-    current_class = current_class or SchoolClass.objects.filter(is_current=True).first()
+    current_class = current_class or get_current_class(request.user)
     current_semester = Semester.objects.filter(school_class=current_class, is_current=True).first() if current_class else None
 
     buf = io.BytesIO()

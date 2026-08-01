@@ -1,4 +1,4 @@
-import os
+﻿import os
 from pathlib import Path
 
 from django.contrib import messages
@@ -15,6 +15,7 @@ from apps.backups.storage_services import (
     check_storage_alerts, clear_archived_modules, create_media_archive,
     import_media_archives,
 )
+from apps.classes.utils import get_current_class
 from apps.classes.models import SchoolClass
 from apps.audit.models import OperationLog
 
@@ -39,7 +40,7 @@ def index(request):
 def create_backup_view(request):
     """手动创建完整备份"""
     if request.method == "POST":
-        current_class = SchoolClass.objects.filter(is_current=True).first()
+        current_class = get_current_class(request.user)
         try:
             record = create_backup(
                 backup_type="manual",

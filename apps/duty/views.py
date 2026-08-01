@@ -1,4 +1,4 @@
-import io
+﻿import io
 from collections import defaultdict
 
 from django.contrib import messages
@@ -14,6 +14,7 @@ from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 
 from apps.audit.models import OperationLog
 from apps.classes.decorators import require_current_class
+from apps.classes.utils import get_current_class
 from apps.classes.models import SchoolClass, Semester
 from apps.duty.forms import DutyTaskForm, DutyGroupForm, DutyRecordForm
 from apps.duty.models import (
@@ -40,7 +41,7 @@ def get_client_ip(request):
 @login_required
 def index(request):
     """值日管理首页"""
-    current_class = SchoolClass.objects.filter(is_current=True).first()
+    current_class = get_current_class(request.user)
     groups = DutyGroup.objects.filter(
         school_class=current_class, is_active=True
     ).prefetch_related("members", "tasks") if current_class else []
@@ -57,7 +58,7 @@ def index(request):
 @require_current_class
 def task_list(request):
     """值日任务配置"""
-    current_class = SchoolClass.objects.filter(is_current=True).first()
+    current_class = get_current_class(request.user)
     tasks = DutyTask.objects.filter(school_class=current_class) if current_class else []
 
     if request.method == "POST":
@@ -77,7 +78,7 @@ def task_list(request):
 
 @login_required
 def task_delete(request, pk):
-    current_class = SchoolClass.objects.filter(is_current=True).first()
+    current_class = get_current_class(request.user)
     task = get_object_or_404(DutyTask, pk=pk, school_class=current_class)
     if request.method == "POST":
         if task.duty_groups.exists() or task.member_assignments.exists():
@@ -94,7 +95,7 @@ def task_delete(request, pk):
 @require_current_class
 def group_create(request):
     """创建值日小组"""
-    current_class = SchoolClass.objects.filter(is_current=True).first()
+    current_class = get_current_class(request.user)
     if request.method == "POST":
         form = DutyGroupForm(request.POST, current_class=current_class)
         if form.is_valid():
@@ -113,7 +114,7 @@ def group_create(request):
 @login_required
 def group_edit(request, pk):
     """修改值日小组及每位成员的任务"""
-    current_class = SchoolClass.objects.filter(is_current=True).first()
+    current_class = get_current_class(request.user)
     group = get_object_or_404(DutyGroup, pk=pk, school_class=current_class)
     if request.method == "POST":
         form = DutyGroupForm(request.POST, instance=group, current_class=current_class)
@@ -204,7 +205,7 @@ def group_detail(request, pk):
 # ============ 智能值日 ============
 
 def _current_class(request):
-    return SchoolClass.objects.filter(is_current=True).first()
+    return get_current_class(request.user)
 
 
 def _get_roster_or_404(request, pk):

@@ -1,4 +1,4 @@
-"""
+﻿"""
 AI 成绩分析视图
 - 设置页：API Key + 模型 + 九科提示词（可折叠逐科编辑）
 - 生成页：调用模型返回分析结果并保存记录
@@ -14,6 +14,7 @@ from django.views.decorators.http import require_POST
 from apps.scores.ai_models import AIAnalysisConfig, AIAnalysisRecord
 from apps.scores.ai_prompts import get_default_prompts, get_subject_names
 from apps.scores import ai_services
+from apps.classes.utils import get_current_class
 from apps.classes.models import SchoolClass
 from apps.scores.models import Exam, ExamSubject, Score, Subject
 from apps.students.models import Student
@@ -31,7 +32,7 @@ def _get_or_create_config(current_class):
 @login_required
 def ai_settings(request):
     """AI 分析设置页"""
-    current_class = SchoolClass.objects.filter(is_current=True).first()
+    current_class = get_current_class(request.user)
     config = _get_or_create_config(current_class) if current_class else None
 
     if request.method == "POST":
@@ -171,7 +172,7 @@ def _build_subject_data_context(exam, subject_name):
 @require_POST
 def ai_generate(request):
     """生成 AI 分析"""
-    current_class = SchoolClass.objects.filter(is_current=True).first()
+    current_class = get_current_class(request.user)
     config = _get_or_create_config(current_class) if current_class else None
 
     if not config or not config.is_enabled:
@@ -300,7 +301,7 @@ def ai_generate(request):
 @login_required
 def ai_records(request):
     """AI 分析历史记录"""
-    current_class = SchoolClass.objects.filter(is_current=True).first()
+    current_class = get_current_class(request.user)
     records = AIAnalysisRecord.objects.filter(
         school_class=current_class,
     ).select_related("exam", "student").order_by("-created_at")[:50] if current_class else []
@@ -311,7 +312,7 @@ def ai_records(request):
 @login_required
 def ai_record_detail(request, pk):
     """AI 分析记录详情"""
-    current_class = SchoolClass.objects.filter(is_current=True).first()
+    current_class = get_current_class(request.user)
     record = get_object_or_404(
         AIAnalysisRecord.objects.select_related("exam", "student"),
         pk=pk, school_class=current_class,

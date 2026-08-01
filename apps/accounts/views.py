@@ -24,6 +24,7 @@ from apps.accounts.forms import (
 )
 from apps.accounts.models import TrustedDevice, EmailVerificationToken
 from apps.accounts.device import get_device_id, get_device_name, get_client_ip as device_get_ip
+from apps.classes.utils import get_current_class
 from apps.accounts.email import send_verification_email
 from apps.audit.models import OperationLog
 
@@ -138,6 +139,10 @@ def login_view(request):
                     require_https=request.is_secure(),
                 ):
                     next_url = "dashboard:index"
+                # 新用户没有班级 → 引导创建
+                if not get_current_class(user):
+                    messages.info(request, "请先创建您的班级。")
+                    return redirect("classes:settings")
                 return redirect(next_url)
         # 登录失败
         # 检查是否是注册了但没验证邮箱的用户
@@ -355,6 +360,11 @@ def verify_email(request):
         ip_address=get_client_ip(request), success=True,
     )
     messages.success(request, f"验证成功，欢迎回来，{user.username}！")
+    # 新用户没有班级 → 引导创建
+    from apps.classes.utils import get_current_class
+    if not get_current_class(user):
+        messages.info(request, "请先创建您的班级。")
+        return redirect("classes:settings")
     return redirect("dashboard:index")
 
 
@@ -505,3 +515,6 @@ def _cascade_delete_user_data(user):
     # 验证令牌和信任设备
     EmailVerificationToken.objects.filter(user=user).delete()
     TrustedDevice.objects.filter(user=user).delete()
+    # 班级及所有关联数据（学生/考试/成绩/考勤/纪律… CASCADE 自动级联）
+    from apps.classes.models import SchoolClass
+    SchoolClass.objects.filter(created_by=user).delete()

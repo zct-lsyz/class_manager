@@ -1,4 +1,4 @@
-from django.contrib import messages
+﻿from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.shortcuts import render, redirect, get_object_or_404
 from django.core.paginator import Paginator
@@ -13,6 +13,7 @@ from apps.dormitory.forms import (
     DormBuildingForm, DormRoomForm, DormAssignmentForm,
     DormHygieneItemForm, DormHygieneCheckForm,
 )
+from apps.classes.utils import get_current_class
 from apps.classes.models import SchoolClass, Semester
 from apps.classes.decorators import require_current_class
 from apps.students.models import Student
@@ -29,7 +30,7 @@ def get_client_ip(request):
 @login_required
 def index(request):
     """宿舍管理首页"""
-    current_class = SchoolClass.objects.filter(is_current=True).first()
+    current_class = get_current_class(request.user)
     buildings = DormBuilding.objects.filter(school_class=current_class) if current_class else []
     rooms = DormRoom.objects.filter(building__school_class=current_class).select_related("building").prefetch_related("assignments") if current_class else []
 
@@ -52,7 +53,7 @@ def index(request):
 @require_current_class
 def building_create(request):
     """新建宿舍楼"""
-    current_class = SchoolClass.objects.filter(is_current=True).first()
+    current_class = get_current_class(request.user)
     if request.method == "POST":
         form = DormBuildingForm(request.POST)
         if form.is_valid():
@@ -70,7 +71,7 @@ def building_create(request):
 @require_current_class
 def room_create(request):
     """新建宿舍（并自动生成床位）"""
-    current_class = SchoolClass.objects.filter(is_current=True).first()
+    current_class = get_current_class(request.user)
     if request.method == "POST":
         form = DormRoomForm(request.POST)
         if form.is_valid():
@@ -97,7 +98,7 @@ def _generate_beds(room):
 @login_required
 def room_detail(request, pk):
     """宿舍详情：床位列表 + 分配状态"""
-    current_class = SchoolClass.objects.filter(is_current=True).first()
+    current_class = get_current_class(request.user)
     room = get_object_or_404(
         DormRoom, pk=pk, building__school_class=current_class,
     )
@@ -123,7 +124,7 @@ def room_detail(request, pk):
 @transaction.atomic
 def bed_assign(request, pk):
     """分配床位"""
-    current_class = SchoolClass.objects.filter(is_current=True).first()
+    current_class = get_current_class(request.user)
     bed = get_object_or_404(
         DormBed, pk=pk, room__building__school_class=current_class,
     )
@@ -168,7 +169,7 @@ def bed_assign(request, pk):
 @login_required
 def hygiene(request):
     """宿舍卫生检查列表"""
-    current_class = SchoolClass.objects.filter(is_current=True).first()
+    current_class = get_current_class(request.user)
     checks = DormHygieneCheck.objects.filter(
         school_class=current_class, is_deleted=False
     ).select_related("room__building").order_by("-date") if current_class else []
@@ -184,7 +185,7 @@ def hygiene(request):
 @require_current_class
 def hygiene_items(request):
     """卫生检查项目配置"""
-    current_class = SchoolClass.objects.filter(is_current=True).first()
+    current_class = get_current_class(request.user)
     items = DormHygieneItem.objects.filter(school_class=current_class) if current_class else []
 
     if request.method == "POST":
@@ -229,7 +230,7 @@ def hygiene_item_delete(request, pk):
 
 @login_required
 def hygiene_item_edit(request, pk):
-    current_class = SchoolClass.objects.filter(is_current=True).first()
+    current_class = get_current_class(request.user)
     item = get_object_or_404(
         DormHygieneItem, pk=pk, school_class=current_class
     )
@@ -252,7 +253,7 @@ def hygiene_item_edit(request, pk):
 @require_current_class
 def hygiene_create(request):
     """录入卫生检查（含项目得分）"""
-    current_class = SchoolClass.objects.filter(is_current=True).first()
+    current_class = get_current_class(request.user)
     current_semester = Semester.objects.filter(
         school_class=current_class, is_current=True,
     ).first()
@@ -323,7 +324,7 @@ def hygiene_create(request):
 @login_required
 def hygiene_detail(request, pk):
     """卫生检查详情（含项目得分）"""
-    current_class = SchoolClass.objects.filter(is_current=True).first()
+    current_class = get_current_class(request.user)
     check = get_object_or_404(
         DormHygieneCheck.objects.select_related("room__building"),
         pk=pk, school_class=current_class, is_deleted=False,
@@ -334,7 +335,7 @@ def hygiene_detail(request, pk):
 
 @login_required
 def hygiene_delete(request, pk):
-    current_class = SchoolClass.objects.filter(is_current=True).first()
+    current_class = get_current_class(request.user)
     check = get_object_or_404(
         DormHygieneCheck, pk=pk, school_class=current_class, is_deleted=False,
     )
@@ -353,7 +354,7 @@ def hygiene_delete(request, pk):
 def discipline(request):
     """宿舍纪律（列表）"""
     from apps.discipline.models import DormDisciplineRecord
-    current_class = SchoolClass.objects.filter(is_current=True).first()
+    current_class = get_current_class(request.user)
     records = DormDisciplineRecord.objects.filter(
         school_class=current_class, is_deleted=False
     ).select_related("student", "item", "dorm_room").order_by("-date") if current_class else []
@@ -371,7 +372,7 @@ def discipline_create(request):
     """登记宿舍纪律"""
     from apps.discipline.models import DormDisciplineRecord
     from apps.discipline.forms import DormDisciplineForm
-    current_class = SchoolClass.objects.filter(is_current=True).first()
+    current_class = get_current_class(request.user)
     current_semester = Semester.objects.filter(
         school_class=current_class, is_current=True,
     ).first()

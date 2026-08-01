@@ -1,4 +1,4 @@
-"""
+﻿"""
 模块数据导出视图
 支持：各模块独立 Excel 导出 + 一键全量导出 ZIP
 """
@@ -15,6 +15,7 @@ from django.utils import timezone
 from django.core.paginator import Paginator
 
 from apps.exports.models import ExportTask
+from apps.classes.utils import get_current_class
 from apps.classes.models import SchoolClass
 from apps.classes.decorators import require_current_class
 from apps.exports.services import (
@@ -36,7 +37,7 @@ def get_client_ip(request):
 @login_required
 def export_center(request):
     """模块数据导出中心"""
-    current_class = SchoolClass.objects.filter(is_current=True).first()
+    current_class = get_current_class(request.user)
     tasks = ExportTask.objects.filter(school_class=current_class).order_by("-created_at")[:20] if current_class else []
 
     modules = [(key, name) for key, name, _path in MODULE_EXPORTS]
@@ -63,7 +64,7 @@ def option_import(request, category):
         "homework_status": "homework:status_settings",
     }
     if request.method == "POST" and request.FILES.get("file"):
-        current_class = SchoolClass.objects.filter(is_current=True).first()
+        current_class = get_current_class(request.user)
         try:
             count = import_options(category, request.FILES["file"], current_class)
             messages.success(request, f"已导入或更新 {count} 个选项。")
@@ -75,7 +76,7 @@ def option_import(request, category):
 @login_required
 def export_module(request, module):
     """导出指定模块数据（Excel）"""
-    current_class = SchoolClass.objects.filter(is_current=True).first()
+    current_class = get_current_class(request.user)
     from apps.audit.models import OperationLog as Log
 
     if not current_class:
@@ -308,7 +309,7 @@ def _collect_module_data(module, current_class):
 @login_required
 def full_export(request):
     """一键全量导出所有模块（ZIP）"""
-    current_class = SchoolClass.objects.filter(is_current=True).first()
+    current_class = get_current_class(request.user)
 
     if not current_class:
         messages.error(request, "请先设置当前班级。")
@@ -389,7 +390,7 @@ def template_download(request, template_type):
 @require_current_class
 def import_data(request):
     """数据导入：上传 → 预览 → 确认 → 正式导入"""
-    current_class = SchoolClass.objects.filter(is_current=True).first()
+    current_class = get_current_class(request.user)
     import_type = request.GET.get("type", "student_info")
 
     # 确认导入

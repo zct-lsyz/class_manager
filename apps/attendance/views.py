@@ -1,4 +1,4 @@
-from django.contrib import messages
+﻿from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.shortcuts import render, redirect, get_object_or_404
 from django.core.paginator import Paginator
@@ -7,6 +7,7 @@ from django.utils import timezone
 
 from apps.attendance.models import AttendanceRecord, AttendanceReason
 from apps.attendance.forms import AttendanceForm
+from apps.classes.utils import get_current_class
 from apps.classes.models import SchoolClass, Semester
 from apps.classes.decorators import require_current_class
 from apps.students.models import Student
@@ -15,7 +16,7 @@ from apps.students.models import Student
 @login_required
 def index(request):
     """考勤管理首页"""
-    current_class = SchoolClass.objects.filter(is_current=True).first()
+    current_class = get_current_class(request.user)
     current_semester = Semester.objects.filter(
         school_class=current_class, is_current=True,
     ).first() if current_class else None
@@ -71,7 +72,7 @@ def index(request):
 @require_current_class
 def create(request):
     """录入考勤"""
-    current_class = SchoolClass.objects.filter(is_current=True).first()
+    current_class = get_current_class(request.user)
     if request.method == "POST":
         form = AttendanceForm(request.POST, request.FILES, current_class=current_class)
         if form.is_valid():
@@ -94,7 +95,7 @@ def create(request):
 @login_required
 def edit(request, pk):
     """修改单个学生的异常考勤"""
-    current_class = SchoolClass.objects.filter(is_current=True).first()
+    current_class = get_current_class(request.user)
     record = get_object_or_404(AttendanceRecord, pk=pk, school_class=current_class)
     if request.method == "POST":
         form = AttendanceForm(
@@ -113,7 +114,7 @@ def edit(request, pk):
 @login_required
 @require_current_class
 def reasons(request):
-    current_class = SchoolClass.objects.filter(is_current=True).first()
+    current_class = get_current_class(request.user)
     if request.method == "POST":
         name = request.POST.get("name", "").strip()
         if name and current_class:
@@ -127,7 +128,7 @@ def reasons(request):
 
 @login_required
 def reason_delete(request, pk):
-    current_class = SchoolClass.objects.filter(is_current=True).first()
+    current_class = get_current_class(request.user)
     item = get_object_or_404(AttendanceReason, pk=pk, school_class=current_class)
     if request.method == "POST":
         item.delete()

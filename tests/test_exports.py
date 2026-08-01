@@ -1,4 +1,4 @@
-"""
+﻿"""
 导入导出服务测试
 """
 import io
@@ -17,7 +17,9 @@ class ImportServiceTests(TestCase):
     """导入服务测试"""
 
     def setUp(self):
-        self.cls = SchoolClass.objects.create(name="高一(1)班", is_current=True)
+        from django.contrib.auth import get_user_model
+        self.user = get_user_model().objects.create_user(username="test-import", password="pass")
+        self.cls = SchoolClass.objects.create(created_by=self.user, name="高一(1)班", is_current=True)
 
     def _make_excel(self, headers, rows):
         """生成测试 Excel 文件的类文件对象"""
@@ -76,6 +78,10 @@ class ImportServiceTests(TestCase):
 class ExportServiceTests(TestCase):
     """导出服务测试"""
 
+    def setUp(self):
+        from django.contrib.auth import get_user_model
+        self.user = get_user_model().objects.create_user(username="test-export-svc", password="pass")
+
     def test_fmt_helper(self):
         """格式化辅助函数"""
         self.assertEqual(fmt(None), "-")
@@ -99,7 +105,7 @@ class ExportServiceTests(TestCase):
         self.assertEqual(ws.cell(2, 2).value, "张三")
 
     def test_every_registered_module_can_be_collected(self):
-        school_class = SchoolClass.objects.create(name="导出测试班", is_current=True)
+        school_class = SchoolClass.objects.create(created_by=self.user, name="导出测试班", is_current=True)
         for key, _name, _path in MODULE_EXPORTS:
             rows, headers, sheet_name, filename = collect_module_data(key, school_class)
             self.assertIsInstance(rows, list)

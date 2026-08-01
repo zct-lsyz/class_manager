@@ -1,4 +1,4 @@
-"""
+﻿"""
 待办事项 + 到期通知 API 测试
 """
 from datetime import timedelta
@@ -18,7 +18,7 @@ class TodoItemTests(TestCase):
     def setUp(self):
         self.user = get_user_model().objects.create_user(username="todo", password="pass")
         self.client.force_login(self.user)
-        self.cls = SchoolClass.objects.create(name="高一(1)班", is_current=True)
+        self.cls = SchoolClass.objects.create(created_by=self.user, name="高一(1)班", is_current=True)
         self.sem = Semester.objects.create(
             school_class=self.cls, academic_year="2026-2027", semester_type="first", is_current=True,
         )
@@ -85,7 +85,7 @@ class TodoNotificationApiTests(TestCase):
     def setUp(self):
         self.user = get_user_model().objects.create_user(username="notif", password="pass")
         self.client.force_login(self.user)
-        self.cls = SchoolClass.objects.create(name="高一(2)班", is_current=True)
+        self.cls = SchoolClass.objects.create(created_by=self.user, name="高一(2)班", is_current=True)
         self.sem = Semester.objects.create(
             school_class=self.cls, academic_year="2026-2027", semester_type="first", is_current=True,
         )

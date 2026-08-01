@@ -1,4 +1,4 @@
-"""完整备份服务测试。"""
+﻿"""完整备份服务测试。"""
 import json
 import sqlite3
 import tempfile
@@ -97,7 +97,7 @@ class MediaArchiveTests(TestCase):
             temp_dir = Path(temp_dir_name)
             media_root = temp_dir / "media"
             archive_dir = temp_dir / "archives"
-            school_class = SchoolClass.objects.create(name="高一(1)班")
+            school_class = SchoolClass.objects.create(created_by=self.user, name="高一(1)班")
             with override_settings(MEDIA_ROOT=media_root), patch(
                 "apps.backups.storage_services.ARCHIVE_DIR", archive_dir,
             ):

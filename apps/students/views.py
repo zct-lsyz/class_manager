@@ -1,4 +1,4 @@
-from django.contrib import messages
+﻿from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.shortcuts import render, redirect, get_object_or_404
 from django.core.paginator import Paginator
@@ -6,6 +6,7 @@ from django.db.models import Q, Sum
 
 from apps.students.models import Student, Guardian
 from apps.students.forms import StudentForm, GuardianForm
+from apps.classes.utils import get_current_class
 from apps.classes.models import SchoolClass
 from apps.audit.models import OperationLog
 
@@ -65,7 +66,7 @@ def student_create(request):
         if form.is_valid():
             student = form.save(commit=False)
             if not student.school_class:
-                student.school_class = SchoolClass.objects.filter(is_current=True).first()
+                student.school_class = get_current_class(request.user)
             student.save()
             messages.success(request, f"学生「{student.name}」添加成功。")
             OperationLog.objects.create(
@@ -79,7 +80,7 @@ def student_create(request):
     else:
         form = StudentForm()
         # 默认选中当前班级
-        current_class = SchoolClass.objects.filter(is_current=True).first()
+        current_class = get_current_class(request.user)
         if current_class:
             form.fields["school_class"].initial = current_class.pk
     return render(request, "students/student_form.html", {"form": form, "title": "新增学生"})
@@ -281,7 +282,7 @@ def history_browser(request, module):
     from apps.students.history_services import get_student_events
     if module not in HISTORY_MODULES:
         return redirect("students:list")
-    current_class = SchoolClass.objects.filter(is_current=True).first()
+    current_class = get_current_class(request.user)
     students = Student.objects.filter(school_class=current_class, is_deleted=False) if current_class else []
     date_from = request.GET.get("date_from", "")
     date_to = request.GET.get("date_to", "")

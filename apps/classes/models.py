@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.db import models
 from django.utils import timezone
 
@@ -13,6 +14,11 @@ class BaseModel(models.Model):
 
 class SchoolClass(BaseModel):
     """班级"""
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE,
+        related_name="school_classes", verbose_name="创建者",
+        null=True, blank=True,  # 仅为了兼容历史数据迁移，业务逻辑层保证必填
+    )
     name = models.CharField("班级名称", max_length=100)
     grade = models.CharField("年级", max_length=50, blank=True, default="")
     school_name = models.CharField("学校名称", max_length=200, blank=True, default="")
@@ -25,6 +31,11 @@ class SchoolClass(BaseModel):
         verbose_name = "班级"
         verbose_name_plural = "班级"
         ordering = ["sort_order", "name"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["created_by", "name"], name="unique_class_per_user",
+            ),
+        ]
 
     def __str__(self):
         return self.name

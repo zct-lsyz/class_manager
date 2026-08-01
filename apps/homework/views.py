@@ -1,4 +1,4 @@
-from django.contrib import messages
+﻿from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.shortcuts import render, redirect, get_object_or_404
 from django.core.paginator import Paginator
@@ -6,6 +6,7 @@ from django.utils import timezone
 
 from apps.homework.models import HomeworkTask, HomeworkRecord, Subject, HomeworkStatus
 from apps.homework.forms import HomeworkTaskForm, HomeworkRecordForm
+from apps.classes.utils import get_current_class
 from apps.classes.models import SchoolClass, Semester
 from apps.classes.decorators import require_current_class
 from apps.students.models import Student
@@ -14,7 +15,7 @@ from apps.students.models import Student
 @login_required
 def index(request):
     """作业检查首页"""
-    current_class = SchoolClass.objects.filter(is_current=True).first()
+    current_class = get_current_class(request.user)
     current_semester = Semester.objects.filter(
         school_class=current_class, is_current=True,
     ).first() if current_class else None
@@ -35,7 +36,7 @@ def index(request):
 @require_current_class
 def task_create(request):
     """新建作业任务"""
-    current_class = SchoolClass.objects.filter(is_current=True).first()
+    current_class = get_current_class(request.user)
     current_semester = Semester.objects.filter(
         school_class=current_class, is_current=True,
     ).first()
@@ -142,7 +143,7 @@ def task_detail(request, pk):
 @require_current_class
 def status_settings(request):
     """作业状态设置"""
-    current_class = SchoolClass.objects.filter(is_current=True).first()
+    current_class = get_current_class(request.user)
     statuses = HomeworkStatus.objects.filter(school_class=current_class) if current_class else []
 
     if request.method == "POST":
@@ -161,7 +162,7 @@ def status_settings(request):
 
 @login_required
 def status_delete(request, pk):
-    current_class = SchoolClass.objects.filter(is_current=True).first()
+    current_class = get_current_class(request.user)
     status = get_object_or_404(HomeworkStatus, pk=pk, school_class=current_class)
     if request.method == "POST":
         if HomeworkRecord.objects.filter(status=f"custom:{status.pk}").exists():

@@ -11,6 +11,8 @@ class AccountSecurityTests(TestCase):
 
     def setUp(self):
         self.user = User.objects.create_user("teacher", password="strong-test-password")
+        from apps.classes.models import SchoolClass
+        SchoolClass.objects.create(created_by=self.user, name="高一(1)班", is_current=True)
 
     def test_external_next_url_is_rejected(self):
         response = self.client.post(

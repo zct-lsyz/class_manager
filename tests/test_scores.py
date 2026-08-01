@@ -1,4 +1,4 @@
-"""
+﻿"""
 成绩计算相关测试
 """
 import io
@@ -19,7 +19,9 @@ class ScoreCalculationTests(TestCase):
     """成绩计算测试"""
 
     def setUp(self):
-        self.cls = SchoolClass.objects.create(name="高一(1)班", is_current=True)
+        from django.contrib.auth import get_user_model
+        self.user = get_user_model().objects.create_user(username="test-score", password="pass")
+        self.cls = SchoolClass.objects.create(created_by=self.user, name="高一(1)班", is_current=True)
         self.sem = Semester.objects.create(
             school_class=self.cls, academic_year="2026-2027", semester_type="first", is_current=True
         )
@@ -76,7 +78,9 @@ class PointCalculationTests(TestCase):
     """积分计算测试"""
 
     def setUp(self):
-        self.cls = SchoolClass.objects.create(name="高一(1)班", is_current=True)
+        from django.contrib.auth import get_user_model
+        self.user = get_user_model().objects.create_user(username="test-point", password="pass")
+        self.cls = SchoolClass.objects.create(created_by=self.user, name="高一(1)班", is_current=True)
         self.student = Student.objects.create(
             school_class=self.cls, student_id="2026001",
             name="测试学生", gender="female",
@@ -110,7 +114,7 @@ class WideScoreImportTests(TestCase):
     def setUp(self):
         self.user = get_user_model().objects.create_user(username="score-importer", password="pass")
         self.client.force_login(self.user)
-        self.cls = SchoolClass.objects.create(name="高一(3)班", is_current=True)
+        self.cls = SchoolClass.objects.create(created_by=self.user, name="高一(3)班", is_current=True)
         self.sem = Semester.objects.create(
             school_class=self.cls, academic_year="2026-2027", semester_type="first", is_current=True,
         )

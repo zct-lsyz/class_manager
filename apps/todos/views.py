@@ -1,4 +1,4 @@
-from datetime import datetime
+﻿from datetime import datetime
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
@@ -6,6 +6,7 @@ from django.shortcuts import redirect, get_object_or_404
 from django.utils import timezone
 
 from apps.classes.decorators import require_current_class
+from apps.classes.utils import get_current_class
 from apps.classes.models import SchoolClass
 from apps.todos.models import TodoItem
 
@@ -26,7 +27,7 @@ def todo_add(request):
             deadline = timezone.make_aware(deadline)
         except (ValueError, TypeError):
             deadline = None
-    cls = SchoolClass.objects.filter(is_current=True).first()
+    cls = get_current_class(request.user)
     TodoItem.objects.create(
         school_class=cls, created_by=request.user, title=title, deadline=deadline,
     )

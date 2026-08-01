@@ -1,4 +1,4 @@
-from django.contrib import messages
+﻿from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.shortcuts import render, redirect, get_object_or_404
 from django.core.paginator import Paginator
@@ -19,6 +19,7 @@ from apps.scores.analysis_services import (
 )
 from apps.classes.subjects import Subject
 from apps.classes.decorators import require_current_class
+from apps.classes.utils import get_current_class
 from apps.classes.models import SchoolClass, Semester
 from apps.audit.services import soft_delete
 from apps.audit.models import OperationLog
@@ -146,7 +147,7 @@ def get_client_ip(request):
 @login_required
 def exam_list(request):
     """考试管理"""
-    current_class = SchoolClass.objects.filter(is_current=True).first()
+    current_class = get_current_class(request.user)
     exams = Exam.objects.filter(school_class=current_class, is_deleted=False).order_by("-date") if current_class else []
 
     paginator = Paginator(exams, 20)
@@ -159,7 +160,7 @@ def exam_list(request):
 @login_required
 def exam_create(request):
     """新建考试"""
-    current_class = SchoolClass.objects.filter(is_current=True).first()
+    current_class = get_current_class(request.user)
     current_semester = Semester.objects.filter(
         school_class=current_class, is_current=True,
     ).first() if current_class else None
@@ -189,7 +190,7 @@ def exam_create(request):
 @login_required
 def exam_detail(request, pk):
     """考试详情：科目管理 + 发布状态"""
-    current_class = SchoolClass.objects.filter(is_current=True).first()
+    current_class = get_current_class(request.user)
     exam = get_object_or_404(
         Exam.objects.select_related("semester"),
         pk=pk, school_class=current_class, is_deleted=False,
@@ -220,7 +221,7 @@ def exam_detail(request, pk):
 
 @login_required
 def exam_delete(request, pk):
-    current_class = SchoolClass.objects.filter(is_current=True).first()
+    current_class = get_current_class(request.user)
     exam = get_object_or_404(
         Exam, pk=pk, school_class=current_class, is_deleted=False,
     )
@@ -238,7 +239,7 @@ def exam_delete(request, pk):
 @login_required
 def exam_subject_create(request, pk):
     """为考试添加科目"""
-    current_class = SchoolClass.objects.filter(is_current=True).first()
+    current_class = get_current_class(request.user)
     exam = get_object_or_404(
         Exam, pk=pk, school_class=current_class, is_deleted=False,
     )
@@ -284,7 +285,7 @@ def exam_subject_delete(request, pk):
 @login_required
 def score_entry(request):
     """成绩录入"""
-    current_class = SchoolClass.objects.filter(is_current=True).first()
+    current_class = get_current_class(request.user)
 
     exam_id = request.GET.get("exam_id", "")
     subject_id = request.GET.get("subject_id", "")
@@ -424,7 +425,7 @@ def _update_ranks(exam_subject):
 
 @login_required
 def score_delete(request, pk):
-    current_class = SchoolClass.objects.filter(is_current=True).first()
+    current_class = get_current_class(request.user)
     score = get_object_or_404(
         Score.objects.select_related("exam", "exam_subject__subject", "student"),
         pk=pk, exam__school_class=current_class, is_deleted=False,
@@ -439,7 +440,7 @@ def score_delete(request, pk):
 @login_required
 def analysis(request):
     """成绩分析：完整统计 + 多班对比 + 优生筛选"""
-    current_class = SchoolClass.objects.filter(is_current=True).first()
+    current_class = get_current_class(request.user)
     current_semester = Semester.objects.filter(
         school_class=current_class, is_current=True,
     ).first() if current_class else None
@@ -604,7 +605,7 @@ def analysis(request):
 @require_current_class
 def external_import(request):
     """导入其他班级成绩用于多班对比。"""
-    current_class = SchoolClass.objects.filter(is_current=True).first()
+    current_class = get_current_class(request.user)
     exam_id = request.GET.get("exam_id", "") or request.POST.get("exam_id", "")
     exam = get_object_or_404(
         Exam, pk=exam_id, school_class=current_class, is_deleted=False,
@@ -651,7 +652,7 @@ def external_import_template(request):
     """下载外部班级成绩导入模板。"""
     from apps.exports.templates_services import external_class_template
     exam_id = request.GET.get("exam_id", "")
-    current_class = SchoolClass.objects.filter(is_current=True).first()
+    current_class = get_current_class(request.user)
     exam = get_object_or_404(
         Exam, pk=exam_id, school_class=current_class, is_deleted=False,
     ) if exam_id else None
@@ -661,7 +662,7 @@ def external_import_template(request):
 @login_required
 def external_delete(request, pk):
     """删除导入的外部对比班级。"""
-    current_class = SchoolClass.objects.filter(is_current=True).first()
+    current_class = get_current_class(request.user)
     external_class = get_object_or_404(
         ExternalClass, pk=pk, school_class=current_class,
     )
@@ -675,7 +676,7 @@ def external_delete(request, pk):
 @login_required
 def class_student_overview(request):
     """班级学生情况总览：逐生展示弱势学科（低于班级均分）标签"""
-    current_class = SchoolClass.objects.filter(is_current=True).first()
+    current_class = get_current_class(request.user)
     exam_id = request.GET.get("exam_id", "")
 
     exam = None
@@ -759,7 +760,7 @@ def class_student_overview(request):
 @login_required
 def student_analysis_detail(request, pk):
     """学生历次成绩、趋势和手动 AI 分析（含优势/弱势学科 + 动态图表）。"""
-    current_class = SchoolClass.objects.filter(is_current=True).first()
+    current_class = get_current_class(request.user)
     student = get_object_or_404(
         Student, pk=pk, school_class=current_class, is_deleted=False,
     )
@@ -1146,7 +1147,7 @@ def score_import_wide(request):
     """按参考成绩宽表一次导入一场考试的多个科目。"""
     if request.method != "POST":
         return redirect("scores:score_entry")
-    current_class = SchoolClass.objects.filter(is_current=True).first()
+    current_class = get_current_class(request.user)
     exam_id = request.POST.get("exam_id", "")
     if not exam_id:
         messages.error(request, "请先选择考试。")
@@ -1282,7 +1283,7 @@ def score_import_wide_template(request):
     from openpyxl import Workbook
     from openpyxl.styles import Alignment, Font, PatternFill
 
-    current_class = SchoolClass.objects.filter(is_current=True).first()
+    current_class = get_current_class(request.user)
     workbook = Workbook()
     sheet = workbook.active
     sheet.title = "成绩导入"

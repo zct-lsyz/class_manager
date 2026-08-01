@@ -1,4 +1,4 @@
-"""关键页面渲染冒烟测试。"""
+﻿"""关键页面渲染冒烟测试。"""
 from django.contrib.auth.models import User
 from django.test import TestCase
 from django.urls import reverse
@@ -14,7 +14,7 @@ class CorePageSmokeTests(TestCase):
     def setUp(self):
         self.user = User.objects.create_user("teacher", password="strong-test-password")
         self.client.force_login(self.user)
-        self.school_class = SchoolClass.objects.create(name="高一(1)班", is_current=True)
+        self.school_class = SchoolClass.objects.create(created_by=self.user, name="高一(1)班", is_current=True)
         self.semester = Semester.objects.create(
             school_class=self.school_class,
             academic_year="2026-2027",
@@ -61,7 +61,7 @@ class ExamCreateGuardTests(TestCase):
         self.assertRedirects(response, reverse("classes:settings"))
 
     def test_exam_create_requires_current_semester_for_current_class(self):
-        SchoolClass.objects.create(name="高一(1)班", is_current=True)
+        SchoolClass.objects.create(created_by=self.user, name="高一(1)班", is_current=True)
         response = self.client.post(reverse("scores:exam_create"), {
             "name": "月考", "exam_type": "regular", "date": "2026-09-01",
         })

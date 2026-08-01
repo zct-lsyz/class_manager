@@ -1,4 +1,4 @@
-"""培优补差视图"""
+﻿"""培优补差视图"""
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.shortcuts import render, redirect, get_object_or_404
@@ -6,6 +6,7 @@ from django.utils import timezone
 
 from apps.scores.models import Exam, ExamSubject, Score, SupportPlan, SupportFollowUp
 from apps.scores.forms import SupportPlanForm
+from apps.classes.utils import get_current_class
 from apps.classes.models import SchoolClass, Semester
 from apps.students.models import Student
 
@@ -13,7 +14,7 @@ from apps.students.models import Student
 @login_required
 def support_list(request):
     """培优补差名单"""
-    current_class = SchoolClass.objects.filter(is_current=True).first()
+    current_class = get_current_class(request.user)
     current_semester = Semester.objects.filter(is_current=True).first()
 
     plans = SupportPlan.objects.filter(
@@ -26,7 +27,7 @@ def support_list(request):
 @login_required
 def support_create(request):
     """创建培优补差计划"""
-    current_class = SchoolClass.objects.filter(is_current=True).first()
+    current_class = get_current_class(request.user)
     current_semester = Semester.objects.filter(is_current=True).first()
 
     if request.method == "POST":
@@ -88,7 +89,7 @@ def support_close(request, pk):
 @login_required
 def support_candidates(request):
     """按成绩筛选培优补差候选人"""
-    current_class = SchoolClass.objects.filter(is_current=True).first()
+    current_class = get_current_class(request.user)
 
     exam_id = request.GET.get("exam_id", "")
     plan_type = request.GET.get("plan_type", "excellent")

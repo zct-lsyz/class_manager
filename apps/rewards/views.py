@@ -1,4 +1,4 @@
-from django.contrib import messages
+﻿from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.shortcuts import render, redirect, get_object_or_404
 from django.core.paginator import Paginator
@@ -9,6 +9,7 @@ from django.utils import timezone
 
 from apps.rewards.models import RewardItem, RewardRecord, PointRecord
 from apps.rewards.forms import RewardItemForm, RewardRecordForm, PointRecordForm, BatchRewardRecordForm
+from apps.classes.utils import get_current_class
 from apps.classes.models import SchoolClass, Semester
 from apps.classes.decorators import require_current_class
 from apps.students.models import Student
@@ -18,7 +19,7 @@ from apps.audit.services import soft_delete
 @login_required
 def index(request):
     """奖励记录列表"""
-    current_class = SchoolClass.objects.filter(is_current=True).first()
+    current_class = get_current_class(request.user)
     records = RewardRecord.objects.filter(
         school_class=current_class, is_deleted=False
     ).select_related("student", "item").order_by("-date") if current_class else []
@@ -35,7 +36,7 @@ def index(request):
 @transaction.atomic
 def reward_create(request):
     """新增奖励"""
-    current_class = SchoolClass.objects.filter(is_current=True).first()
+    current_class = get_current_class(request.user)
     current_semester = Semester.objects.filter(
         school_class=current_class, is_current=True,
     ).first() if current_class else None
@@ -111,7 +112,7 @@ def reward_delete(request, pk):
 @login_required
 def points(request):
     """奖惩积分"""
-    current_class = SchoolClass.objects.filter(is_current=True).first()
+    current_class = get_current_class(request.user)
     current_semester = Semester.objects.filter(
         school_class=current_class, is_current=True,
     ).first() if current_class else None
@@ -162,7 +163,7 @@ def points(request):
 @require_current_class
 def rules(request):
     """奖励与积分规则设置"""
-    current_class = SchoolClass.objects.filter(is_current=True).first()
+    current_class = get_current_class(request.user)
     items = RewardItem.objects.filter(school_class=current_class) if current_class else []
 
     if request.method == "POST":
@@ -181,7 +182,7 @@ def rules(request):
 
 @login_required
 def rule_delete(request, pk):
-    current_class = SchoolClass.objects.filter(is_current=True).first()
+    current_class = get_current_class(request.user)
     item = get_object_or_404(RewardItem, pk=pk, school_class=current_class)
     if request.method == "POST":
         if item.records.exists():

@@ -1,4 +1,4 @@
-"""试卷原卷 + 小分表联合 AI 分析视图。"""
+﻿"""试卷原卷 + 小分表联合 AI 分析视图。"""
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.db import transaction
@@ -7,6 +7,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 
 from apps.audit.models import OperationLog
+from apps.classes.utils import get_current_class
 from apps.classes.models import SchoolClass
 from apps.scores.ai_models import AIAnalysisConfig, AIExamAnalysisSource, AIQuestionWeakness
 from apps.scores.ai_prompts import get_default_prompts, get_subject_names
@@ -36,7 +37,7 @@ def _analysis_level(score_rate):
 
 @login_required
 def exam_analysis(request):
-    current_class = SchoolClass.objects.filter(is_current=True).first()
+    current_class = get_current_class(request.user)
     config = None
     exam_subjects = ExamSubject.objects.none()
     sources = AIExamAnalysisSource.objects.none()
@@ -171,7 +172,7 @@ def exam_analysis(request):
 
 @login_required
 def exam_analysis_detail(request, pk):
-    current_class = SchoolClass.objects.filter(is_current=True).first()
+    current_class = get_current_class(request.user)
     source = get_object_or_404(
         AIExamAnalysisSource.objects.select_related(
             "exam_subject__exam", "exam_subject__subject", "created_by",

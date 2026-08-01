@@ -1,10 +1,11 @@
-from django.contrib import messages
+﻿from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.shortcuts import render, redirect, get_object_or_404
 from django.core.paginator import Paginator
 
 from apps.activities.models import ClassMeeting, Activity, ClassCultureTask
 from apps.activities.forms import ClassMeetingForm, ActivityForm, ClassCultureTaskForm
+from apps.classes.utils import get_current_class
 from apps.classes.models import SchoolClass, Semester
 from apps.classes.decorators import require_current_class
 from apps.audit.services import soft_delete
@@ -13,7 +14,7 @@ from apps.audit.services import soft_delete
 @login_required
 def class_meetings(request):
     """主题班会列表"""
-    current_class = SchoolClass.objects.filter(is_current=True).first()
+    current_class = get_current_class(request.user)
     meetings = ClassMeeting.objects.filter(school_class=current_class).order_by("-date") if current_class else []
     paginator = Paginator(meetings, 20)
     page = request.GET.get("page", 1)
@@ -25,7 +26,7 @@ def class_meetings(request):
 @require_current_class
 def class_meeting_create(request):
     """新建主题班会"""
-    current_class = SchoolClass.objects.filter(is_current=True).first()
+    current_class = get_current_class(request.user)
     current_semester = Semester.objects.filter(
         school_class=current_class, is_current=True,
     ).first()
@@ -47,7 +48,7 @@ def class_meeting_create(request):
 @login_required
 def activities(request):
     """文体活动列表"""
-    current_class = SchoolClass.objects.filter(is_current=True).first()
+    current_class = get_current_class(request.user)
     acts = Activity.objects.filter(school_class=current_class, is_deleted=False).order_by("-date") if current_class else []
     paginator = Paginator(acts, 20)
     page = request.GET.get("page", 1)
@@ -59,7 +60,7 @@ def activities(request):
 @require_current_class
 def activity_create(request):
     """新建文体活动"""
-    current_class = SchoolClass.objects.filter(is_current=True).first()
+    current_class = get_current_class(request.user)
     current_semester = Semester.objects.filter(
         school_class=current_class, is_current=True,
     ).first()
@@ -95,7 +96,7 @@ def activity_delete(request, pk):
 @login_required
 def culture(request):
     """班级文化"""
-    current_class = SchoolClass.objects.filter(is_current=True).first()
+    current_class = get_current_class(request.user)
     tasks = ClassCultureTask.objects.filter(school_class=current_class).order_by("-deadline") if current_class else []
     paginator = Paginator(tasks, 20)
     page = request.GET.get("page", 1)
@@ -107,7 +108,7 @@ def culture(request):
 @require_current_class
 def culture_create(request):
     """新建文化任务"""
-    current_class = SchoolClass.objects.filter(is_current=True).first()
+    current_class = get_current_class(request.user)
     current_semester = Semester.objects.filter(
         school_class=current_class, is_current=True,
     ).first()
