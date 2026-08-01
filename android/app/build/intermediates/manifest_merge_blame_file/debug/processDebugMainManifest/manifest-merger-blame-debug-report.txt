@@ -46,80 +46,81 @@
 28-->D:\class_manager\class_manager\android\app\src\main\AndroidManifest.xml:12:9-41
 29        android:supportsRtl="true"
 29-->D:\class_manager\class_manager\android\app\src\main\AndroidManifest.xml:13:9-35
-30        android:theme="@style/Theme.ClassManager"
-30-->D:\class_manager\class_manager\android\app\src\main\AndroidManifest.xml:15:9-50
-31        android:usesCleartextTraffic="true" >
-31-->D:\class_manager\class_manager\android\app\src\main\AndroidManifest.xml:14:9-44
-32        <activity
-32-->D:\class_manager\class_manager\android\app\src\main\AndroidManifest.xml:17:9-26:20
-33            android:name="com.classmanager.app.MainActivity"
-33-->D:\class_manager\class_manager\android\app\src\main\AndroidManifest.xml:18:13-41
-34            android:configChanges="orientation|screenSize|keyboardHidden"
-34-->D:\class_manager\class_manager\android\app\src\main\AndroidManifest.xml:20:13-74
-35            android:exported="true"
-35-->D:\class_manager\class_manager\android\app\src\main\AndroidManifest.xml:19:13-36
-36            android:windowSoftInputMode="adjustResize" >
-36-->D:\class_manager\class_manager\android\app\src\main\AndroidManifest.xml:21:13-55
-37            <intent-filter>
-37-->D:\class_manager\class_manager\android\app\src\main\AndroidManifest.xml:22:13-25:29
-38                <action android:name="android.intent.action.MAIN" />
-38-->D:\class_manager\class_manager\android\app\src\main\AndroidManifest.xml:23:17-69
-38-->D:\class_manager\class_manager\android\app\src\main\AndroidManifest.xml:23:25-66
-39
-40                <category android:name="android.intent.category.LAUNCHER" />
-40-->D:\class_manager\class_manager\android\app\src\main\AndroidManifest.xml:24:17-77
-40-->D:\class_manager\class_manager\android\app\src\main\AndroidManifest.xml:24:27-74
-41            </intent-filter>
-42        </activity>
-43
-44        <service
-44-->D:\class_manager\class_manager\android\app\src\main\AndroidManifest.xml:28:9-30:40
-45            android:name="com.classmanager.app.PollingService"
-45-->D:\class_manager\class_manager\android\app\src\main\AndroidManifest.xml:29:13-43
-46            android:exported="false" />
-46-->D:\class_manager\class_manager\android\app\src\main\AndroidManifest.xml:30:13-37
-47
-48        <receiver
-48-->D:\class_manager\class_manager\android\app\src\main\AndroidManifest.xml:32:9-38:20
-49            android:name="com.classmanager.app.BootReceiver"
-49-->D:\class_manager\class_manager\android\app\src\main\AndroidManifest.xml:33:13-41
-50            android:exported="false" >
-50-->D:\class_manager\class_manager\android\app\src\main\AndroidManifest.xml:34:13-37
-51            <intent-filter>
-51-->D:\class_manager\class_manager\android\app\src\main\AndroidManifest.xml:35:13-37:29
-52                <action android:name="android.intent.action.BOOT_COMPLETED" />
-52-->D:\class_manager\class_manager\android\app\src\main\AndroidManifest.xml:36:17-79
-52-->D:\class_manager\class_manager\android\app\src\main\AndroidManifest.xml:36:25-76
-53            </intent-filter>
-54        </receiver>
-55        <receiver
-55-->D:\class_manager\class_manager\android\app\src\main\AndroidManifest.xml:40:9-42:40
-56            android:name="com.classmanager.app.PollAlarmReceiver"
-56-->D:\class_manager\class_manager\android\app\src\main\AndroidManifest.xml:41:13-46
-57            android:exported="false" />
-57-->D:\class_manager\class_manager\android\app\src\main\AndroidManifest.xml:42:13-37
-58
-59        <provider
-59-->[androidx.emoji2:emoji2:1.2.0] C:\Users\z1765\.gradle\caches\9.3.0\transforms\e8fff24822425cfe1e968b5a88e88a25\workspace\transformed\emoji2-1.2.0\AndroidManifest.xml:24:9-32:20
-60            android:name="androidx.startup.InitializationProvider"
-60-->[androidx.emoji2:emoji2:1.2.0] C:\Users\z1765\.gradle\caches\9.3.0\transforms\e8fff24822425cfe1e968b5a88e88a25\workspace\transformed\emoji2-1.2.0\AndroidManifest.xml:25:13-67
-61            android:authorities="com.classmanager.app.androidx-startup"
-61-->[androidx.emoji2:emoji2:1.2.0] C:\Users\z1765\.gradle\caches\9.3.0\transforms\e8fff24822425cfe1e968b5a88e88a25\workspace\transformed\emoji2-1.2.0\AndroidManifest.xml:26:13-68
-62            android:exported="false" >
-62-->[androidx.emoji2:emoji2:1.2.0] C:\Users\z1765\.gradle\caches\9.3.0\transforms\e8fff24822425cfe1e968b5a88e88a25\workspace\transformed\emoji2-1.2.0\AndroidManifest.xml:27:13-37
-63            <meta-data
-63-->[androidx.emoji2:emoji2:1.2.0] C:\Users\z1765\.gradle\caches\9.3.0\transforms\e8fff24822425cfe1e968b5a88e88a25\workspace\transformed\emoji2-1.2.0\AndroidManifest.xml:29:13-31:52
-64                android:name="androidx.emoji2.text.EmojiCompatInitializer"
-64-->[androidx.emoji2:emoji2:1.2.0] C:\Users\z1765\.gradle\caches\9.3.0\transforms\e8fff24822425cfe1e968b5a88e88a25\workspace\transformed\emoji2-1.2.0\AndroidManifest.xml:30:17-75
-65                android:value="androidx.startup" />
-65-->[androidx.emoji2:emoji2:1.2.0] C:\Users\z1765\.gradle\caches\9.3.0\transforms\e8fff24822425cfe1e968b5a88e88a25\workspace\transformed\emoji2-1.2.0\AndroidManifest.xml:31:17-49
-66            <meta-data
-66-->[androidx.lifecycle:lifecycle-process:2.4.1] C:\Users\z1765\.gradle\caches\9.3.0\transforms\d9b89becb6a3685be80696a2a52fbc4c\workspace\transformed\lifecycle-process-2.4.1\AndroidManifest.xml:31:13-33:52
-67                android:name="androidx.lifecycle.ProcessLifecycleInitializer"
-67-->[androidx.lifecycle:lifecycle-process:2.4.1] C:\Users\z1765\.gradle\caches\9.3.0\transforms\d9b89becb6a3685be80696a2a52fbc4c\workspace\transformed\lifecycle-process-2.4.1\AndroidManifest.xml:32:17-78
-68                android:value="androidx.startup" />
-68-->[androidx.lifecycle:lifecycle-process:2.4.1] C:\Users\z1765\.gradle\caches\9.3.0\transforms\d9b89becb6a3685be80696a2a52fbc4c\workspace\transformed\lifecycle-process-2.4.1\AndroidManifest.xml:33:17-49
-69        </provider>
-70    </application>
-71
-72</manifest>
+30        android:testOnly="true"
+31        android:theme="@style/Theme.ClassManager"
+31-->D:\class_manager\class_manager\android\app\src\main\AndroidManifest.xml:15:9-50
+32        android:usesCleartextTraffic="true" >
+32-->D:\class_manager\class_manager\android\app\src\main\AndroidManifest.xml:14:9-44
+33        <activity
+33-->D:\class_manager\class_manager\android\app\src\main\AndroidManifest.xml:17:9-26:20
+34            android:name="com.classmanager.app.MainActivity"
+34-->D:\class_manager\class_manager\android\app\src\main\AndroidManifest.xml:18:13-41
+35            android:configChanges="orientation|screenSize|keyboardHidden"
+35-->D:\class_manager\class_manager\android\app\src\main\AndroidManifest.xml:20:13-74
+36            android:exported="true"
+36-->D:\class_manager\class_manager\android\app\src\main\AndroidManifest.xml:19:13-36
+37            android:windowSoftInputMode="adjustResize" >
+37-->D:\class_manager\class_manager\android\app\src\main\AndroidManifest.xml:21:13-55
+38            <intent-filter>
+38-->D:\class_manager\class_manager\android\app\src\main\AndroidManifest.xml:22:13-25:29
+39                <action android:name="android.intent.action.MAIN" />
+39-->D:\class_manager\class_manager\android\app\src\main\AndroidManifest.xml:23:17-69
+39-->D:\class_manager\class_manager\android\app\src\main\AndroidManifest.xml:23:25-66
+40
+41                <category android:name="android.intent.category.LAUNCHER" />
+41-->D:\class_manager\class_manager\android\app\src\main\AndroidManifest.xml:24:17-77
+41-->D:\class_manager\class_manager\android\app\src\main\AndroidManifest.xml:24:27-74
+42            </intent-filter>
+43        </activity>
+44
+45        <service
+45-->D:\class_manager\class_manager\android\app\src\main\AndroidManifest.xml:28:9-30:40
+46            android:name="com.classmanager.app.PollingService"
+46-->D:\class_manager\class_manager\android\app\src\main\AndroidManifest.xml:29:13-43
+47            android:exported="false" />
+47-->D:\class_manager\class_manager\android\app\src\main\AndroidManifest.xml:30:13-37
+48
+49        <receiver
+49-->D:\class_manager\class_manager\android\app\src\main\AndroidManifest.xml:32:9-38:20
+50            android:name="com.classmanager.app.BootReceiver"
+50-->D:\class_manager\class_manager\android\app\src\main\AndroidManifest.xml:33:13-41
+51            android:exported="false" >
+51-->D:\class_manager\class_manager\android\app\src\main\AndroidManifest.xml:34:13-37
+52            <intent-filter>
+52-->D:\class_manager\class_manager\android\app\src\main\AndroidManifest.xml:35:13-37:29
+53                <action android:name="android.intent.action.BOOT_COMPLETED" />
+53-->D:\class_manager\class_manager\android\app\src\main\AndroidManifest.xml:36:17-79
+53-->D:\class_manager\class_manager\android\app\src\main\AndroidManifest.xml:36:25-76
+54            </intent-filter>
+55        </receiver>
+56        <receiver
+56-->D:\class_manager\class_manager\android\app\src\main\AndroidManifest.xml:40:9-42:40
+57            android:name="com.classmanager.app.PollAlarmReceiver"
+57-->D:\class_manager\class_manager\android\app\src\main\AndroidManifest.xml:41:13-46
+58            android:exported="false" />
+58-->D:\class_manager\class_manager\android\app\src\main\AndroidManifest.xml:42:13-37
+59
+60        <provider
+60-->[androidx.emoji2:emoji2:1.2.0] C:\Users\z1765\.gradle\caches\9.3.0\transforms\e8fff24822425cfe1e968b5a88e88a25\workspace\transformed\emoji2-1.2.0\AndroidManifest.xml:24:9-32:20
+61            android:name="androidx.startup.InitializationProvider"
+61-->[androidx.emoji2:emoji2:1.2.0] C:\Users\z1765\.gradle\caches\9.3.0\transforms\e8fff24822425cfe1e968b5a88e88a25\workspace\transformed\emoji2-1.2.0\AndroidManifest.xml:25:13-67
+62            android:authorities="com.classmanager.app.androidx-startup"
+62-->[androidx.emoji2:emoji2:1.2.0] C:\Users\z1765\.gradle\caches\9.3.0\transforms\e8fff24822425cfe1e968b5a88e88a25\workspace\transformed\emoji2-1.2.0\AndroidManifest.xml:26:13-68
+63            android:exported="false" >
+63-->[androidx.emoji2:emoji2:1.2.0] C:\Users\z1765\.gradle\caches\9.3.0\transforms\e8fff24822425cfe1e968b5a88e88a25\workspace\transformed\emoji2-1.2.0\AndroidManifest.xml:27:13-37
+64            <meta-data
+64-->[androidx.emoji2:emoji2:1.2.0] C:\Users\z1765\.gradle\caches\9.3.0\transforms\e8fff24822425cfe1e968b5a88e88a25\workspace\transformed\emoji2-1.2.0\AndroidManifest.xml:29:13-31:52
+65                android:name="androidx.emoji2.text.EmojiCompatInitializer"
+65-->[androidx.emoji2:emoji2:1.2.0] C:\Users\z1765\.gradle\caches\9.3.0\transforms\e8fff24822425cfe1e968b5a88e88a25\workspace\transformed\emoji2-1.2.0\AndroidManifest.xml:30:17-75
+66                android:value="androidx.startup" />
+66-->[androidx.emoji2:emoji2:1.2.0] C:\Users\z1765\.gradle\caches\9.3.0\transforms\e8fff24822425cfe1e968b5a88e88a25\workspace\transformed\emoji2-1.2.0\AndroidManifest.xml:31:17-49
+67            <meta-data
+67-->[androidx.lifecycle:lifecycle-process:2.4.1] C:\Users\z1765\.gradle\caches\9.3.0\transforms\d9b89becb6a3685be80696a2a52fbc4c\workspace\transformed\lifecycle-process-2.4.1\AndroidManifest.xml:31:13-33:52
+68                android:name="androidx.lifecycle.ProcessLifecycleInitializer"
+68-->[androidx.lifecycle:lifecycle-process:2.4.1] C:\Users\z1765\.gradle\caches\9.3.0\transforms\d9b89becb6a3685be80696a2a52fbc4c\workspace\transformed\lifecycle-process-2.4.1\AndroidManifest.xml:32:17-78
+69                android:value="androidx.startup" />
+69-->[androidx.lifecycle:lifecycle-process:2.4.1] C:\Users\z1765\.gradle\caches\9.3.0\transforms\d9b89becb6a3685be80696a2a52fbc4c\workspace\transformed\lifecycle-process-2.4.1\AndroidManifest.xml:33:17-49
+70        </provider>
+71    </application>
+72
+73</manifest>

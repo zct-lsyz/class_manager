@@ -23,7 +23,11 @@ def get_client_ip(request):
 @login_required
 def student_list(request):
     """学生列表"""
-    students = Student.objects.filter(is_deleted=False)
+    current_class = get_current_class(request.user)
+    if current_class:
+        students = Student.objects.filter(school_class=current_class, is_deleted=False)
+    else:
+        students = Student.objects.none()
 
     # 筛选
     gender = request.GET.get("gender", "")
@@ -67,6 +71,9 @@ def student_create(request):
             student = form.save(commit=False)
             if not student.school_class:
                 student.school_class = get_current_class(request.user)
+            if not student.school_class:
+                messages.error(request, "请先创建班级，再添加学生。")
+                return redirect("classes:settings")
             student.save()
             messages.success(request, f"学生「{student.name}」添加成功。")
             OperationLog.objects.create(
