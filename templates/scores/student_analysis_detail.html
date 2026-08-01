@@ -59,7 +59,7 @@
 
 <div class="card mb-3">
     <div class="card-header py-2"><i class="bi bi-graph-up me-2"></i>成绩趋势</div>
-    <div class="card-body"><canvas id="studentAnalysisChart" height="260"></canvas></div>
+    <div class="card-body"><canvas id="studentAnalysisChart" height="180"></canvas></div>
 </div>
 
 <div class="card mb-3">
@@ -162,7 +162,11 @@ function rebuildChart() {
         return;
     }
 
-    const hasRank = metrics.some(m => m.includes('排名'));
+    const isRankMetric = m => m.includes('排名');
+    const hasScore = metrics.some(m => !isRankMetric(m));
+    const hasRank = metrics.some(isRankMetric);
+    const dualAxis = hasScore && hasRank;
+
     const datasets = [];
     for (const subj of subjects) {
         const c = colorFor(subj);
@@ -182,6 +186,7 @@ function rebuildChart() {
                 fill: false,
                 pointRadius: 3,
                 spanGaps: false,
+                yAxisID: dualAxis ? (isRankMetric(metric) ? 'y1' : 'y') : 'y',
             });
         }
     }
@@ -190,6 +195,34 @@ function rebuildChart() {
     if (window._chart) window._chart.destroy();
 
     const isSingleExam = selectedExams.length === 1;
+    const scales = dualAxis
+        ? {
+            // 分数：左轴，根据数值自动选取合适区间
+            y: {
+                type: 'linear',
+                position: 'left',
+                reverse: false,
+                title: { display: true, text: '分数' },
+                ticks: { precision: 0 },
+            },
+            // 排名：右轴，反转（排名越小越好），按数值自动区间
+            y1: {
+                type: 'linear',
+                position: 'right',
+                reverse: true,
+                title: { display: true, text: '排名' },
+                grid: { drawOnChartArea: false },
+                ticks: { precision: 0 },
+            },
+        }
+        : {
+            y: {
+                reverse: hasRank && !isSingleExam,
+                beginAtZero: !hasRank,
+                title: { display: true, text: metrics.join(' / ') },
+            },
+        };
+
     window._chart = new Chart(ctx, {
         type: isSingleExam ? 'bar' : 'line',
         data: {
@@ -198,15 +231,10 @@ function rebuildChart() {
         },
         options: {
             responsive: true,
+            maintainAspectRatio: true,
             interaction: { mode: 'index', intersect: false },
             plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } } },
-            scales: {
-                y: {
-                    reverse: hasRank && !isSingleExam,
-                    beginAtZero: !hasRank,
-                    title: { display: true, text: metrics.join(' / ') },
-                },
-            },
+            scales: scales,
         },
     });
 }
@@ -218,6 +246,25 @@ document.querySelectorAll('.exam-check, .subject-check, .metric-check').forEach(
 
 // 初始渲染
 rebuildChart();
+
+// 弱势学科标签：未预设颜色的科目按名称哈希生成固定颜色（同一科始终同一颜色）
+(function() {
+    const tagColors = {};
+    document.querySelectorAll('[class*="subject-tag-"]').forEach(function(el) {
+        const m = el.className.match(/subject-tag-([^\s]+)/);
+        if (!m) return;
+        const name = m[1];
+        if (getComputedStyle(el).getPropertyValue('--sj-bg').trim()) return;
+        if (!tagColors[name]) {
+            let h = 0;
+            for (const ch of name) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+            const hue = h % 360;
+            tagColors[name] = { bg: 'hsl(' + hue + ' 85% 90%)', fg: 'hsl(' + hue + ' 65% 28%)' };
+        }
+        el.style.setProperty('--sj-bg', tagColors[name].bg);
+        el.style.setProperty('--sj-fg', tagColors[name].fg);
+    });
+})();
 </script>
 {% endblock %}
 

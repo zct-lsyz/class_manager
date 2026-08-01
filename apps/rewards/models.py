@@ -111,6 +111,7 @@ class PointRecord(BaseModel):
             ("classroom_discipline", "课堂纪律扣分"),
             ("dorm_discipline", "宿舍纪律扣分"),
             ("hygiene", "卫生扣分/加分"),
+            ("attendance", "考勤扣分/加分"),
             ("manual", "手工调整"),
         ],
         default="manual",

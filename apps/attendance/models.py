@@ -56,6 +56,10 @@ class AttendanceRecord(BaseModel):
         default="normal",
     )
     reason = models.TextField("原因/备注", blank=True, default="")
+    points_deducted = models.IntegerField(
+        "加减分", default=0,
+        help_text="正数加分、负数扣分（如迟到扣1填 -1，全勤奖励加2填 2）",
+    )
     leave_proof = models.FileField(
         "请假证明", upload_to="attendance/", blank=True,
     )

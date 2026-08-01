@@ -451,9 +451,63 @@ def score_delete(request, pk):
     return redirect(f"/scores/entry/?exam_id={score.exam_id}&subject_id={score.exam_subject_id}")
 
 
+def _filter_students(exam, exam_subjects, dimension, field, op, value):
+    """按维度（总分/某科目）筛选学生，返回满足条件的学生 id 集合。
+
+    dimension: "total" 或 "subject:科目名"
+    field: score / class_rank / grade_rank / city_rank
+    op: gte(≥) / lte(≤)
+    """
+    try:
+        threshold = float(value)
+    except (TypeError, ValueError):
+        return set()
+
+    def _check(v):
+        if v is None:
+            return False
+        return v >= threshold if op == "gte" else v <= threshold
+
+    if dimension == "total":
+        totals = {}
+        for row in Score.objects.filter(
+            exam=exam, status="normal", score__isnull=False, is_deleted=False,
+        ).values("student_id").annotate(total=Sum("score")):
+            totals[row["student_id"]] = row["total"]
+        if field == "score":
+            return {sid for sid, t in totals.items() if _check(t)}
+        if field == "class_rank":
+            ranks = _compute_total_ranks(exam)
+            return {sid for sid in totals if ranks.get(sid) is not None and _check(ranks[sid])}
+        return set()
+
+    if dimension.startswith("subject:"):
+        subject_name = dimension.split(":", 1)[1]
+        es = next((e for e in exam_subjects if e.subject.name == subject_name), None)
+        if not es:
+            return set()
+        field_map = {
+            "score": "score",
+            "class_rank": "rank",
+            "grade_rank": "grade_rank",
+            "city_rank": "city_rank",
+        }
+        db_field = field_map.get(field)
+        if not db_field:
+            return set()
+        sids = set()
+        for s in Score.objects.filter(
+            exam_subject=es, status="normal", is_deleted=False,
+        ).only("student_id", db_field):
+            if _check(getattr(s, db_field)):
+                sids.add(s.student_id)
+        return sids
+    return set()
+
+
 @login_required
 def analysis(request):
-    """成绩分析：完整统计 + 多班对比 + 优生筛选"""
+    """成绩分析：完整统计 + 优生筛选（仅本班数据与图表）"""
     current_class = get_current_class(request.user)
     current_semester = Semester.objects.filter(
         school_class=current_class, is_current=True,
@@ -465,48 +519,52 @@ def analysis(request):
         Exam, pk=exam_id, school_class=current_class, is_deleted=False,
     ) if exam_id else None
 
-    # 优生筛选条件
-    criteria = {}
-    if request.GET.get("score_threshold"):
-        criteria["score_threshold"] = request.GET["score_threshold"]
-    if request.GET.get("class_rank_threshold"):
-        criteria["class_rank_threshold"] = request.GET["class_rank_threshold"]
-    if request.GET.get("grade_rank_threshold"):
-        criteria["grade_rank_threshold"] = request.GET["grade_rank_threshold"]
-    if request.GET.get("city_rank_threshold"):
-        criteria["city_rank_threshold"] = request.GET["city_rank_threshold"]
-    criteria["combine_mode"] = request.GET.get("combine_mode", "any")
-    is_filtering = any(
-        k in criteria and criteria[k] for k in
-        ("score_threshold", "class_rank_threshold", "grade_rank_threshold", "city_rank_threshold")
-    )
+    # 优生筛选：维度（总分/某科） + 条件（字段/运算符/数值）
+    filter_dimension = request.GET.get("filter_dimension", "")
+    filter_field = request.GET.get("filter_field", "")
+    filter_op = request.GET.get("filter_op", "gte")
+    filter_value = request.GET.get("filter_value", "")
+    is_filtering = bool(filter_dimension and filter_field and filter_value)
 
     analysis_data = {}
     rank_distribution = {}
     rank_chart_type = "bar"
-    comparison_classes = []
-    comparison_table = []
-    comparison_chart = {}
+    exam_subjects = []
+    class_averages = {}
+    grade_lines = {}
+    class_total_table = []
+    class_averages_total = 0
+    filtered_student_ids = None
+    filter_count = 0
+
     if exam:
         exam_subjects = list(ExamSubject.objects.filter(exam=exam).select_related("subject"))
 
-        # 1. 本班各科统计（含中位数/方差/位次）
+        # 计算筛选学生集合（一旦筛选，所有统计均基于该集合）
+        if is_filtering:
+            filtered_student_ids = _filter_students(
+                exam, exam_subjects, filter_dimension, filter_field, filter_op, filter_value,
+            )
+            filter_count = len(filtered_student_ids)
+
+        # 1. 本班各科统计
         for es in exam_subjects:
             scores = list(Score.objects.filter(
                 exam_subject=es, is_deleted=False, status="normal", score__isnull=False,
             ))
-            if is_filtering:
-                scores = apply_criteria(scores, criteria)
-            stats = compute_score_stats(scores, es.full_score)
+            if filtered_student_ids is not None:
+                scores = [s for s in scores if s.student_id in filtered_student_ids]
             analysis_data[es.subject.name] = {
                 "full_score": es.full_score,
-                **stats,
+                **compute_score_stats(scores, es.full_score),
             }
 
-        # 2. 总分排名分布（按原始全部成绩）
+        # 2. 总分排名分布（基于筛选后的学生）
         total_scores = list(Score.objects.filter(
             exam=exam, status="normal", score__isnull=False, is_deleted=False,
         ).values("student_id").annotate(total=Sum("score")).order_by("-total"))
+        if filtered_student_ids is not None:
+            total_scores = [r for r in total_scores if r["student_id"] in filtered_student_ids]
         previous_total = None
         current_rank = 0
         for position, row in enumerate(total_scores, 1):
@@ -516,38 +574,17 @@ def analysis(request):
             rank_distribution[str(current_rank)] = rank_distribution.get(str(current_rank), 0) + 1
         rank_chart_type = "line" if len(rank_distribution) > 12 else "bar"
 
-        # 3. 多班对比
-        ext_classes, comparison_table, comparison_chart = build_comparison_data(
-            exam, exam_subjects, current_class,
-            criteria=criteria if is_filtering else None,
-        )
-        comparison_classes = [{"id": None, "name": "本班", "school_name": ""}]
-        comparison_classes.extend(
-            {"id": ec.pk, "name": ec.name, "school_name": ec.school_name}
-            for ec in ext_classes
-        )
-
-        # 4. 班级总成绩分析表
-        students = list(Student.objects.filter(
-            school_class=current_class, is_deleted=False,
-        ).order_by("sort_order", "student_id"))
-
-        # 各科班级平均分
-        class_averages = {}
+        # 3. 各科班级平均分（供弱势判断与颜色，基于筛选后的学生）
         for es in exam_subjects:
-            scores_qs = Score.objects.filter(
+            scores = list(Score.objects.filter(
                 exam_subject=es, is_deleted=False, status="normal", score__isnull=False,
-            )
-            if is_filtering:
-                scores_qs = apply_criteria(list(scores_qs), criteria)
-            values = [float(s.score) for s in scores_qs if s.score is not None]
-            if values:
-                class_averages[es.subject.name] = round(sum(values) / len(values), 1)
-            else:
-                class_averages[es.subject.name] = 0
+            ))
+            if filtered_student_ids is not None:
+                scores = [s for s in scores if s.student_id in filtered_student_ids]
+            values = [float(s.score) for s in scores if s.score is not None]
+            class_averages[es.subject.name] = round(sum(values) / len(values), 1) if values else 0
 
-        # 本科线/合格线
-        grade_lines = {}
+        # 4. 本科线/合格线
         for es in exam_subjects:
             gl = GradeLine.objects.filter(exam_subject=es).first()
             grade_lines[es.pk] = {
@@ -555,17 +592,21 @@ def analysis(request):
                 "pass_line": gl.pass_line if gl else None,
             }
 
-        # 逐生构建
-        class_total_table = []
+        # 5. 班级总成绩分析表（仅显示筛选后的学生）
+        students = list(Student.objects.filter(
+            school_class=current_class, is_deleted=False,
+        ).order_by("sort_order", "student_id"))
+
         for student in students:
+            if filtered_student_ids is not None and student.pk not in filtered_student_ids:
+                continue
             student_scores = {}
             total = 0.0
             has_any_score = False
             weak_subjects = []
             for es in exam_subjects:
                 score_obj = Score.objects.filter(
-                    exam_subject=es, student=student,
-                    is_deleted=False,
+                    exam_subject=es, student=student, is_deleted=False,
                 ).first()
                 if score_obj and score_obj.status == "normal" and score_obj.score is not None:
                     has_any_score = True
@@ -576,7 +617,6 @@ def analysis(request):
                     is_below_avg = score_val < avg if avg > 0 else False
                     if is_below_avg:
                         weak_subjects.append(subject_name)
-                    # 级部排名：优先用 grade_rank，否则用班级 rank
                     display_rank = score_obj.grade_rank if score_obj.grade_rank is not None else score_obj.rank
                     student_scores[subject_name] = {
                         "score": score_val,
@@ -584,7 +624,6 @@ def analysis(request):
                         "is_below_avg": is_below_avg,
                     }
                 else:
-                    # 缺考或无成绩
                     student_scores[es.subject.name] = None
 
             if not has_any_score:
@@ -626,7 +665,7 @@ def analysis(request):
             hist_r = history_ranks.get(sid)
             if hist_r is None:
                 continue
-            delta = hist_r - cur_r  # 正值 = 名次提升（进步），负值 = 名次下降（退步）
+            delta = hist_r - cur_r
             if (rank_progress_threshold and delta >= rank_progress_threshold) or \
                (rank_decline_threshold and delta <= -rank_decline_threshold):
                 student = Student.objects.filter(pk=sid).first()
@@ -649,27 +688,23 @@ def analysis(request):
     ).first() if student_id else None
     if selected_student and exam:
         student = selected_student
-        if student:
-            exams_qs = Exam.objects.filter(
-                school_class=current_class, is_deleted=False
-            ).order_by("date")
-            trend = []
-            for e in exams_qs:
-                total = 0
-                count = 0
-                for es in ExamSubject.objects.filter(exam=e):
-                    s = Score.objects.filter(
-                        exam_subject=es,
-                        student=student,
-                        status="normal",
-                        is_deleted=False,
-                    ).first()
-                    if s and s.score is not None:
-                        total += float(s.score)
-                        count += 1
-                if count > 0:
-                    trend.append({"exam": e.name, "date": e.date.strftime("%m-%d"), "score": round(total, 1)})
-            student_trend = {"student": student, "trend": trend}
+        exams_qs = Exam.objects.filter(
+            school_class=current_class, is_deleted=False
+        ).order_by("date")
+        trend = []
+        for e in exams_qs:
+            total = 0
+            count = 0
+            for es in ExamSubject.objects.filter(exam=e):
+                s = Score.objects.filter(
+                    exam_subject=es, student=student, status="normal", is_deleted=False,
+                ).first()
+                if s and s.score is not None:
+                    total += float(s.score)
+                    count += 1
+            if count > 0:
+                trend.append({"exam": e.name, "date": e.date.strftime("%m-%d"), "score": round(total, 1)})
+        student_trend = {"student": student, "trend": trend}
 
     return render(request, "scores/analysis.html", {
         "exams": exams, "exam": exam, "analysis_data": analysis_data,
@@ -680,11 +715,12 @@ def analysis(request):
             school_class=current_class, is_deleted=False
         ).order_by("student_id") if current_class else [],
         # 优生筛选
-        "criteria": criteria, "is_filtering": is_filtering,
-        # 多班对比
-        "comparison_classes": comparison_classes,
-        "comparison_table": comparison_table,
-        "comparison_chart": comparison_chart,
+        "filter_dimension": filter_dimension,
+        "filter_field": filter_field,
+        "filter_op": filter_op,
+        "filter_value": filter_value,
+        "is_filtering": is_filtering,
+        "filter_count": filter_count,
         # AI 分析配置状态
         "ai_config": _get_ai_config(current_class),
         "ai_subjects": _get_ai_subjects(exam),
@@ -765,6 +801,44 @@ def grade_line_settings(request, exam_id):
             "pass_line": gl.pass_line if gl else None,
         }
     return JsonResponse(grade_lines)
+
+
+@login_required
+def comparison(request):
+    """多班成绩对比（独立页面）：对比表 + 图表 + 外部班级导入。"""
+    current_class = get_current_class(request.user)
+    exam_id = request.GET.get("exam_id", "")
+    exam = get_object_or_404(
+        Exam, pk=exam_id, school_class=current_class, is_deleted=False,
+    ) if exam_id else None
+    exams = Exam.objects.filter(
+        school_class=current_class, is_deleted=False,
+    ).order_by("-date") if current_class else []
+
+    comparison_classes = []
+    comparison_table = []
+    comparison_chart = {}
+    exam_subjects = []
+    if exam:
+        exam_subjects = list(ExamSubject.objects.filter(exam=exam).select_related("subject"))
+        ext_classes, comparison_table, comparison_chart = build_comparison_data(
+            exam, exam_subjects, current_class,
+        )
+        comparison_classes = [{"id": None, "name": "本班", "school_name": ""}]
+        comparison_classes.extend(
+            {"id": ec.pk, "name": ec.name, "school_name": ec.school_name}
+            for ec in ext_classes
+        )
+
+    external_classes = ExternalClass.objects.filter(school_class=current_class) if current_class else []
+
+    return render(request, "scores/comparison.html", {
+        "exams": exams, "exam": exam, "exam_subjects": exam_subjects,
+        "comparison_classes": comparison_classes,
+        "comparison_table": comparison_table,
+        "comparison_chart": comparison_chart,
+        "external_classes": external_classes,
+    })
 
 
 @login_required
@@ -1110,12 +1184,58 @@ def subject_settings(request):
     if request.method == "POST":
         name = request.POST.get("name", "")
         short_name = request.POST.get("short_name", "")
+        sort_order = request.POST.get("sort_order", "0")
+        try:
+            sort_order = int(sort_order)
+        except (ValueError, TypeError):
+            sort_order = 0
         if name:
-            Subject.objects.create(name=name, short_name=short_name)
+            Subject.objects.create(name=name, short_name=short_name, sort_order=sort_order)
             messages.success(request, f"科目「{name}」已添加。")
             return redirect("scores:subject_settings")
 
     return render(request, "scores/subject_settings.html", {"subjects": subjects})
+
+
+@login_required
+def subject_edit(request, pk):
+    """修改科目"""
+    subject = get_object_or_404(Subject, pk=pk)
+    if request.method == "POST":
+        name = request.POST.get("name", "").strip()
+        short_name = request.POST.get("short_name", "").strip()
+        is_active = request.POST.get("is_active") == "on"
+        sort_order = request.POST.get("sort_order", "0")
+        try:
+            sort_order = int(sort_order)
+        except (ValueError, TypeError):
+            sort_order = 0
+        if not name:
+            messages.error(request, "科目名称不能为空。")
+        else:
+            subject.name = name
+            subject.short_name = short_name
+            subject.is_active = is_active
+            subject.sort_order = sort_order
+            subject.save(update_fields=["name", "short_name", "is_active", "sort_order", "updated_at"])
+            messages.success(request, f"科目「{name}」已更新。")
+    return redirect("scores:subject_settings")
+
+
+@login_required
+def subject_delete(request, pk):
+    """删除/停用科目"""
+    subject = get_object_or_404(Subject, pk=pk)
+    if request.method == "POST":
+        from apps.scores.models import ExamSubject
+        if ExamSubject.objects.filter(subject=subject).exists():
+            subject.is_active = False
+            subject.save(update_fields=["is_active", "updated_at"])
+            messages.info(request, f"科目「{subject.name}」已有考试记录，已改为停用。")
+        else:
+            subject.delete()
+            messages.info(request, f"科目「{subject.name}」已删除。")
+    return redirect("scores:subject_settings")
 
 
 @login_required

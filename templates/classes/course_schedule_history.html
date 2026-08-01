@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}课程表历史{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mt-3 mb-4">
+    <h4 class="mb-0"><i class="bi bi-clock-history me-2 text-primary"></i>课程表历史</h4>
+    <a href="{% url 'classes:course_schedule' %}" class="btn btn-outline-secondary btn-sm">
+        <i class="bi bi-arrow-left me-1"></i>返回课表编辑
+    </a>
+</div>
+
+<div class="card">
+    <div class="card-header">已保存的课表版本</div>
+    <div class="card-body p-0 table-responsive">
+        <table class="table table-hover mb-0">
+            <thead>
+                <tr>
+                    <th>版本</th>
+                    <th>学期</th>
+                    <th>保存时间</th>
+                    <th>课程数</th>
+                    <th>操作</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for s in snapshots %}
+                <tr>
+                    <td><strong>{{ s.label|default:s.created_at|date:"Y-m-d H:i" }}</strong></td>
+                    <td>{{ s.semester.get_display_name|default:"—" }}</td>
+                    <td>{{ s.created_at|date:"Y-m-d H:i:s" }}</td>
+                    <td>{{ s.data|length }}</td>
+                    <td>
+                        <a href="{% url 'classes:course_schedule_view' s.pk %}" class="btn btn-sm btn-outline-primary">
+                            <i class="bi bi-eye me-1"></i>查看
+                        </a>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="5" class="text-center text-muted py-4">暂无历史版本，保存课表后会自动生成。</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

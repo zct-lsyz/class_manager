@@ -86,11 +86,15 @@ class ManagementWorkflowTests(TestCase):
         self.assertEqual(student.secondary_contact, "王女士")
 
     def test_course_period_and_schedule_save(self):
+        # 先添加课程（含授课教师）
+        self.client.post(reverse("classes:course_create"), {"name": "数学", "teacher": "陈老师"})
+        from apps.classes.models import Course
+        course = Course.objects.get(school_class=self.school_class, name="数学")
         response = self.client.post(reverse("classes:course_schedule"), {
             "action": "save_schedule", "period_count": "2",
             "start_time_1": "08:00", "end_time_1": "08:45",
             "start_time_2": "08:55", "end_time_2": "09:40",
-            "cell_1_1": "数学", "teacher_1_1": "陈老师",
+            "cell_1_1": str(course.pk),
         })
         self.assertEqual(response.status_code, 302)
         self.assertEqual(CoursePeriod.objects.filter(school_class=self.school_class).count(), 2)

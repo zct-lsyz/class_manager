@@ -153,9 +153,9 @@ def _collect_module_data(module, current_class):
             qs = qs.filter(school_class=current_class)
         rows = [[
             fmt(r.date), r.student.student_id, r.student.name,
-            r.get_period_display(), r.get_status_display(), r.reason,
+            r.get_period_display(), r.get_status_display(), r.points_deducted, r.reason,
         ] for r in qs]
-        return rows, ["日期", "学号", "姓名", "时段", "状态", "原因"], "考勤记录", "attendance.xlsx"
+        return rows, ["日期", "学号", "姓名", "时段", "状态", "加减分", "原因"], "考勤记录", "attendance.xlsx"
 
     # 课堂纪律
     if module == "discipline":

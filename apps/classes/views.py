@@ -7,7 +7,7 @@ from django.db.models import Q
 from apps.classes.utils import get_current_class
 from apps.classes.models import (
     SchoolClass, Semester, CommitteeRole, CommitteeMember, StudyGroup,
-    CourseScheduleEntry, CoursePeriod,
+    CourseScheduleEntry, CoursePeriod, Course, CourseScheduleSnapshot,
 )
 from apps.classes.forms import SchoolClassForm, SemesterForm
 from apps.classes.subjects import Subject
@@ -88,6 +88,36 @@ def class_edit(request, pk):
     else:
         form = SchoolClassForm(instance=cls)
     return render(request, "classes/class_form.html", {"form": form, "cls": cls})
+
+
+@login_required
+def class_delete(request, pk):
+    """删除班级（需输入班级名称二次确认）。
+    级联删除：该班级的学期、学生，以及学生相关的成绩/评语/谈话/考勤/奖惩等全部数据。
+    """
+    cls = get_object_or_404(SchoolClass, pk=pk, created_by=request.user)
+    if request.method == "POST":
+        confirm_name = request.POST.get("confirm_name", "").strip()
+        if confirm_name != cls.name:
+            messages.error(request, "输入的班级名称不匹配，删除已取消。")
+            return redirect("classes:settings")
+
+        from django.db import transaction
+        student_count = Student.objects.filter(school_class=cls).count()
+        with transaction.atomic():
+            # 学生.school_class 为 SET_NULL，需先手动删除学生（CASCADE 清理学生全部关联数据）
+            Student.objects.filter(school_class=cls).delete()
+            # 班级删除后，CASCADE 到学期、考试、值日、宿舍、评语模板、课程表等
+            cls.delete()
+
+        OperationLog.objects.create(
+            user=request.user, action="delete", module="classes",
+            object_repr=cls.name,
+            detail=f"删除班级: {cls.name}（含 {student_count} 名学生及全部关联数据）",
+            ip_address=get_client_ip(request), success=True,
+        )
+        messages.warning(request, f"班级「{cls.name}」已删除，含 {student_count} 名学生及全部关联数据。")
+    return redirect("classes:settings")
 
 
 @login_required
@@ -226,10 +256,16 @@ def committee_member_create(request):
             if not student.school_class:
                 student.school_class = current_class
                 student.save(update_fields=["school_class", "updated_at"])
-            CommitteeMember.objects.update_or_create(
+            member, created = CommitteeMember.objects.get_or_create(
                 role=role, student=student, semester=current_semester,
-                defaults={"is_active": True},
+                defaults={"is_active": True, "appointment_date": timezone.localdate()},
             )
+            if not created:
+                member.is_active = True
+                # 首次任命时自动记录任命日期；已有任命日期则保留
+                if not member.appointment_date:
+                    member.appointment_date = timezone.localdate()
+                member.save(update_fields=["is_active", "appointment_date", "updated_at"])
             _sync_student_positions(student)
             messages.success(request, f"{student.name} 已任命为「{role.name}」。")
         else:
@@ -325,24 +361,15 @@ def study_group_delete(request, pk):
 @login_required
 @require_current_class
 def course_schedule(request):
-    """课程表"""
+    """课程表：课程管理 + 下拉选课 + 调课 + 保存快照"""
     current_class = get_current_class(request.user)
     current_semester = Semester.objects.filter(
         school_class=current_class, is_current=True,
     ).first() if current_class else None
 
-    if request.method == "POST" and request.POST.get("action") == "add_subject":
-        subject_name = request.POST.get("new_subject", "").strip()
-        if subject_name:
-            subject = Subject.objects.filter(name__iexact=subject_name).first()
-            if not subject:
-                Subject.objects.create(name=subject_name)
-            messages.success(request, f"课程「{subject_name}」已添加。")
-        return redirect("classes:course_schedule")
-
     entries = CourseScheduleEntry.objects.filter(
-        school_class=current_class, semester=current_semester
-    ) if current_class else []
+        school_class=current_class, semester=current_semester,
+    ).select_related("course") if current_class else []
 
     # 构建网格: {weekday: {period: entry}}
     grid = {}
@@ -357,8 +384,10 @@ def course_schedule(request):
         grid[e.weekday][e.period] = e
         max_period = max(max_period, e.period)
 
-    # 可选课程（统一科目主数据入口）
-    subjects = Subject.objects.filter(is_active=True)
+    # 当前班级已添加的课程（含授课教师）
+    courses = Course.objects.filter(
+        school_class=current_class,
+    ).order_by("sort_order", "name") if current_class else []
 
     if request.method == "POST":
         if not current_class:
@@ -382,33 +411,285 @@ def course_schedule(request):
                         "end_time": request.POST.get(f"end_time_{period}") or None,
                     },
                 )
-            CourseScheduleEntry.objects.filter(
-                school_class=current_class, semester=current_semester
-            ).delete()
+            # 收集新网格数据用于快照
+            course_map = {str(c.pk): c for c in courses}
+            new_grid_data = {}
             count = 0
             for key, value in request.POST.items():
-                if key.startswith("cell_") and value.strip():
-                    try:
-                        _, weekday, period = key.split("_")
-                        weekday, period = int(weekday), int(period)
-                        if weekday not in range(1, 8) or period not in range(1, max_period + 1):
-                            continue
-                        CourseScheduleEntry.objects.create(
-                            school_class=current_class, semester=current_semester,
-                            weekday=weekday, period=period,
-                            subject=value.strip(),
-                            teacher=request.POST.get(f"teacher_{weekday}_{period}", "").strip(),
-                            location=request.POST.get(f"location_{weekday}_{period}", "").strip(),
-                        )
-                        count += 1
-                    except (ValueError, TypeError):
+                if not key.startswith("cell_"):
+                    continue
+                try:
+                    _, weekday, period = key.split("_")
+                    weekday, period = int(weekday), int(period)
+                    if weekday not in range(1, 8) or period not in range(1, max_period + 1):
                         continue
-        messages.success(request, f"课程表已保存（{count} 节课）。")
+                except (ValueError, TypeError):
+                    continue
+                cell_value = value.strip()
+                if not cell_value:
+                    continue
+                course_obj = course_map.get(cell_value)
+                subject_name = course_obj.name if course_obj else cell_value
+                teacher_name = course_obj.teacher if course_obj else ""
+                CourseScheduleEntry.objects.update_or_create(
+                    school_class=current_class, semester=current_semester,
+                    weekday=weekday, period=period,
+                    defaults={
+                        "course": course_obj,
+                        "subject": subject_name,
+                        "teacher": teacher_name,
+                    },
+                )
+                new_grid_data[f"{weekday}_{period}"] = {
+                    "subject": subject_name,
+                    "teacher": teacher_name,
+                }
+                count += 1
+            # 清掉这次没有填的空格子（保留原条目，避免误删历史）
+            existing_keys = {f"{e.weekday}_{e.period}" for e in entries}
+            for key in existing_keys - set(new_grid_data.keys()):
+                w, p = key.split("_")
+                CourseScheduleEntry.objects.filter(
+                    school_class=current_class, semester=current_semester,
+                    weekday=int(w), period=int(p),
+                ).delete()
+
+            # 生成历史快照（内容有变化才生成）
+            if new_grid_data:
+                latest = CourseScheduleSnapshot.objects.filter(
+                    school_class=current_class, semester=current_semester,
+                ).order_by("-created_at").first()
+                if not latest or latest.data != new_grid_data:
+                    version = CourseScheduleSnapshot.objects.filter(
+                        school_class=current_class, semester=current_semester,
+                    ).count() + 1
+                    CourseScheduleSnapshot.objects.create(
+                        school_class=current_class, semester=current_semester,
+                        label=f"课表 v{version}",
+                        data=new_grid_data,
+                    )
+        messages.success(request, f"课程表已保存（{count} 节课），已生成历史快照。")
         return redirect("classes:course_schedule")
 
     return render(request, "classes/course_schedule.html", {
-        "grid": grid, "max_period": max_period, "subjects": subjects,
+        "grid": grid, "max_period": max_period, "courses": courses,
         "period_settings": period_settings,
+        "periods": range(1, max_period + 1),
+        "weekdays": range(1, 8),
+    })
+
+
+def _course_color(name):
+    """与前端一致的科目哈希背景色（hsl(hash%360 70% 92%) → RGB hex）"""
+    if not name:
+        return None
+    h = 0
+    for ch in name:
+        h = (h * 31 + ord(ch)) & 0xFFFFFFFF
+    hue = h % 360
+    s, l = 0.70, 0.92
+    c = (1 - abs(2 * l - 1)) * s
+    x = c * (1 - abs((hue / 60) % 2 - 1))
+    m = l - c / 2
+    if hue < 60:
+        r, g, b = c, x, 0
+    elif hue < 120:
+        r, g, b = x, c, 0
+    elif hue < 180:
+        r, g, b = 0, c, x
+    elif hue < 240:
+        r, g, b = 0, x, c
+    elif hue < 300:
+        r, g, b = x, 0, c
+    else:
+        r, g, b = c, 0, x
+    return "%02X%02X%02X" % (
+        round((r + m) * 255), round((g + m) * 255), round((b + m) * 255),
+    )
+
+
+@login_required
+def course_schedule_export(request):
+    """导出课程表 Excel（保留各科目背景色）。"""
+    current_class = get_current_class(request.user)
+    current_semester = Semester.objects.filter(
+        school_class=current_class, is_current=True,
+    ).first() if current_class else None
+    if not current_class:
+        return redirect("classes:settings")
+
+    from openpyxl import Workbook
+    from openpyxl.styles import PatternFill, Alignment, Font, Border, Side
+    from openpyxl.utils import get_column_letter
+    from django.http import HttpResponse
+
+    entries = {
+        (e.weekday, e.period): e for e in CourseScheduleEntry.objects.filter(
+            school_class=current_class, semester=current_semester,
+        )
+    }
+    period_settings = {
+        p.period: p for p in CoursePeriod.objects.filter(
+            school_class=current_class, semester=current_semester,
+        )
+    }
+    max_period = max([p for (_d, p) in entries.keys()] + list(period_settings.keys()) + [8])
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "课程表"
+    weekday_labels = ["", "周一", "周二", "周三", "周四", "周五", "周六", "周日"]
+    ws.cell(1, 1, "节次")
+    for d in range(1, 8):
+        ws.cell(1, d + 1, weekday_labels[d])
+
+    thin = Side(style="thin", color="CCCCCC")
+    border = Border(left=thin, right=thin, top=thin, bottom=thin)
+    header_fill = PatternFill("solid", start_color="1A73E8")
+    for col in range(1, 9):
+        cell = ws.cell(1, col)
+        cell.font = Font(bold=True, color="FFFFFF")
+        cell.fill = header_fill
+        cell.alignment = Alignment(horizontal="center", vertical="center")
+
+    for period in range(1, max_period + 1):
+        row = period + 1
+        ps = period_settings.get(period)
+        time_label = f"第{period}节"
+        if ps and ps.start_time:
+            time_label += f"\n{ps.start_time.strftime('%H:%M')}" + (
+                f"-{ps.end_time.strftime('%H:%M')}" if ps.end_time else ""
+            )
+        cell = ws.cell(row, 1, time_label)
+        cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+        cell.border = border
+        for d in range(1, 8):
+            entry = entries.get((d, period))
+            cell = ws.cell(row, d + 1)
+            cell.border = border
+            cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+            if entry:
+                cell.value = entry.subject + (f"\n{entry.teacher}" if entry.teacher else "")
+                color = _course_color(entry.subject)
+                if color:
+                    cell.fill = PatternFill("solid", start_color=color)
+
+    ws.column_dimensions["A"].width = 14
+    for d in range(1, 8):
+        ws.column_dimensions[get_column_letter(d + 1)].width = 16
+    ws.row_dimensions[1].height = 22
+
+    response = HttpResponse(
+        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
+    response["Content-Disposition"] = 'attachment; filename="course_schedule.xlsx"'
+    wb.save(response)
+    return response
+
+
+# ====== 课程管理 ======
+
+@login_required
+@require_current_class
+def course_create(request):
+    """添加课程（含授课教师）"""
+    current_class = get_current_class(request.user)
+    if request.method == "POST":
+        name = request.POST.get("name", "").strip()
+        teacher = request.POST.get("teacher", "").strip()
+        if not name:
+            messages.error(request, "课程名称不能为空。")
+        elif Course.objects.filter(school_class=current_class, name=name).exists():
+            messages.warning(request, f"课程「{name}」已存在。")
+        else:
+            Course.objects.create(
+                school_class=current_class, name=name, teacher=teacher,
+            )
+            messages.success(request, f"课程「{name}」已添加。")
+    return redirect("classes:course_schedule")
+
+
+@login_required
+@require_current_class
+def course_edit(request, pk):
+    """修改课程"""
+    current_class = get_current_class(request.user)
+    course = get_object_or_404(Course, pk=pk, school_class=current_class)
+    if request.method == "POST":
+        name = request.POST.get("name", "").strip()
+        teacher = request.POST.get("teacher", "").strip()
+        if not name:
+            messages.error(request, "课程名称不能为空。")
+        else:
+            dup = Course.objects.filter(
+                school_class=current_class, name=name,
+            ).exclude(pk=course.pk).exists()
+            if dup:
+                messages.warning(request, f"课程「{name}」已存在。")
+            else:
+                old_name = course.name
+                course.name = name
+                course.teacher = teacher
+                course.save(update_fields=["name", "teacher", "updated_at"])
+                # 同步已排课表条目中的科目名
+                CourseScheduleEntry.objects.filter(course=course).update(
+                    subject=name, teacher=teacher,
+                )
+                messages.success(request, f"课程「{old_name}」已更新为「{name}」。")
+    return redirect("classes:course_schedule")
+
+
+@login_required
+@require_current_class
+def course_delete(request, pk):
+    """删除课程"""
+    current_class = get_current_class(request.user)
+    course = get_object_or_404(Course, pk=pk, school_class=current_class)
+    if request.method == "POST":
+        # 课表条目解除关联并清空科目（SET_NULL 后清空 subject 显示）
+        CourseScheduleEntry.objects.filter(course=course).update(
+            course=None, subject="", teacher="",
+        )
+        messages.info(request, f"课程「{course.name}」已删除，相关课表位置已清空。")
+        course.delete()
+    return redirect("classes:course_schedule")
+
+
+# ====== 课程表历史 ======
+
+@login_required
+@require_current_class
+def course_schedule_history(request):
+    """课程表历史版本列表"""
+    current_class = get_current_class(request.user)
+    snapshots = CourseScheduleSnapshot.objects.filter(
+        school_class=current_class,
+    ).select_related("semester").order_by("-created_at")
+    return render(request, "classes/course_schedule_history.html", {
+        "snapshots": snapshots,
+    })
+
+
+@login_required
+@require_current_class
+def course_schedule_view(request, pk):
+    """查看某个历史版本的课表（只读）"""
+    current_class = get_current_class(request.user)
+    snapshot = get_object_or_404(
+        CourseScheduleSnapshot, pk=pk, school_class=current_class,
+    )
+    period_settings = {
+        row.period: row for row in CoursePeriod.objects.filter(
+            school_class=current_class, semester=snapshot.semester,
+        )
+    }
+    max_period = max(
+        [int(k.split("_")[1]) for k in snapshot.data.keys()] + [8]
+    )
+    return render(request, "classes/course_schedule_view.html", {
+        "snapshot": snapshot,
+        "period_settings": period_settings,
+        "max_period": max_period,
         "periods": range(1, max_period + 1),
         "weekdays": range(1, 8),
     })

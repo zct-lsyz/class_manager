@@ -13,6 +13,18 @@ from apps.classes.decorators import require_current_class
 from apps.students.models import Student
 
 
+def _sync_attendance_points(record):
+    """考勤加减分同步到统一积分明细。points_deducted 正数加分、负数扣分。"""
+    from apps.rewards.services import sync_source_point
+    reason = f"{record.get_period_display()}：{record.get_status_display()}"
+    sync_source_point(
+        student=record.student, school_class=record.school_class,
+        semester=record.semester, date=record.date,
+        points=record.points_deducted, reason=reason,
+        source_type="attendance", source_id=record.pk,
+    )
+
+
 @login_required
 def index(request):
     """考勤管理首页"""
@@ -79,6 +91,7 @@ def create(request):
             record = form.save(commit=False)
             record.school_class = current_class
             record.save()
+            _sync_attendance_points(record)
             messages.success(request, "考勤记录已保存。")
             return redirect("attendance:index")
     else:
@@ -103,6 +116,7 @@ def edit(request, pk):
         )
         if form.is_valid():
             form.save()
+            _sync_attendance_points(record)
             messages.success(request, "异常考勤已更新。")
             return redirect("attendance:index")
     else:

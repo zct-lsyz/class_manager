@@ -45,6 +45,9 @@
                                     <a href="{% url 'classes:class_edit' cls.pk %}" class="btn btn-sm btn-outline-primary">
                                         <i class="bi bi-pencil"></i>
                                     </a>
+                                    <button type="button" class="btn btn-sm btn-outline-danger" data-bs-toggle="modal" data-bs-target="#deleteClassModal{{ cls.pk }}">
+                                        <i class="bi bi-trash"></i>
+                                    </button>
                                 </td>
                             </tr>
                             {% empty %}
@@ -189,4 +192,36 @@
         </div>
     </div>
 </div>
+
+<!-- 删除班级确认模态框 -->
+{% for cls in classes %}
+<div class="modal fade" id="deleteClassModal{{ cls.pk }}" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form method="post" action="{% url 'classes:class_delete' cls.pk %}" onsubmit="return confirm('再次确认：将永久删除班级「{{ cls.name }}」及其全部数据，此操作不可恢复！')">
+                {% csrf_token %}
+                <div class="modal-header">
+                    <h5 class="modal-title text-danger"><i class="bi bi-exclamation-triangle me-2"></i>删除班级</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <p>即将删除班级 <strong>{{ cls.name }}</strong>，以下数据将被<strong class="text-danger">永久删除、不可恢复</strong>：</p>
+                    <ul class="small">
+                        <li>该班级的全部学期</li>
+                        <li>该班级的全部学生（{{ cls.students.count }} 名）</li>
+                        <li>学生相关的成绩、评语、谈话、考勤、奖惩、作业、宿舍等全部数据</li>
+                        <li>该班级的考试、值日、学习小组、课程表等</li>
+                    </ul>
+                    <p class="mb-1 small">请输入班级名称 <strong>{{ cls.name }}</strong> 以确认删除：</p>
+                    <input type="text" name="confirm_name" class="form-control" placeholder="{{ cls.name }}" required autocomplete="off">
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="submit" class="btn btn-danger"><i class="bi bi-trash me-1"></i>确认删除</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endfor %}
 {% endblock %}

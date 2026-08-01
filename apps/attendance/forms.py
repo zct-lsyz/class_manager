@@ -6,12 +6,13 @@ from apps.students.models import Student
 class AttendanceForm(forms.ModelForm):
     class Meta:
         model = AttendanceRecord
-        fields = ["student", "date", "period", "status", "reason", "leave_proof"]
+        fields = ["student", "date", "period", "status", "points_deducted", "reason", "leave_proof"]
         widgets = {
             "student": forms.Select(attrs={"class": "form-select"}),
             "date": forms.DateInput(attrs={"class": "form-control", "type": "date"}),
             "period": forms.Select(attrs={"class": "form-select"}),
             "status": forms.Select(attrs={"class": "form-select"}),
+            "points_deducted": forms.NumberInput(attrs={"class": "form-control"}),
             "reason": forms.TextInput(attrs={"class": "form-control", "list": "attendance-reason-options"}),
             "leave_proof": forms.FileInput(attrs={"class": "form-control"}),
         }
@@ -20,6 +21,7 @@ class AttendanceForm(forms.ModelForm):
             "date": "日期",
             "period": "时段",
             "status": "状态",
+            "points_deducted": "加减分（正加负扣）",
             "reason": "原因/备注",
             "leave_proof": "请假证明",
         }

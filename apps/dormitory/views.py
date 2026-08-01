@@ -4,6 +4,7 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.core.paginator import Paginator
 from django.db import transaction
 from django.db.models import Q
+from django.utils import timezone
 
 from apps.dormitory.models import (
     DormBuilding, DormRoom, DormBed, DormAssignment,
@@ -316,6 +317,10 @@ def hygiene_create(request):
     rooms = DormRoom.objects.filter(building__school_class=current_class).select_related("building") if current_class else []
     form.fields["room"].queryset = rooms
 
+    # 每个卫生项目的默认实际得分 = 满分 - 默认扣分（新建时自动预填）
+    for item in items:
+        item.default_score = max(0, item.full_score - item.default_deduction)
+
     return render(request, "dormitory/hygiene_form.html", {
         "form": form, "items": items,
     })
@@ -369,15 +374,113 @@ def discipline(request):
 @login_required
 @require_current_class
 def discipline_create(request):
-    """登记宿舍纪律"""
+    """登记宿舍纪律（支持先选宿舍→选择该宿舍学生或全体同步加减分）"""
     from apps.discipline.models import DormDisciplineRecord
     from apps.discipline.forms import DormDisciplineForm
+    from apps.discipline.models import ConfigurableItem
     current_class = get_current_class(request.user)
     current_semester = Semester.objects.filter(
         school_class=current_class, is_current=True,
     ).first()
 
+    rooms = DormRoom.objects.filter(
+        building__school_class=current_class,
+    ).select_related("building").order_by("building", "room_number") if current_class else []
+
     if request.method == "POST":
+        student_mode = request.POST.get("student_mode", "one")
+
+        if student_mode == "all":
+            # 全体模式：给该宿舍每个当前分配学生各创建一条记录，加减分同步
+            room = None
+            room_id = request.POST.get("dorm_room", "")
+            if room_id:
+                room = get_object_or_404(
+                    DormRoom, pk=room_id, building__school_class=current_class,
+                )
+            if not room:
+                messages.error(request, "请先选择宿舍。")
+                return redirect("dormitory:discipline_create")
+
+            item = None
+            item_id = request.POST.get("item", "")
+            if item_id:
+                item = ConfigurableItem.objects.filter(pk=item_id, module="dorm_discipline").first()
+            try:
+                points = int(request.POST.get("points_deducted", "0") or "0")
+            except (ValueError, TypeError):
+                points = 0
+
+            def _as_date(name, default=None):
+                v = request.POST.get(name, "")
+                from datetime import date as _date
+                try:
+                    return _date.fromisoformat(v) if v else default
+                except ValueError:
+                    return default
+
+            def _as_time(name):
+                from datetime import time as _time
+                v = request.POST.get(name, "")
+                try:
+                    hh, mm = v.split(":")
+                    return _time(int(hh), int(mm))
+                except (ValueError, TypeError):
+                    return None
+
+            students = Student.objects.filter(
+                dorm_assignments__room=room, dorm_assignments__is_current=True,
+                is_deleted=False,
+            ).distinct()
+            if not students.exists():
+                messages.error(request, "该宿舍暂无分配学生。")
+                return redirect("dormitory:discipline_create")
+
+            created = 0
+            with transaction.atomic():
+                for st in students:
+                    record = DormDisciplineRecord.objects.create(
+                        school_class=current_class,
+                        semester=current_semester,
+                        student=st,
+                        dorm_room=room,
+                        date=_as_date("date", timezone.localdate()),
+                        time=_as_time("time"),
+                        item=item,
+                        custom_content=request.POST.get("custom_content", "").strip(),
+                        severity=request.POST.get("severity", "moderate"),
+                        description=request.POST.get("description", "").strip(),
+                        action_taken=request.POST.get("action_taken", "").strip(),
+                        points_deducted=points,
+                        needs_follow_up=request.POST.get("needs_follow_up") == "on",
+                        follow_up_date=_as_date("follow_up_date"),
+                        follow_up_result=request.POST.get("follow_up_result", "").strip(),
+                        remarks=request.POST.get("remarks", "").strip(),
+                    )
+                    # 同步到统一积分（正的 points_deducted 记扣分）
+                    if points:
+                        from apps.rewards.services import sync_source_point
+                        item_name = item.name if item else (record.custom_content or "宿舍纪律")
+                        sync_source_point(
+                            student=st, school_class=current_class,
+                            semester=current_semester, date=record.date,
+                            points=-points, reason=f"{record.get_severity_display()}：{item_name}",
+                            source_type="dorm_discipline", source_id=record.pk,
+                        )
+                    created += 1
+            messages.success(
+                request,
+                f"已为该宿舍 {created} 名学生同步登记宿舍纪律（每人{'扣' if points else '加'} {abs(points)} 分）。",
+            )
+            OperationLog.objects.create(
+                user=request.user, action="create", module="dormitory",
+                object_repr=f"{room} 全体纪律",
+                detail=f"宿舍纪律全体登记：{created} 人，{points} 分",
+                ip_address=get_client_ip(request), success=True,
+            )
+            return redirect("dormitory:discipline")
+
+        # 单学生模式
         form = DormDisciplineForm(request.POST)
         if form.is_valid():
             record = form.save(commit=False)
@@ -386,7 +489,30 @@ def discipline_create(request):
             record.save()
             messages.success(request, "宿舍纪律记录已保存。")
             return redirect("dormitory:discipline")
-    else:
-        form = DormDisciplineForm()
+        return render(request, "dormitory/discipline_form.html", {
+            "form": form, "rooms": rooms, "dorm_room_students": _build_room_students(current_class),
+        })
 
-    return render(request, "dormitory/discipline_form.html", {"form": form})
+    form = DormDisciplineForm()
+    form.fields["dorm_room"].queryset = rooms
+    # 学生选项由前端根据所选宿舍动态填充，初始为空（仅"全体"占位由 JS 重建）
+    form.fields["student"].queryset = Student.objects.filter(
+        school_class=current_class, is_deleted=False,
+    ) if current_class else Student.objects.none()
+
+    return render(request, "dormitory/discipline_form.html", {
+        "form": form, "rooms": rooms, "dorm_room_students": _build_room_students(current_class),
+    })
+
+
+def _build_room_students(current_class):
+    """构建 {room_id: [{id, name}]} 宿舍→当前分配学生映射，供前端联动。"""
+    data = {}
+    if not current_class:
+        return data
+    assignments = DormAssignment.objects.filter(
+        room__building__school_class=current_class, is_current=True,
+    ).select_related("room", "student")
+    for a in assignments:
+        data.setdefault(a.room_id, []).append({"id": a.student_id, "name": a.student.name})
+    return data

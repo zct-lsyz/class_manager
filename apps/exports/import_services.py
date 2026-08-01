@@ -10,13 +10,89 @@ from django.db import transaction
 
 from openpyxl import load_workbook
 
-from apps.classes.models import SchoolClass
+from apps.classes.models import SchoolClass, Semester
 from apps.students.models import Student, Guardian
 from apps.students.validators import PHONE_PATTERN, STUDENT_ID_PATTERN
 
 
 PHONE_RE = re.compile(PHONE_PATTERN)
 STUDENT_ID_RE = re.compile(STUDENT_ID_PATTERN)
+
+# 导入学生信息时，宿舍号中的默认宿舍楼名
+DEFAULT_DORM_BUILDING = "一栋"
+
+
+def _parse_dormitory(dormitory_str):
+    """解析宿舍字符串，返回 (楼名, 房间号)。
+
+    支持格式：
+      "1号楼 101" / "一栋 101"  → ("1号楼", "101") / ("一栋", "101")
+      "一栋101" / "1号楼101"    → ("一栋", "101") / ("1号楼", "101")
+      "101"                     → (None, "101")（楼名取默认）
+      "A101"                    → (None, "A101")
+    """
+    s = str(dormitory_str or "").strip()
+    if not s:
+        return None, None
+    # 空格分隔：最后一段为房间号，其余为楼名
+    parts = s.split()
+    if len(parts) >= 2:
+        building = "".join(parts[:-1])
+        room = parts[-1]
+        return building or None, room
+    # 无空格：楼名（含 栋/楼/号 结尾）+ 房间号
+    m = re.match(r"^(.+?[栋楼])(\d+)$", s)
+    if m:
+        return m.group(1), m.group(2)
+    # 纯数字房间号
+    if s.isdigit():
+        return None, s
+    # 其它（如 A101）整段视为房间号
+    return None, s
+
+
+def _sync_dormitory_assignment(student, school_class):
+    """根据学生 dormitory/bed_number 自动创建宿舍楼/宿舍/床位并分配。
+
+    只在学生填写了宿舍信息时执行；未填则跳过。
+    """
+    if not student.dormitory:
+        return
+    building_name, room_number = _parse_dormitory(student.dormitory)
+    if not room_number:
+        return
+    building_name = building_name or DEFAULT_DORM_BUILDING
+
+    from apps.dormitory.models import DormBuilding, DormRoom, DormBed, DormAssignment
+
+    building, _ = DormBuilding.objects.get_or_create(
+        school_class=school_class, name=building_name,
+        defaults={"sort_order": 0},
+    )
+    room, _ = DormRoom.objects.get_or_create(
+        building=building, room_number=room_number,
+        defaults={"bed_count": 8},
+    )
+    # 确保床位存在（默认 1-床位数，编号 01、02...）
+    existing = set(DormBed.objects.filter(room=room).values_list("bed_number", flat=True))
+    for i in range(1, room.bed_count + 1):
+        bed_no = f"{i:02d}"
+        if bed_no not in existing:
+            DormBed.objects.create(room=room, bed_number=bed_no)
+
+    bed = None
+    bed_number = str(student.bed_number or "").strip()
+    if bed_number:
+        bed = DormBed.objects.filter(room=room, bed_number=bed_number).first()
+
+    # 取消学生旧分配，创建新分配
+    DormAssignment.objects.filter(student=student, is_current=True).update(is_current=False)
+    DormAssignment.objects.create(
+        student=student, room=room, bed=bed, is_current=True,
+        semester=Semester.objects.filter(
+            school_class=school_class, is_current=True,
+        ).first(),
+    )
 
 
 def parse_uploaded_file(uploaded_file):
@@ -316,13 +392,13 @@ def validate_student_info(data_rows):
 
 @transaction.atomic
 def import_student_info(valid_rows, school_class):
-    """统一导入学生信息（含联系人）"""
+    """统一导入学生信息（含联系人），并自动为有联系人的学生创建家长记录"""
     created = 0
     for item in valid_rows:
         birth_date = item["birth_date"]
         if isinstance(birth_date, datetime):
             birth_date = birth_date.date()
-        Student.objects.create(
+        student = Student.objects.create(
             school_class=school_class,
             student_id=item["student_id"],
             name=item["name"],
@@ -344,4 +420,71 @@ def import_student_info(valid_rows, school_class):
             remarks=item["remarks"],
         )
         created += 1
+        # 根据导入的联系人关系自动匹配创建家长记录
+        _create_guardian_from_import(student, item)
+        # 有宿舍/床号时自动创建宿舍楼/宿舍/床位并分配
+        if item.get("dormitory") or item.get("bed_number"):
+            _sync_dormitory_assignment(student, school_class)
     return created
+
+
+_FATHER_KEYWORDS = ("父亲", "爸爸", "老爸", "爹")
+_MOTHER_KEYWORDS = ("母亲", "妈妈", "老妈", "娘")
+
+
+def _is_father(relation):
+    return relation in _FATHER_KEYWORDS or relation.startswith("爸") or relation.startswith("爹")
+
+
+def _is_mother(relation):
+    return relation in _MOTHER_KEYWORDS or relation.startswith("妈") or relation.startswith("娘")
+
+
+def _create_guardian_from_import(student, item):
+    """根据导入行的联系人关系，自动为学生的家长标签页创建 Guardian 记录。"""
+    contacts = []
+    if item.get("primary_contact"):
+        contacts.append((item["primary_contact"], item.get("primary_phone", "")))
+    if item.get("secondary_contact"):
+        contacts.append((item["secondary_contact"], item.get("secondary_phone", "")))
+    if not contacts:
+        return
+
+    father_name = ""
+    father_phone = ""
+    mother_name = ""
+    mother_phone = ""
+    other_guardian = ""
+
+    for relation, phone in contacts:
+        if _is_father(relation):
+            father_name = father_name or relation
+            father_phone = father_phone or phone
+        elif _is_mother(relation):
+            mother_name = mother_name or relation
+            mother_phone = mother_phone or phone
+        else:
+            entry = f"{relation} {phone}".strip() if phone else relation
+            other_guardian = f"{other_guardian}；{entry}" if other_guardian else entry
+
+    # 主要联系人：以"联系人关系"（第一个联系人）的关系为准
+    primary_relation = contacts[0][0]
+    if _is_father(primary_relation):
+        primary_key = "father"
+    elif _is_mother(primary_relation):
+        primary_key = "mother"
+    else:
+        primary_key = "other"
+
+    Guardian.objects.update_or_create(
+        student=student,
+        defaults={
+            "father_name": father_name,
+            "father_phone": father_phone,
+            "mother_name": mother_name,
+            "mother_phone": mother_phone,
+            "other_guardian": other_guardian,
+            "primary_contact": primary_key,
+            "home_address": item.get("home_address", ""),
+        },
+    )

@@ -17,6 +17,27 @@ def get_client_ip(request):
     return x_forwarded_for.split(",")[0].strip() if x_forwarded_for else request.META.get("REMOTE_ADDR", "")
 
 
+def _sync_discipline_points(record):
+    """课堂/宿舍纪律的加减分同步到统一积分明细。
+
+    points_deducted 语义：正数扣分、负数加分。
+    """
+    from apps.rewards.services import sync_source_point
+    item_name = record.item.name if record.item else record.custom_content or "纪律事件"
+    reason = f"{record.get_severity_display()}：{item_name}"
+    source_type = (
+        "classroom_discipline"
+        if isinstance(record, ClassroomDisciplineRecord)
+        else "dorm_discipline"
+    )
+    sync_source_point(
+        student=record.student, school_class=record.school_class,
+        semester=record.semester, date=record.date,
+        points=-record.points_deducted, reason=reason,
+        source_type=source_type, source_id=record.pk,
+    )
+
+
 # ====== 课堂纪律条目 ======
 
 @login_required
@@ -78,6 +99,7 @@ def classroom_create(request):
             record.school_class = current_class
             record.semester = current_semester
             record.save()
+            _sync_discipline_points(record)
             messages.success(request, "课堂纪律记录已保存。")
             return redirect("discipline:classroom_list")
     else:
@@ -94,6 +116,7 @@ def classroom_edit(request, pk):
         form = ClassroomDisciplineForm(request.POST, instance=record)
         if form.is_valid():
             form.save()
+            _sync_discipline_points(record)
             messages.success(request, "课堂纪律记录已更新。")
             return redirect("discipline:classroom_list")
     else:
@@ -106,6 +129,8 @@ def classroom_delete(request, pk):
     """删除课堂纪律事件（软删除）"""
     record = get_object_or_404(ClassroomDisciplineRecord, pk=pk)
     if request.method == "POST":
+        from apps.rewards.services import unsync_source_point
+        unsync_source_point("classroom_discipline", record.pk)
         soft_delete(
             record,
             user=request.user,
@@ -188,6 +213,7 @@ def dorm_create(request):
             record.school_class = current_class
             record.semester = current_semester
             record.save()
+            _sync_discipline_points(record)
             messages.success(request, "宿舍纪律记录已保存。")
             return redirect("discipline:dorm_list")
     else:
@@ -203,6 +229,7 @@ def dorm_edit(request, pk):
         form = DormDisciplineForm(request.POST, instance=record)
         if form.is_valid():
             form.save()
+            _sync_discipline_points(record)
             messages.success(request, "宿舍纪律记录已更新。")
             return redirect("discipline:dorm_list")
     else:
@@ -215,6 +242,8 @@ def dorm_delete(request, pk):
     """删除宿舍纪律"""
     record = get_object_or_404(DormDisciplineRecord, pk=pk)
     if request.method == "POST":
+        from apps.rewards.services import unsync_source_point
+        unsync_source_point("dorm_discipline", record.pk)
         soft_delete(
             record,
             user=request.user,

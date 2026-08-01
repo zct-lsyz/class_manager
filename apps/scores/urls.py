@@ -20,6 +20,7 @@ urlpatterns = [
     path("entry/import-wide/", views.score_import_wide, name="score_import_wide"),
     path("entry/template-wide/", views.score_import_wide_template, name="score_import_wide_template"),
     path("analysis/", views.analysis, name="analysis"),
+    path("analysis/comparison/", views.comparison, name="comparison"),
     path("analysis/external/import/", views.external_import, name="external_import"),
     path("analysis/external/template/", views.external_import_template, name="external_import_template"),
     path("analysis/external/<int:pk>/delete/", views.external_delete, name="external_delete"),
@@ -27,6 +28,8 @@ urlpatterns = [
     path("analysis/students/", views.class_student_overview, name="class_student_overview"),
     path("analysis/grade-lines/<int:exam_id>/", views.grade_line_settings, name="grade_line_settings"),
     path("subjects/", views.subject_settings, name="subject_settings"),
+    path("subjects/<int:pk>/edit/", views.subject_edit, name="subject_edit"),
+    path("subjects/<int:pk>/delete/", views.subject_delete, name="subject_delete"),
     # 培优补差
     path("support/", support_views.support_list, name="support_list"),
     path("support/create/", support_views.support_create, name="support_create"),

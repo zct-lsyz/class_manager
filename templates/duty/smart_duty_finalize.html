@@ -1,9 +1,10 @@
 {% extends "base.html" %}
+{% load custom_filters %}
 {% block title %}值日方案确认{% endblock %}
 {% block content %}
 <h4 class="mt-3 mb-3"><i class="bi bi-brush me-2 text-primary"></i>智能值日</h4>
 
-{% include "duty/_step_indicator.html" with step=4 labels="配置任务与人数,自动生成排班,手动调整,确认存档" %}
+{% include "duty/_step_indicator.html" with step=4 labels="配置任务与人数,自动生成排班,手动调整,确认存档"|split:"," %}
 
 <div class="card">
     <div class="card-header py-2 d-flex flex-wrap justify-content-between align-items-center">

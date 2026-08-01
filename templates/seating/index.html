@@ -167,6 +167,8 @@ document.addEventListener('DOMContentLoaded', function() {
         if (block && placeholder) placeholder.remove();
     });
     const bindBlock = block => block.addEventListener('dragstart', () => { dragged = block; });
+    // 根据所在位置切换块宽度：座位格子内占满（w-100），未分配区按名字宽度自适应
+    const syncBlockWidth = (block, inSeat) => block.classList.toggle('w-100', !!inSeat);
     document.querySelectorAll('.student-block').forEach(bindBlock);
     if (window.bootstrap) document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(element => {
         new bootstrap.Tooltip(element, {delay: {show: 300, hide: 100}, container: 'body'});
@@ -178,8 +180,12 @@ document.addEventListener('DOMContentLoaded', function() {
             if (!dragged || dragged.parentElement === slot) return;
             const origin = dragged.parentElement;
             const occupied = slot.querySelector('.student-block');
-            if (occupied) unassigned.appendChild(occupied);
+            if (occupied) {
+                unassigned.appendChild(occupied);
+                syncBlockWidth(occupied, false);  // 被挤回未分配区 → 恢复名字宽度
+            }
             slot.appendChild(dragged);
+            syncBlockWidth(dragged, true);  // 拖入座位 → 占满格子
             if (origin.classList.contains('seat-slot')) syncSeats();
             unassigned.querySelector('.unassigned-empty')?.remove();
             syncSeats();
@@ -188,7 +194,11 @@ document.addEventListener('DOMContentLoaded', function() {
     unassigned.addEventListener('dragover', event => event.preventDefault());
     unassigned.addEventListener('drop', event => {
         event.preventDefault();
-        if (dragged) { unassigned.appendChild(dragged); syncSeats(); }
+        if (dragged) {
+            unassigned.appendChild(dragged);
+            syncBlockWidth(dragged, false);  // 拖回未分配区 → 恢复名字宽度
+            syncSeats();
+        }
     });
     const prioritySelects = Array.from(document.querySelectorAll('.priority-select'));
     prioritySelects.forEach(select => {

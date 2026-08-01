@@ -122,8 +122,8 @@ def collect_module_data(module, current_class):
         queryset = AttendanceRecord.objects.select_related("student", "semester")
         if current_class:
             queryset = queryset.filter(school_class=current_class)
-        rows = [[fmt(item.date), item.student.student_id, item.student.name, item.get_period_display(), item.get_status_display(), item.reason, item.leave_proof.name] for item in queryset]
-        return _result(rows, ["日期", "学号", "姓名", "时段", "状态", "原因", "请假证明"], "考勤记录", "attendance.xlsx")
+        rows = [[fmt(item.date), item.student.student_id, item.student.name, item.get_period_display(), item.get_status_display(), item.points_deducted, item.reason, item.leave_proof.name] for item in queryset]
+        return _result(rows, ["日期", "学号", "姓名", "时段", "状态", "加减分", "原因", "请假证明"], "考勤记录", "attendance.xlsx")
 
     if module in {"homework_tasks", "homework_records", "homework_statuses"}:
         from apps.homework.models import HomeworkTask, HomeworkRecord, HomeworkStatus
@@ -219,8 +219,8 @@ def collect_module_data(module, current_class):
             queryset = CourseScheduleEntry.objects.select_related("semester")
             if current_class:
                 queryset = queryset.filter(school_class=current_class)
-            rows = [[item.semester.get_display_name() if item.semester else "", item.get_weekday_display(), item.period, item.subject, item.teacher, item.location, item.remarks] for item in queryset]
-            return _result(rows, ["学期", "星期", "节次", "科目", "教师", "地点", "备注"], "课程表", "course_schedule.xlsx")
+            rows = [[item.semester.get_display_name() if item.semester else "", item.get_weekday_display(), item.period, item.subject, item.teacher, item.remarks] for item in queryset]
+            return _result(rows, ["学期", "星期", "节次", "科目", "教师", "备注"], "课程表", "course_schedule.xlsx")
         if module == "committee":
             queryset = CommitteeMember.objects.select_related("role", "student", "semester")
             if current_class:

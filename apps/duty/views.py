@@ -443,10 +443,12 @@ def smart_duty_adjust(request, pk):
                 seen[entry.day_index].add(entry.student_id)
         if conflicts:
             messages.warning(request, "发现同一天重复分配：" + "；".join(dict.fromkeys(conflicts)))
-        else:
-            messages.success(request, "值日安排已保存。")
+            _log_operation(request, "edit", roster.name, "手动调整值日排班（存在冲突）")
+            return redirect("duty:smart_duty_adjust", pk=roster.pk)
+        messages.success(request, "值日安排已保存。")
         _log_operation(request, "edit", roster.name, "手动调整值日排班")
-        return redirect("duty:smart_duty_adjust", pk=roster.pk)
+        # "保存调整并继续" → 进入第 4 步确认存档
+        return redirect("duty:smart_duty_finalize", pk=roster.pk)
 
     unassigned = list(current_class.students.filter(is_deleted=False))
     assigned_ids = {e.student_id for e in DutyRosterEntry.objects.filter(roster=roster)}

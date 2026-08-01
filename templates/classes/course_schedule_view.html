@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% load custom_filters %}
+{% block title %}课表历史 - {{ snapshot.label }}{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mt-3 mb-4 flex-wrap">
+    <h4 class="mb-0"><i class="bi bi-calendar-week me-2 text-primary"></i>课表历史：{{ snapshot.label|default:snapshot.created_at|date:"Y-m-d H:i" }}
+        <small class="text-muted fs-6">{{ snapshot.created_at|date:"Y-m-d H:i:s" }}</small>
+    </h4>
+    <div>
+        <button type="button" class="btn btn-outline-primary btn-sm" onclick="window.print()">
+            <i class="bi bi-printer me-1"></i>导出 / 打印
+        </button>
+        <a href="{% url 'classes:course_schedule_history' %}" class="btn btn-outline-secondary btn-sm">
+            <i class="bi bi-arrow-left me-1"></i>返回历史
+        </a>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-body p-0 table-responsive">
+        <table class="table table-bordered mb-0 text-center">
+            <thead><tr><th style="width:60px;">节次</th>
+                {% for d in "1234567"|make_list %}<th>周{{ d|add:0 }}<br><small class="text-muted">{% if d == '1' %}周一{% elif d == '2' %}周二{% elif d == '3' %}周三{% elif d == '4' %}周四{% elif d == '5' %}周五{% elif d == '6' %}周六{% else %}周日{% endif %}</small></th>{% endfor %}
+            </tr></thead>
+            <tbody>
+            {% for period in periods %}
+            <tr>
+                {% with period_setting=period_settings|get_item:period %}
+                <td class="align-middle text-muted small">第{{ period }}节
+                    <div class="small">{{ period_setting.start_time|time:'H:i'|default:"" }}{% if period_setting.start_time and period_setting.end_time %}-{% endif %}{{ period_setting.end_time|time:'H:i'|default:"" }}</div>
+                </td>
+                {% endwith %}
+                {% for weekday in weekdays %}
+                {% with key=weekday|stringformat:"s"|add:"_"|add:period %}
+                {% with cell=snapshot.data|get_item:key %}
+                <td class="p-2 align-middle" style="min-width:120px">
+                    {% if cell %}
+                    <div class="fw-semibold">{{ cell.subject }}</div>
+                    {% if cell.teacher %}<div class="text-muted small">{{ cell.teacher }}</div>{% endif %}
+                    {% else %}
+                    <span class="text-muted small">自习</span>
+                    {% endif %}
+                </td>
+                {% endwith %}
+                {% endwith %}
+                {% endfor %}
+            </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+@media print {
+    body * { visibility: hidden; }
+    .card, .card * { visibility: visible; }
+    .card { position: absolute; left: 0; top: 0; width: 100%; border: none; }
+    .btn, .card-header button, .card-header a { display: none !important; }
+}
+</style>
+{% endblock %}

@@ -155,6 +155,26 @@ class StudyGroup(BaseModel):
         return self.name
 
 
+class Course(BaseModel):
+    """课程（含授课教师），供课程表选择"""
+    school_class = models.ForeignKey(
+        SchoolClass, on_delete=models.CASCADE,
+        related_name="courses", verbose_name="班级",
+    )
+    name = models.CharField("课程名称", max_length=50)
+    teacher = models.CharField("授课教师", max_length=50, blank=True, default="")
+    sort_order = models.IntegerField("排序", default=0)
+
+    class Meta:
+        verbose_name = "课程"
+        verbose_name_plural = "课程"
+        ordering = ["sort_order", "name"]
+        unique_together = ["school_class", "name"]
+
+    def __str__(self):
+        return f"{self.name}（{self.teacher}）" if self.teacher else self.name
+
+
 class CourseScheduleEntry(BaseModel):
     """课程表条目"""
     WEEKDAY_CHOICES = [
@@ -170,11 +190,14 @@ class CourseScheduleEntry(BaseModel):
         Semester, on_delete=models.SET_NULL,
         null=True, blank=True, verbose_name="学期",
     )
+    course = models.ForeignKey(
+        Course, on_delete=models.SET_NULL,
+        null=True, blank=True, verbose_name="课程",
+    )
     weekday = models.IntegerField("星期", choices=WEEKDAY_CHOICES)
     period = models.IntegerField("节次")
     subject = models.CharField("科目", max_length=50, blank=True, default="")
     teacher = models.CharField("任课教师", max_length=50, blank=True, default="")
-    location = models.CharField("上课地点", max_length=100, blank=True, default="")
     remarks = models.CharField("备注", max_length=100, blank=True, default="")
 
     class Meta:
@@ -206,3 +229,25 @@ class CoursePeriod(BaseModel):
         verbose_name_plural = "课程节次"
         ordering = ["period"]
         unique_together = ["school_class", "semester", "period"]
+
+
+class CourseScheduleSnapshot(BaseModel):
+    """课程表历史快照（每次保存生成一个版本）"""
+    school_class = models.ForeignKey(
+        SchoolClass, on_delete=models.CASCADE,
+        related_name="course_snapshots", verbose_name="班级",
+    )
+    semester = models.ForeignKey(
+        Semester, on_delete=models.SET_NULL,
+        null=True, blank=True, verbose_name="学期",
+    )
+    label = models.CharField("版本标签", max_length=100, blank=True, default="")
+    data = models.JSONField("课表数据", default=dict)
+
+    class Meta:
+        verbose_name = "课程表快照"
+        verbose_name_plural = "课程表快照"
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.label}（{self.created_at:%Y-%m-%d %H:%M}）"

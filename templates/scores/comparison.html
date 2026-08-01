@@ -1,0 +1,217 @@
+{% extends "base.html" %}
+{% load custom_filters %}
+{% block title %}多班成绩对比{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mt-3 mb-4 flex-wrap gap-2">
+    <h4 class="mb-0"><i class="bi bi-collection me-2 text-primary"></i>多班成绩对比</h4>
+    <a href="{% url 'scores:analysis' %}{% if exam %}?exam_id={{ exam.pk }}{% endif %}" class="btn btn-outline-secondary btn-sm">
+        <i class="bi bi-arrow-left me-1"></i>返回成绩分析
+    </a>
+</div>
+
+<div class="card mb-3">
+    <div class="card-header py-2">选择考试</div>
+    <div class="card-body">
+        <form method="get" action="{% url 'scores:comparison' %}" class="row g-2 align-items-end">
+            <div class="col-md-4">
+                <label class="form-label small">考试</label>
+                <select name="exam_id" class="form-select" onchange="this.form.submit()">
+                    <option value="">-- 请选择考试 --</option>
+                    {% for e in exams %}
+                    <option value="{{ e.pk }}" {% if exam and e.pk == exam.pk %}selected{% endif %}>{{ e.name }}（{{ e.date }}）</option>
+                    {% endfor %}
+                </select>
+            </div>
+        </form>
+    </div>
+</div>
+
+{% if exam %}
+<div class="row g-3">
+    <div class="col-md-5">
+        <!-- 外部班级导入 -->
+        <div class="card">
+            <div class="card-header py-2"><i class="bi bi-upload me-2"></i>导入其他班级成绩</div>
+            <div class="card-body">
+                <div class="small text-muted mb-2">
+                    考试「{{ exam.name }}」共 {{ exam_subjects|length }} 个科目。下载模板后按科目填写其他班级学生成绩与名次。
+                </div>
+                <a href="{% url 'scores:external_import_template' %}?exam_id={{ exam.pk }}" class="btn btn-outline-primary btn-sm mb-3">
+                    <i class="bi bi-download me-1"></i>下载导入模板
+                </a>
+                <form method="post" enctype="multipart/form-data" action="{% url 'scores:external_import' %}" class="row g-2">
+                    {% csrf_token %}
+                    <input type="hidden" name="exam_id" value="{{ exam.pk }}">
+                    <div class="col-12">
+                        <label class="form-label small">班级名称（必填）</label>
+                        <input type="text" name="class_name" class="form-control form-control-sm" placeholder="如：3班 / 5班">
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label small">学校名称（可选）</label>
+                        <input type="text" name="school_name" class="form-control form-control-sm" placeholder="同一学校可留空">
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label small">Excel 文件</label>
+                        <input type="file" name="file" class="form-control form-control-sm" accept=".xlsx,.xls" required>
+                    </div>
+                    <div class="col-12">
+                        <button type="submit" class="btn btn-primary btn-sm"><i class="bi bi-upload me-1"></i>导入</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- 已导入班级列表 -->
+        <div class="card mt-3">
+            <div class="card-header py-2"><i class="bi bi-collection me-2"></i>已导入的对比班级</div>
+            <div class="card-body p-0 table-responsive">
+                <table class="table table-hover mb-0">
+                    <thead><tr><th>班级</th><th>学校</th><th>操作</th></tr></thead>
+                    <tbody>
+                        {% for ec in external_classes %}
+                        <tr>
+                            <td>{{ ec.name }}</td>
+                            <td>{{ ec.school_name|default:"—" }}</td>
+                            <td>
+                                <form method="post" action="{% url 'scores:external_delete' ec.pk %}" class="d-inline" onsubmit="return confirm('确认删除该对比班级及其成绩？')">
+                                    {% csrf_token %}
+                                    <button type="submit" class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
+                                </form>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr><td colspan="3" class="text-muted text-center">暂无导入的对比班级</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-7">
+        {% if comparison_table %}
+        <!-- 对比图表 -->
+        <div class="card mb-3">
+            <div class="card-header py-2"><i class="bi bi-bar-chart me-2 text-success"></i>各科多班对比图表</div>
+            <div class="card-body">
+                <div class="row g-2 align-items-end mb-2">
+                    <div class="col-md-5">
+                        <label class="form-label small">对比指标</label>
+                        <select id="compareMetricSelect" class="form-select form-select-sm">
+                            <option value="avg">平均分</option>
+                            <option value="variance">方差</option>
+                            <option value="max">最高分</option>
+                            <option value="min">最低分</option>
+                            <option value="max_grade_rank">最高级部名次</option>
+                            <option value="min_grade_rank">最低级部名次</option>
+                            <option value="max_city_rank">最高市名次</option>
+                            <option value="min_city_rank">最低市名次</option>
+                        </select>
+                    </div>
+                </div>
+                <canvas id="compareChart" height="220"></canvas>
+            </div>
+        </div>
+
+        <!-- 对比明细表 -->
+        <div class="card">
+            <div class="card-header py-2">各科多班对比明细</div>
+            <div class="card-body p-0 table-responsive">
+                <table class="table table-bordered mb-0 stats-wide-table">
+                    <thead>
+                        <tr>
+                            <th rowspan="2">科目</th><th rowspan="2">满分</th>
+                            {% for cc in comparison_classes %}
+                            <th class="text-center" colspan="6">{{ cc.name }}
+                                <small class="fw-normal">{% if cc.school_name %}{{ cc.school_name }}{% endif %}</small>
+                            </th>
+                            {% endfor %}
+                        </tr>
+                        <tr>
+                            {% for cc in comparison_classes %}
+                            <th>人数</th><th>均分</th><th>方差</th><th>最高</th><th>最低</th>
+                            {% endfor %}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in comparison_table %}
+                        <tr>
+                            <td><strong>{{ row.subject }}</strong></td>
+                            <td>{{ row.full_score }}</td>
+                            {% for cc in comparison_classes %}
+                            {% if cc.id %}
+                            {% with key="ext_"|add:cc.id %}{% with stats=row.classes|get_item:key %}{% include "scores/_comparison_cells.html" %}{% endwith %}{% endwith %}
+                            {% else %}
+                            {% with key="own" %}{% with stats=row.classes|get_item:key %}{% include "scores/_comparison_cells.html" %}{% endwith %}{% endwith %}
+                            {% endif %}
+                            {% endfor %}
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        {% else %}
+        <div class="alert alert-light border text-muted small">
+            <i class="bi bi-info-circle me-1"></i>
+            尚未导入其他班级成绩。在左侧选择考试并导入后，即可与本班对比平均分、方差、最高/最低分与名次。
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% else %}
+<div class="text-muted py-5 text-center">
+    <i class="bi bi-collection fs-3 d-block mb-2"></i>
+    请先在上方选择考试，查看多班对比或导入其他班级成绩。
+</div>
+{% endif %}
+
+{{ comparison_chart|json_script:"comparison-chart-data" }}
+{{ comparison_classes|json_script:"comparison-classes-data" }}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+{% if comparison_chart %}
+const compareData = JSON.parse(document.getElementById('comparison-chart-data').textContent);
+const classColors = ['#1a73e8', '#28a745', '#f57c00', '#7c3aed', '#dc3545', '#00acc1', '#f9a825', '#5e35b1'];
+const metricLabels = {
+    'avg': '平均分', 'variance': '方差', 'max': '最高分', 'min': '最低分',
+    'max_grade_rank': '最高级部名次', 'min_grade_rank': '最低级部名次',
+    'max_city_rank': '最高市名次', 'min_city_rank': '最低市名次'
+};
+const compareMetricSelect = document.getElementById('compareMetricSelect');
+const subjectNames = Object.keys(compareData['avg']);
+let compareChart = null;
+function buildCompareChart() {
+    const metric = compareMetricSelect.value;
+    const datasets = [];
+    const ownValues = subjectNames.map(s => compareData[metric][s].own);
+    datasets.push({ label: '本班', data: ownValues, backgroundColor: classColors[0] });
+    const extKeys = Object.keys(compareData[metric][subjectNames[0]]).filter(k => k.startsWith('ext_'));
+    extKeys.forEach((key, i) => {
+        datasets.push({
+            label: key.replace('ext_', '') + '班',
+            data: subjectNames.map(s => compareData[metric][s][key]),
+            backgroundColor: classColors[(i + 1) % classColors.length]
+        });
+    });
+    if (compareChart) compareChart.destroy();
+    compareChart = new Chart(document.getElementById('compareChart'), {
+        type: 'bar',
+        data: { labels: subjectNames, datasets: datasets },
+        options: {
+            responsive: true,
+            plugins: {
+                legend: { position: 'bottom' },
+                title: { display: true, text: '各科' + metricLabels[metric] + '对比' }
+            },
+            scales: { y: { beginAtZero: true } }
+        }
+    });
+}
+compareMetricSelect.addEventListener('change', buildCompareChart);
+buildCompareChart();
+{% endif %}
+</script>
+{% endblock %}

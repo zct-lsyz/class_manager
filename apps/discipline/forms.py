@@ -8,6 +8,7 @@ class ItemPointsSelect(forms.Select):
         option = super().create_option(name, value, label, selected, index, subindex, attrs)
         if value and getattr(value, "instance", None):
             option["attrs"]["data-points"] = abs(value.instance.default_points)
+            option["attrs"]["data-severity"] = value.instance.default_severity
         return option
 
 

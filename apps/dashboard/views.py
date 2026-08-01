@@ -155,29 +155,38 @@ def index(request):
     except Exception:
         pass
 
-    # 今日缺勤
+    # 今日缺勤：全天/早读/晚自习等时段内，事假/病假/缺勤/迟到/早退等所有"未到"情况均计入
     today_absent = 0
     try:
         from apps.attendance.models import AttendanceRecord
         qs_att = AttendanceRecord.objects.filter(date=today)
         if current_class:
             qs_att = qs_att.filter(school_class=current_class)
-        today_absent = qs_att.filter(status__in=["absent", "late"]).count()
+        # 非正常状态（normal 之外）都算未到，按学生去重统计人数
+        today_absent = qs_att.exclude(status="normal").values("student_id").distinct().count()
     except Exception:
         pass
 
-    # 本周未交作业
+    # 本周未交作业：本周布置的作业中，未交/迟交（含非积极自定义状态）的记录数
     week_start = today - timezone.timedelta(days=today.weekday())
     week_unsubmitted = 0
     try:
-        from apps.homework.models import HomeworkRecord
-        qs_hw = HomeworkRecord.objects.filter(
-            submission_date__gte=week_start,
-            status__in=["unsubmitted", "late"],
-        )
+        from django.db.models import Q
+        from apps.homework.models import HomeworkRecord, HomeworkStatus
         if current_class:
-            qs_hw = qs_hw.filter(school_class=current_class)
-        week_unsubmitted = qs_hw.count()
+            qs_hw = HomeworkRecord.objects.filter(
+                task__school_class=current_class,
+                task__assigned_date__gte=week_start,
+                task__assigned_date__lte=today,
+            )
+            # 内置未交/迟交 + 非积极的自定义状态
+            status_q = Q(status__in=["unsubmitted", "late"])
+            negative_custom_ids = HomeworkStatus.objects.filter(
+                school_class=current_class, is_active=True, is_positive=False,
+            ).values_list("pk", flat=True)
+            for sid in negative_custom_ids:
+                status_q |= Q(status=f"custom:{sid}")
+            week_unsubmitted = qs_hw.filter(status_q).count()
     except Exception:
         pass
 

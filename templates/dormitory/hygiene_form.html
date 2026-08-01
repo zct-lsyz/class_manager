@@ -25,9 +25,9 @@
         <div class="row g-3">
             {% for item in items %}
             <div class="col-md-3">
-                <label class="form-label small">{{ item.name }}（满分 {{ item.full_score }}）</label>
+                <label class="form-label small">{{ item.name }}（满分 {{ item.full_score }}{% if item.default_deduction %}，默认扣 {{ item.default_deduction }} 分{% endif %}）</label>
                 <input type="number" name="item_{{ item.pk }}" class="form-control"
-                    min="0" max="{{ item.full_score }}" value="{{ item.full_score }}"
+                    min="0" max="{{ item.full_score }}" value="{{ item.default_score }}"
                     placeholder="0-{{ item.full_score }}">
             </div>
             {% endfor %}
