@@ -199,8 +199,24 @@ def index(request):
         logger.exception("工作台趋势统计加载失败")
         pass
 
+    # ----- 待办事项 -----
+    active_todos = []
+    completed_todos = []
+    try:
+        from apps.todos.models import TodoItem
+        active_todos = TodoItem.objects.filter(
+            school_class=current_class, is_deleted=False, is_completed=False,
+        ).order_by("deadline", "-created_at") if current_class else []
+        completed_todos = TodoItem.objects.filter(
+            school_class=current_class, is_deleted=False, is_completed=True,
+        ).order_by("-updated_at")[:5] if current_class else []
+    except Exception:
+        logger.exception("工作台待办事项加载失败")
+        pass
+
     context = {
         "today": today,
+        "now": timezone.now(),
         "current_class": current_class,
         "current_semester": current_semester,
         # 统计卡片
@@ -218,6 +234,9 @@ def index(request):
         "pending_comments": pending_comments,
         # 提醒
         "reminders": reminders,
+        # 待办事项
+        "active_todos": active_todos,
+        "completed_todos": completed_todos,
     }
     return render(request, "dashboard/index.html", context)
 
@@ -295,6 +314,8 @@ def api_notifications(request):
         "warning_count": 0,
         "warnings": [],
         "today_backup_alert": False,
+        "due_count": 0,
+        "due_todos": [],
     }
 
     # 今日值日
@@ -366,5 +387,24 @@ def api_notifications(request):
         result["today_backup_alert"] = failed > 0
     except Exception:
         pass
+
+    # 到期/逾期待办
+    if current_class:
+        try:
+            from apps.todos.models import TodoItem
+            due_todos = TodoItem.objects.filter(
+                school_class=current_class, is_deleted=False, is_completed=False,
+                deadline__lte=timezone.now(),
+            ).order_by("deadline")[:10]
+            result["due_count"] = due_todos.count()
+            result["due_todos"] = [
+                {
+                    "title": t.title,
+                    "deadline": timezone.localtime(t.deadline).strftime("%m-%d %H:%M") if t.deadline else None,
+                }
+                for t in due_todos
+            ]
+        except Exception:
+            pass
 
     return JsonResponse(result)

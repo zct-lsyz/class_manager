@@ -57,6 +57,8 @@ urlpatterns = [
     path("backups/", include("apps.backups.urls")),
     # 操作日志
     path("audit/", include("apps.audit.urls")),
+    # 待办事项
+    path("todos/", include("apps.todos.urls")),
     # 登录保护的上传附件
     path("protected-media/<path:path>", protected_media, name="protected_media"),
 ]

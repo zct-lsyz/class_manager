@@ -165,10 +165,85 @@
             </div>
         </div>
 
+        <!-- 待办事项 -->
+        <div class="card mt-3">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span><i class="bi bi-check2-square me-2"></i>待办事项</span>
+                <small class="text-muted">{{ active_todos|length }} 项待完成</small>
+            </div>
+            <div class="card-body">
+                <form method="post" action="{% url 'todos:add' %}" class="input-group input-group-sm mb-3">
+                    {% csrf_token %}
+                    <input type="text" name="title" class="form-control" placeholder="添加待办…" required maxlength="200">
+                    <input type="datetime-local" name="deadline" class="form-control" style="max-width:200px">
+                    <button type="submit" class="btn btn-primary"><i class="bi bi-plus-lg"></i></button>
+                </form>
+
+                {% if active_todos %}
+                <div class="list-group list-group-flush">
+                    {% for todo in active_todos %}
+                    <div class="list-group-item d-flex justify-content-between align-items-center px-0">
+                        <div class="d-flex align-items-center">
+                            <form method="post" action="{% url 'todos:toggle' todo.pk %}" class="d-inline me-2">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-link p-0 text-secondary" title="标记完成">
+                                    <i class="bi bi-circle fs-5"></i>
+                                </button>
+                            </form>
+                            <div>
+                                <div>{{ todo.title }}</div>
+                                {% if todo.deadline %}
+                                <small class="text-muted">
+                                    <i class="bi bi-clock me-1"></i>{{ todo.deadline|date:"m-d H:i" }}
+                                    {% if todo.deadline < now and not todo.is_completed %}<span class="text-danger">已到期</span>{% endif %}
+                                </small>
+                                {% endif %}
+                            </div>
+                        </div>
+                        <form method="post" action="{% url 'todos:delete' todo.pk %}" class="d-inline">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-sm text-danger" title="删除">
+                                <i class="bi bi-x-lg"></i>
+                            </button>
+                        </form>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <p class="text-muted small mb-0">暂无待办事项，在上方输入标题和截止时间即可添加。</p>
+                {% endif %}
+
+                {% if completed_todos %}
+                <div class="mt-3">
+                    <small class="text-muted fw-bold">已完成</small>
+                    <div class="list-group list-group-flush">
+                        {% for todo in completed_todos %}
+                        <div class="list-group-item d-flex justify-content-between align-items-center px-0">
+                            <div class="d-flex align-items-center">
+                                <form method="post" action="{% url 'todos:toggle' todo.pk %}" class="d-inline me-2">
+                                    {% csrf_token %}
+                                    <button type="submit" class="btn btn-link p-0 text-success" title="恢复待办">
+                                        <i class="bi bi-check-circle-fill fs-5"></i>
+                                    </button>
+                                </form>
+                                <span class="text-muted text-decoration-line-through">{{ todo.title }}</span>
+                            </div>
+                            <form method="post" action="{% url 'todos:delete' todo.pk %}" class="d-inline">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-sm text-danger" title="删除"><i class="bi bi-x-lg"></i></button>
+                            </form>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
         <!-- 提醒汇总 -->
         <div class="card mt-3">
             <div class="card-header">
-                <i class="bi bi-bell me-2"></i>待办提醒
+                <i class="bi bi-bell me-2"></i>提醒汇总
             </div>
             <div class="card-body">
                 <div class="list-group list-group-flush">

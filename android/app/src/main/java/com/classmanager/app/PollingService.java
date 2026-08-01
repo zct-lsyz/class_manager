@@ -8,6 +8,7 @@ import android.content.Intent;
 import android.content.SharedPreferences;
 import android.os.SystemClock;
 
+import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.io.BufferedReader;
@@ -71,6 +72,23 @@ public class PollingService extends IntentService {
             if (backupAlert) {
                 NotificationHelper.show(this, "备份失败提醒",
                         "今日存在失败的备份任务，请检查。", NOTIFICATION_ID_BASE + 3);
+            }
+
+            // 待办到期提醒
+            int dueCount = obj.optInt("due_count", 0);
+            if (dueCount > 0) {
+                String body;
+                if (dueCount == 1) {
+                    JSONArray dueTodos = obj.optJSONArray("due_todos");
+                    String firstTitle = "";
+                    if (dueTodos != null && dueTodos.length() > 0) {
+                        firstTitle = dueTodos.optJSONObject(0).optString("title", "");
+                    }
+                    body = "待办「" + firstTitle + "」已到期，请及时处理。";
+                } else {
+                    body = "当前有 " + dueCount + " 项待办已到期，请及时处理。";
+                }
+                NotificationHelper.show(this, "待办提醒", body, NOTIFICATION_ID_BASE + 4);
             }
         } catch (Exception e) {
             // 忽略解析错误
