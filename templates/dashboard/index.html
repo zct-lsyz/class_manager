@@ -5,6 +5,26 @@
 
 {% block extra_head %}
 <style>
+/* 统计卡片 */
+.stat-card {
+    border-radius: 12px;
+    padding: 1.25rem;
+    transition: transform 0.15s;
+    height: 100%;
+}
+.stat-card:hover { transform: translateY(-2px); }
+.stat-card .stat-icon {
+    width: 48px; height: 48px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.4rem;
+    flex-shrink: 0;
+}
+.stat-number { font-size: 1.6rem; font-weight: 700; line-height: 1.2; }
+.stat-label { font-size: 0.8rem; color: #6c757d; margin-top: 2px; }
+
 /* 倒计时卡片 */
 .countdown-card {
     border-radius: 12px;
@@ -13,35 +33,23 @@
     text-align: center;
     transition: transform 0.2s;
     background: #fff;
-    min-width: 110px;
+    min-width: 100px;
+    flex: 1;
 }
 .countdown-card:hover { transform: translateY(-2px); }
 .countdown-card .cd-days {
-    font-size: 2rem;
+    font-size: 1.8rem;
     font-weight: 700;
     color: #1a73e8;
     line-height: 1.1;
 }
-.countdown-card .cd-label {
-    font-size: 0.8rem;
-    color: #6c757d;
-    margin-top: 0.25rem;
-}
-.countdown-card .cd-name {
-    font-size: 0.85rem;
-    font-weight: 600;
-    color: #495057;
-    margin-top: 0.35rem;
-}
-.countdown-card .cd-date {
-    font-size: 0.75rem;
-    color: #adb5bd;
-    margin-top: 0.15rem;
-}
 .countdown-card.urgent .cd-days { color: #dc3545; }
 .countdown-card.warning .cd-days { color: #f57c00; }
+.countdown-card .cd-label { font-size: 0.75rem; color: #6c757d; margin-top: 0.25rem; }
+.countdown-card .cd-name { font-size: 0.85rem; font-weight: 600; color: #495057; margin-top: 0.35rem; }
+.countdown-card .cd-date { font-size: 0.75rem; color: #adb5bd; margin-top: 0.15rem; }
 
-/* 每日名言 */
+/* 名言卡片 */
 .quote-card {
     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
     color: #fff;
@@ -52,55 +60,73 @@
     border-bottom: 1px solid rgba(255,255,255,0.2);
     color: rgba(255,255,255,0.9);
 }
-.quote-card .card-header i { color: rgba(255,255,255,0.9); }
 .quote-text {
-    font-size: 1.1rem;
+    font-size: 1.05rem;
     line-height: 1.8;
     font-style: italic;
     position: relative;
-    padding: 0 1rem;
+    padding: 0 0.5rem;
 }
-.quote-text::before { content: "\201C"; font-size: 2.5rem; color: rgba(255,255,255,0.4); position: absolute; left: -0.2rem; top: -0.5rem; }
-.quote-author {
-    text-align: right;
-    color: rgba(255,255,255,0.7);
+.quote-text::before { content: "\201C"; font-size: 2rem; color: rgba(255,255,255,0.35); position: absolute; left: -0.1rem; top: -0.4rem; }
+.quote-author { text-align: right; color: rgba(255,255,255,0.7); font-size: 0.85rem; margin-top: 0.5rem; }
+
+/* 待办概览条目 */
+.todo-preview-item {
+    border-left: 3px solid #1a73e8;
+    padding: 0.5rem 0.75rem;
+    margin-bottom: 0.4rem;
     font-size: 0.85rem;
-    margin-top: 0.5rem;
+    background: #f8f9fa;
+    border-radius: 0 6px 6px 0;
 }
+.todo-preview-item.priority-high { border-left-color: #dc3545; }
+.todo-preview-item.priority-mid { border-left-color: #f57c00; }
+.todo-preview-item .todo-time { font-size: 0.75rem; color: #adb5bd; }
+
+/* 快捷操作按钮卡片 */
+.quick-action-btn {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.6rem 0.9rem;
+    border-radius: 8px;
+    font-size: 0.85rem;
+    font-weight: 500;
+    transition: all 0.15s;
+    text-decoration: none;
+}
+.quick-action-btn:hover { transform: translateY(-1px); box-shadow: 0 2px 6px rgba(0,0,0,0.1); }
 
 /* 网站卡片 */
 .website-card {
-    display: inline-block;
+    display: inline-flex;
+    align-items: center;
     background: #fff;
     border: 1px solid #e9ecef;
     border-radius: 10px;
-    padding: 0.75rem 1.25rem;
-    margin: 0.25rem;
+    padding: 0.6rem 1.1rem;
+    margin: 0.2rem;
     text-align: center;
     transition: all 0.2s;
     min-width: 100px;
     position: relative;
+    text-decoration: none;
 }
 .website-card:hover {
     border-color: #1a73e8;
     box-shadow: 0 2px 8px rgba(26,115,232,0.15);
     transform: translateY(-1px);
 }
-.website-card .web-name {
-    font-size: 0.85rem;
-    font-weight: 500;
-    color: #495057;
-}
+.website-card .web-name { font-size: 0.85rem; font-weight: 500; color: #495057; }
 .website-card .web-delete {
     position: absolute;
-    top: 2px;
-    right: 6px;
-    font-size: 0.7rem;
+    top: 1px; right: 5px;
+    font-size: 0.65rem;
     color: #ced4da;
     cursor: pointer;
     border: none;
     background: none;
-    padding: 2px;
+    padding: 1px;
     line-height: 1;
 }
 .website-card .web-delete:hover { color: #dc3545; }
@@ -122,52 +148,26 @@
 }
 .realtime-item i { color: #1a73e8; font-size: 1rem; }
 .realtime-item .val { font-weight: 600; }
-
-/* 待办概览 */
-.todo-preview-item {
-    border-left: 3px solid #1a73e8;
-    padding: 0.4rem 0.75rem;
-    margin-bottom: 0.35rem;
-    font-size: 0.85rem;
-    background: #f8f9fa;
-    border-radius: 0 6px 6px 0;
-}
-.todo-preview-item .todo-time {
-    font-size: 0.75rem;
-    color: #adb5bd;
-}
 </style>
 {% endblock %}
 
 {% block content %}
-<!-- 欢迎横幅 + 实时信息 -->
+<!-- ===== 欢迎横幅 + 实时信息 ===== -->
 <div class="d-flex justify-content-between align-items-center flex-wrap mt-3 mb-4">
     <h4 class="mb-2 mb-md-0">
         <i class="bi bi-grid-1x2-fill me-2 text-primary"></i>工作台首页
     </h4>
     <div class="realtime-bar">
-        <span class="realtime-item">
-            <i class="bi bi-calendar3"></i>
-            <span id="currentDate" class="val">{{ today|date:"Y年m月d日" }}</span>
-        </span>
-        <span class="realtime-item">
-            <i class="bi bi-clock"></i>
-            <span id="currentTime" class="val">{{ now|date:"H:i:s" }}</span>
-        </span>
-        <span class="realtime-item">
-            <i class="bi bi-calendar-week"></i>
-            <span id="currentWeekday" class="val"></span>
-        </span>
+        <span class="realtime-item"><i class="bi bi-calendar3"></i><span id="currentDate" class="val">{{ today|date:"Y年m月d日" }}</span></span>
+        <span class="realtime-item"><i class="bi bi-clock"></i><span id="currentTime" class="val">{{ now|date:"H:i:s" }}</span></span>
+        <span class="realtime-item"><i class="bi bi-calendar-week"></i><span id="currentWeekday" class="val"></span></span>
         {% if teaching_week %}
-        <span class="realtime-item">
-            <i class="bi bi-book"></i>
-            <span class="val">第 <strong>{{ teaching_week }}</strong> 教学周</span>
-        </span>
+        <span class="realtime-item"><i class="bi bi-book"></i><span class="val">第 <strong>{{ teaching_week }}</strong> 教学周</span></span>
         {% endif %}
     </div>
 </div>
 
-<!-- 提醒区域 -->
+<!-- ===== 提醒区域 ===== -->
 {% if reminders %}
 <div class="mb-4">
     {% for reminder in reminders %}
@@ -179,9 +179,9 @@
 </div>
 {% endif %}
 
-<!-- 统计卡片 -->
+<!-- ===== 第一部分：数据概览（3个核心卡片） ===== -->
 <div class="row g-3 mb-4">
-    <div class="col-6 col-md-3">
+    <div class="col-md-4">
         <div class="stat-card bg-white border">
             <div class="d-flex align-items-center">
                 <div class="stat-icon bg-primary bg-opacity-10 text-primary me-3">
@@ -199,7 +199,7 @@
         </div>
     </div>
 
-    <div class="col-6 col-md-3">
+    <div class="col-md-4">
         <div class="stat-card bg-white border">
             <div class="d-flex align-items-center">
                 <div class="stat-icon bg-warning bg-opacity-10 text-warning me-3">
@@ -210,15 +210,13 @@
                     <div class="stat-label">今日缺勤</div>
                 </div>
             </div>
-            {% if attendance_rate %}
             <div class="mt-2 small text-muted">
-                本月出勤率：<span class="text-success">{{ attendance_rate }}%</span>
+                迟到或缺勤人数
             </div>
-            {% endif %}
         </div>
     </div>
 
-    <div class="col-6 col-md-3">
+    <div class="col-md-4">
         <div class="stat-card bg-white border">
             <div class="d-flex align-items-center">
                 <div class="stat-icon bg-danger bg-opacity-10 text-danger me-3">
@@ -230,272 +228,232 @@
                 </div>
             </div>
             <div class="mt-2 small text-muted">
-                纪律：课堂 {{ week_discipline }} / 宿舍 {{ week_dorm_discipline }}
+                本周累计未交/迟交人次
             </div>
-        </div>
-    </div>
-
-    <div class="col-6 col-md-3">
-        <div class="stat-card bg-white border">
-            <div class="d-flex align-items-center">
-                <div class="stat-icon bg-success bg-opacity-10 text-success me-3">
-                    <i class="bi bi-star-fill"></i>
-                </div>
-                <div>
-                    <div class="stat-number">{{ this_month_rewards }}</div>
-                    <div class="stat-label">本月奖励</div>
-                </div>
-            </div>
-            {% if exam_avg_score %}
-            <div class="mt-2 small text-muted">
-                最近考试均分：<span class="text-primary">{{ exam_avg_score|floatformat:1 }}</span>
-            </div>
-            {% endif %}
         </div>
     </div>
 </div>
 
-<div class="row g-4">
-    <!-- 左侧：快捷入口 + 待办及倒计时 + 教学网站 -->
-    <div class="col-md-8">
-        <!-- 快捷入口 -->
-        <div class="card">
+<!-- ===== 第二部分：待办及倒计时（重点区域） ===== -->
+<div class="card mb-4">
+    <div class="card-header">
+        <i class="bi bi-list-check me-2"></i>待办及倒计时
+    </div>
+    <div class="card-body">
+        <div class="row g-4">
+            <!-- 左侧：待办事项 -->
+            <div class="col-md-6">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h6 class="mb-0 fw-bold">
+                        <i class="bi bi-check2-square me-1 text-primary"></i>待办事项
+                    </h6>
+                    <div>
+                        <span class="badge bg-primary rounded-pill me-1">{{ todo_count }} 项</span>
+                        <a href="{% url 'todos:list' %}" class="btn btn-sm btn-outline-primary">查看全部 <i class="bi bi-arrow-right"></i></a>
+                    </div>
+                </div>
+                {% if active_todos %}
+                <div class="mb-2">
+                    {% for todo in active_todos %}
+                    <div class="todo-preview-item {% if todo.priority == 1 %}priority-high{% elif todo.priority == 2 %}priority-mid{% endif %}">
+                        <div class="d-flex justify-content-between align-items-start">
+                            <span>
+                                {% if todo.priority == 1 %}<span class="badge bg-danger me-1" style="font-size:0.6rem">急</span>{% endif %}
+                                {{ todo.title }}
+                            </span>
+                            <span class="todo-time ms-2">
+                                {% if todo.deadline %}{{ todo.deadline|date:"m-d H:i" }}{% else %}<span class="text-muted">—</span>{% endif %}
+                            </span>
+                        </div>
+                    </div>
+                    {% endfor %}
+                    {% if todo_count > 5 %}
+                    <div class="text-center mt-2">
+                        <a href="{% url 'todos:list' %}" class="small text-muted">还有 {{ todo_count|add:"-5" }} 项待办…</a>
+                    </div>
+                    {% endif %}
+                </div>
+                {% else %}
+                <p class="text-muted small py-2">暂无待办事项，<a href="{% url 'todos:list' %}">去添加</a></p>
+                {% endif %}
+            </div>
+
+            <!-- 右侧：倒计时 -->
+            <div class="col-md-6">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h6 class="mb-0 fw-bold">
+                        <i class="bi bi-hourglass-split me-1 text-warning"></i>倒计时
+                    </h6>
+                    <a href="{% url 'dashboard:countdown_list' %}" class="btn btn-sm btn-outline-primary">管理 <i class="bi bi-arrow-right"></i></a>
+                </div>
+                {% if countdowns %}
+                <div class="d-flex flex-wrap gap-2">
+                    {% for cd in countdowns|slice:":6" %}
+                    <div class="countdown-card {% if cd.days_remaining <= 3 %}urgent{% elif cd.days_remaining <= 7 %}warning{% endif %}">
+                        <div class="cd-days">
+                            {% if cd.days_remaining > 0 %}{{ cd.days_remaining }}
+                            {% elif cd.days_remaining == 0 %}今天
+                            {% else %}已过期{% endif %}
+                        </div>
+                        <div class="cd-label">{% if cd.days_remaining > 0 %}天{% endif %}</div>
+                        <div class="cd-name">{{ cd.name }}</div>
+                        <div class="cd-date">{{ cd.target_date|date:"Y-m-d" }}</div>
+                    </div>
+                    {% endfor %}
+                    {% if countdowns|length > 6 %}
+                    <div class="text-center w-100">
+                        <a href="{% url 'dashboard:countdown_list' %}" class="text-muted small">还有 {{ countdowns|length|add:"-6" }} 项倒计时…</a>
+                    </div>
+                    {% endif %}
+                </div>
+                {% else %}
+                <p class="text-muted small py-2">暂无倒计时，<a href="{% url 'dashboard:countdown_list' %}">去设置</a></p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ===== 第三部分：快捷操作 + 基本信息（左右布局） ===== -->
+<div class="row g-4 mb-4">
+    <!-- 左侧：快捷操作 -->
+    <div class="col-md-7">
+        <div class="card h-100">
             <div class="card-header">
                 <i class="bi bi-lightning-charge me-2"></i>快捷操作
             </div>
             <div class="card-body">
                 <div class="row g-2">
-                    <div class="col-6 col-md-4">
-                        <a href="{% url 'attendance:index' %}" class="btn btn-outline-primary w-100 text-start btn-sm">
-                            <i class="bi bi-clipboard-check me-2"></i>录入考勤
+                    <div class="col-6 col-lg-4">
+                        <a href="{% url 'attendance:index' %}" class="quick-action-btn btn btn-outline-primary w-100">
+                            <i class="bi bi-clipboard-check"></i>录入考勤
                         </a>
                     </div>
-                    <div class="col-6 col-md-4">
-                        <a href="{% url 'discipline:classroom_list' %}" class="btn btn-outline-warning w-100 text-start btn-sm">
-                            <i class="bi bi-exclamation-triangle me-2"></i>登记课堂纪律
+                    <div class="col-6 col-lg-4">
+                        <a href="{% url 'discipline:classroom_list' %}" class="quick-action-btn btn btn-outline-warning w-100">
+                            <i class="bi bi-exclamation-triangle"></i>登记课堂纪律
                         </a>
                     </div>
-                    <div class="col-6 col-md-4">
-                        <a href="{% url 'dormitory:index' %}" class="btn btn-outline-info w-100 text-start btn-sm">
-                            <i class="bi bi-house-door me-2"></i>登记宿舍卫生
+                    <div class="col-6 col-lg-4">
+                        <a href="{% url 'dormitory:index' %}" class="quick-action-btn btn btn-outline-success w-100">
+                            <i class="bi bi-house-door"></i>登记宿舍卫生
                         </a>
                     </div>
-                    <div class="col-6 col-md-4">
-                        <a href="{% url 'dormitory:discipline' %}" class="btn btn-outline-secondary w-100 text-start btn-sm">
-                            <i class="bi bi-house-exclamation me-2"></i>登记宿舍纪律
+                    <div class="col-6 col-lg-4">
+                        <a href="{% url 'dormitory:discipline' %}" class="quick-action-btn btn btn-outline-secondary w-100">
+                            <i class="bi bi-house-exclamation"></i>登记宿舍纪律
                         </a>
                     </div>
-                    <div class="col-6 col-md-4">
-                        <a href="{% url 'homework:index' %}" class="btn btn-outline-danger w-100 text-start btn-sm">
-                            <i class="bi bi-journal-text me-2"></i>登记作业未交
+                    <div class="col-6 col-lg-4">
+                        <a href="{% url 'homework:index' %}" class="quick-action-btn btn btn-outline-danger w-100">
+                            <i class="bi bi-journal-text"></i>登记作业未交
                         </a>
                     </div>
-                    <div class="col-6 col-md-4">
-                        <a href="{% url 'scores:exam_list' %}" class="btn btn-outline-success w-100 text-start btn-sm">
-                            <i class="bi bi-file-earmark-text me-2"></i>新建考试
+                    <div class="col-6 col-lg-4">
+                        <a href="{% url 'scores:exam_list' %}" class="quick-action-btn btn btn-outline-primary w-100">
+                            <i class="bi bi-file-earmark-text"></i>新建考试
                         </a>
                     </div>
-                    <div class="col-6 col-md-4">
-                        <a href="{% url 'scores:score_entry' %}" class="btn btn-outline-primary w-100 text-start btn-sm">
-                            <i class="bi bi-pencil-square me-2"></i>录入成绩
+                    <div class="col-6 col-lg-4">
+                        <a href="{% url 'scores:score_entry' %}" class="quick-action-btn btn btn-outline-info w-100">
+                            <i class="bi bi-pencil-square"></i>录入成绩
                         </a>
                     </div>
-                    <div class="col-6 col-md-4">
-                        <a href="{% url 'seating:index' %}" class="btn btn-outline-info w-100 text-start btn-sm">
-                            <i class="bi bi-layout-text-window me-2"></i>调整座位
+                    <div class="col-6 col-lg-4">
+                        <a href="{% url 'seating:index' %}" class="quick-action-btn btn btn-outline-secondary w-100">
+                            <i class="bi bi-layout-text-window"></i>调整座位
                         </a>
                     </div>
-                    <div class="col-6 col-md-4">
-                        <a href="{% url 'comments:list' %}" class="btn btn-outline-primary w-100 text-start btn-sm">
-                            <i class="bi bi-chat-quote me-2"></i>写评语
+                    <div class="col-6 col-lg-4">
+                        <a href="{% url 'comments:list' %}" class="quick-action-btn btn btn-outline-primary w-100">
+                            <i class="bi bi-chat-quote"></i>写评语
                         </a>
                     </div>
-                    <div class="col-6 col-md-4">
-                        <a href="{% url 'backups:index' %}" class="btn btn-outline-dark w-100 text-start btn-sm">
-                            <i class="bi bi-shield-check me-2"></i>执行备份
+                    <div class="col-6 col-lg-4">
+                        <a href="{% url 'backups:index' %}" class="quick-action-btn btn btn-outline-dark w-100">
+                            <i class="bi bi-shield-check"></i>执行备份
                         </a>
                     </div>
                 </div>
-            </div>
-        </div>
-
-        <!-- 待办及倒计时 -->
-        <div class="card mt-3">
-            <div class="card-header">
-                <i class="bi bi-list-check me-2"></i>待办及倒计时
-            </div>
-            <div class="card-body">
-                <div class="row g-3">
-                    <!-- 待办事项概览 -->
-                    <div class="col-md-6">
-                        <div class="d-flex justify-content-between align-items-center mb-2">
-                            <h6 class="mb-0 fw-bold">
-                                <i class="bi bi-check2-square me-1 text-primary"></i>待办事项
-                            </h6>
-                            <div>
-                                <span class="badge bg-primary rounded-pill me-1">{{ todo_count }} 项</span>
-                                <a href="{% url 'todos:list' %}" class="btn btn-sm btn-outline-primary">查看全部 <i class="bi bi-arrow-right"></i></a>
-                            </div>
-                        </div>
-                        {% if active_todos %}
-                        <div class="mb-2">
-                            {% for todo in active_todos %}
-                            <div class="todo-preview-item">
-                                <div class="d-flex justify-content-between align-items-start">
-                                    <span>{{ todo.title }}</span>
-                                    <span class="todo-time ms-2">
-                                        {% if todo.deadline %}
-                                        {{ todo.deadline|date:"m-d H:i" }}
-                                        {% else %}
-                                        <span class="text-muted">—</span>
-                                        {% endif %}
-                                    </span>
-                                </div>
-                            </div>
-                            {% endfor %}
-                            {% if todo_count > 5 %}
-                            <div class="text-center mt-2">
-                                <small class="text-muted">还有 {{ todo_count|add:"-5" }} 项待办…</small>
-                            </div>
-                            {% endif %}
-                        </div>
-                        {% else %}
-                        <p class="text-muted small">暂无待办事项。</p>
-                        {% endif %}
-                        <form method="post" action="{% url 'todos:add' %}" class="input-group input-group-sm">
-                            {% csrf_token %}
-                            <input type="text" name="title" class="form-control" placeholder="快速添加待办…" required maxlength="200">
-                            <input type="datetime-local" name="deadline" class="form-control" style="max-width:180px" placeholder="截止时间">
-                            <button type="submit" class="btn btn-primary"><i class="bi bi-plus-lg"></i></button>
-                        </form>
-                    </div>
-
-                    <!-- 倒计时 -->
-                    <div class="col-md-6">
-                        <div class="d-flex justify-content-between align-items-center mb-2">
-                            <h6 class="mb-0 fw-bold">
-                                <i class="bi bi-hourglass-split me-1 text-warning"></i>倒计时
-                            </h6>
-                            <a href="{% url 'dashboard:countdown_list' %}" class="btn btn-sm btn-outline-primary">管理 <i class="bi bi-arrow-right"></i></a>
-                        </div>
-                        {% if countdowns %}
-                        <div class="d-flex flex-wrap gap-2">
-                            {% for cd in countdowns|slice:":6" %}
-                            <div class="countdown-card {% if cd.days_remaining <= 3 %}urgent{% elif cd.days_remaining <= 7 %}warning{% endif %}">
-                                <div class="cd-days">
-                                    {% if cd.days_remaining > 0 %}
-                                    {{ cd.days_remaining }}
-                                    {% elif cd.days_remaining == 0 %}
-                                    今天
-                                    {% else %}
-                                    已过期
-                                    {% endif %}
-                                </div>
-                                <div class="cd-label">
-                                    {% if cd.days_remaining > 0 %}天{% elif cd.days_remaining == 0 %}{% else %}{% endif %}
-                                </div>
-                                <div class="cd-name">{{ cd.name }}</div>
-                                <div class="cd-date">{{ cd.target_date|date:"Y-m-d" }}</div>
-                            </div>
-                            {% endfor %}
-                            {% if countdowns|length > 6 %}
-                            <div class="text-center w-100">
-                                <a href="{% url 'dashboard:countdown_list' %}" class="text-muted small">还有 {{ countdowns|length|add:"-6" }} 项倒计时…</a>
-                            </div>
-                            {% endif %}
-                        </div>
-                        {% else %}
-                        <p class="text-muted small">暂无倒计时。</p>
-                        {% endif %}
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- 常用教学网站 -->
-        <div class="card mt-3">
-            <div class="card-header d-flex justify-content-between align-items-center">
-                <span><i class="bi bi-globe me-2"></i>常用教学网站</span>
-                <button class="btn btn-sm btn-outline-primary" type="button" data-bs-toggle="collapse" data-bs-target="#websiteForm">
-                    <i class="bi bi-plus-lg"></i> 添加网站
-                </button>
-            </div>
-            <div class="card-body">
-                <div class="collapse mb-3" id="websiteForm">
-                    <form method="post" action="{% url 'dashboard:website_add' %}" class="card card-body bg-light p-2 mb-2">
-                        {% csrf_token %}
-                        <div class="input-group input-group-sm mb-2">
-                            <input type="text" name="name" class="form-control" placeholder="网站名称（如：山东省教育云平台）" required maxlength="100">
-                            <input type="text" name="url" class="form-control" placeholder="URL链接（如：www.sdei.edu.cn）" required>
-                            <button type="submit" class="btn btn-primary">添加</button>
-                        </div>
-                    </form>
-                </div>
-                {% if teaching_websites %}
-                <div class="d-flex flex-wrap">
-                    {% for site in teaching_websites %}
-                    <a href="{{ site.url }}" target="_blank" rel="noopener" class="website-card text-decoration-none">
-                        <span class="web-name">{{ site.name }}</span>
-                        <form method="post" action="{% url 'dashboard:website_delete' site.pk %}" class="d-inline" onsubmit="return confirm('确定删除「{{ site.name }}」？')">
-                            {% csrf_token %}
-                            <button type="submit" class="web-delete" title="删除"><i class="bi bi-x-lg"></i></button>
-                        </form>
-                    </a>
-                    {% endfor %}
-                </div>
-                {% else %}
-                <p class="text-muted small mb-0">暂无收藏的教学网站，点击"添加网站"开始收藏。默认推荐山东省教育相关网站。</p>
-                {% endif %}
             </div>
         </div>
     </div>
 
-    <!-- 右侧：基本信息 + 每日名言 -->
-    <div class="col-md-4">
-        <!-- 基本信息 -->
-        <div class="card">
+    <!-- 右侧：基本信息 -->
+    <div class="col-md-5">
+        <div class="card h-100">
             <div class="card-header">
                 <i class="bi bi-info-circle me-2"></i>基本信息
             </div>
             <div class="card-body">
                 <table class="table table-borderless mb-0">
-                    <tr>
-                        <td class="text-muted small">班级</td>
-                        <td>{{ current_class.name|default:"未设置" }}</td>
-                    </tr>
-                    <tr>
-                        <td class="text-muted small">学期</td>
-                        <td>{{ current_semester.get_display_name|default:"未设置" }}</td>
-                    </tr>
-                    <tr>
-                        <td class="text-muted small">班主任</td>
-                        <td>{{ current_class.head_teacher|default:"未设置" }}</td>
-                    </tr>
-                    <tr>
-                        <td class="text-muted small">学校</td>
-                        <td>{{ current_class.school_name|default:"未设置" }}</td>
-                    </tr>
+                    <tr><td class="text-muted small" style="width:60px">班级</td><td>{{ current_class.name|default:"未设置" }}</td></tr>
+                    <tr><td class="text-muted small">学期</td><td>{{ current_semester.get_display_name|default:"未设置" }}</td></tr>
+                    <tr><td class="text-muted small">班主任</td><td>{{ current_class.head_teacher|default:"未设置" }}</td></tr>
+                    <tr><td class="text-muted small">学校</td><td>{{ current_class.school_name|default:"未设置" }}</td></tr>
                 </table>
-            </div>
-        </div>
 
-        <!-- 每日励志名言 -->
-        <div class="card quote-card mt-3">
-            <div class="card-header">
-                <i class="bi bi-chat-quote me-2"></i>每日励志名言
-            </div>
-            <div class="card-body">
-                <div class="quote-text">{{ daily_quote }}</div>
-                {% if daily_quote_author %}
-                <div class="quote-author">—— {{ daily_quote_author }}</div>
-                {% endif %}
-                <div class="text-center mt-3">
-                    <small class="text-white-50">
-                        <i class="bi bi-info-circle me-1"></i>每日零点自动更新
-                    </small>
+                <!-- 每日励志名言（嵌套在基本信息卡片内） -->
+                <div class="quote-card rounded p-3 mt-3">
+                    <div class="d-flex align-items-center mb-2">
+                        <i class="bi bi-chat-quote me-2"></i>
+                        <small class="fw-bold">每日励志名言</small>
+                    </div>
+                    <div class="quote-text">{{ daily_quote }}</div>
+                    {% if daily_quote_author %}
+                    <div class="quote-author">—— {{ daily_quote_author }}</div>
+                    {% endif %}
+                    <div class="text-center mt-2">
+                        <small class="text-white-50">每日零点自动更新</small>
+                    </div>
                 </div>
             </div>
         </div>
+    </div>
+</div>
+
+<!-- ===== 第四部分：常用教学网站 ===== -->
+<div class="card mb-4">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-globe me-2"></i>常用教学网站</span>
+        <button class="btn btn-sm btn-outline-primary" type="button" data-bs-toggle="collapse" data-bs-target="#websiteForm">
+            <i class="bi bi-plus-lg"></i> 添加网站
+        </button>
+    </div>
+    <div class="card-body">
+        <div class="collapse mb-3" id="websiteForm">
+            <form method="post" action="{% url 'dashboard:website_add' %}" class="card card-body bg-light p-2 mb-2">
+                {% csrf_token %}
+                <div class="row g-2 align-items-end">
+                    <div class="col-md-5">
+                        <label class="form-label small mb-1">网站名称</label>
+                        <input type="text" name="name" class="form-control form-control-sm" placeholder="如：山东省教育云平台" required maxlength="100">
+                    </div>
+                    <div class="col-md-5">
+                        <label class="form-label small mb-1">URL链接</label>
+                        <input type="text" name="url" class="form-control form-control-sm" placeholder="如：www.sdei.edu.cn" required>
+                    </div>
+                    <div class="col-md-2">
+                        <button type="submit" class="btn btn-primary btn-sm w-100">添加</button>
+                    </div>
+                </div>
+            </form>
+        </div>
+        {% if teaching_websites %}
+        <div class="d-flex flex-wrap">
+            {% for site in teaching_websites %}
+            <a href="{{ site.url }}" target="_blank" rel="noopener" class="website-card text-decoration-none">
+                <span class="web-name">{{ site.name }}</span>
+                <form method="post" action="{% url 'dashboard:website_delete' site.pk %}" class="d-inline" onsubmit="return confirm('确定删除「{{ site.name }}」？')">
+                    {% csrf_token %}
+                    <button type="submit" class="web-delete" title="删除"><i class="bi bi-x-lg"></i></button>
+                </form>
+            </a>
+            {% endfor %}
+        </div>
+        {% else %}
+        <p class="text-muted small mb-0">暂无收藏的教学网站。点击"添加网站"开始收藏，默认推荐山东省教育相关网站。</p>
+        {% endif %}
     </div>
 </div>
 {% endblock %}

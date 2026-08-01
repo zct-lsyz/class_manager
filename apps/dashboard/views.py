@@ -181,80 +181,6 @@ def index(request):
     except Exception:
         pass
 
-    # 本周课堂纪律
-    week_discipline = 0
-    try:
-        from apps.discipline.models import ClassroomDisciplineRecord
-        qs_disc = ClassroomDisciplineRecord.objects.filter(date__gte=week_start)
-        if current_class:
-            qs_disc = qs_disc.filter(school_class=current_class)
-        week_discipline = qs_disc.count()
-    except Exception:
-        pass
-
-    # 本周宿舍纪律
-    week_dorm_discipline = 0
-    try:
-        from apps.discipline.models import DormDisciplineRecord
-        qs_dorm = DormDisciplineRecord.objects.filter(date__gte=week_start)
-        if current_class:
-            qs_dorm = qs_dorm.filter(school_class=current_class)
-        week_dorm_discipline = qs_dorm.count()
-    except Exception:
-        pass
-
-    # 本月奖励
-    this_month_rewards = 0
-    try:
-        from apps.rewards.models import RewardRecord
-        qs_rw = RewardRecord.objects.filter(
-            date__month=today.month, date__year=today.year,
-        )
-        if current_class:
-            qs_rw = qs_rw.filter(school_class=current_class)
-        this_month_rewards = qs_rw.count()
-    except Exception:
-        pass
-
-    # 最近考试均分
-    latest_exam = None
-    exam_avg_score = None
-    try:
-        from apps.scores.models import Exam, Score
-        if current_semester:
-            latest_exam = Exam.objects.filter(
-                semester=current_semester, is_deleted=False,
-            ).order_by("-date").first()
-            if latest_exam:
-                from django.db.models import Avg
-                result = Score.objects.filter(
-                    exam=latest_exam, status="normal", is_deleted=False,
-                ).aggregate(avg=Avg("score"))
-                exam_avg_score = result["avg"]
-    except Exception:
-        pass
-
-    # 出勤率
-    attendance_rate = None
-    try:
-        from apps.attendance.models import AttendanceRecord
-        ar_qs = AttendanceRecord.objects.filter(
-            date__month=today.month, date__year=today.year,
-        )
-        if current_class:
-            ar_qs = ar_qs.filter(school_class=current_class)
-        this_month_attendance_count = ar_qs.count()
-        total_days_this_month = ar_qs.values("date").distinct().count()
-        if total_days_this_month > 0 and total_students > 0:
-            total_possible = total_students * total_days_this_month
-            if total_possible > 0:
-                attendance_rate = round(
-                    (total_possible - this_month_attendance_count)
-                    / total_possible * 100, 1
-                )
-    except Exception:
-        pass
-
     # ----- 提醒事项 -----
     reminders = []
     try:
@@ -322,18 +248,12 @@ def index(request):
         "current_class": current_class,
         "current_semester": current_semester,
         "teaching_week": teaching_week,
-        # 统计卡片
+        # 统计卡片（3个核心数据）
         "total_students": total_students,
         "male_count": male_count,
         "female_count": female_count,
         "today_absent": today_absent,
-        "attendance_rate": attendance_rate,
         "week_unsubmitted": week_unsubmitted,
-        "week_discipline": week_discipline,
-        "week_dorm_discipline": week_dorm_discipline,
-        "this_month_rewards": this_month_rewards,
-        "exam_avg_score": exam_avg_score,
-        "latest_exam": latest_exam,
         # 提醒
         "reminders": reminders,
         # 待办事项概览
