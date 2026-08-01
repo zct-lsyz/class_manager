@@ -2,7 +2,7 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.shortcuts import render, redirect, get_object_or_404
 from django.core.paginator import Paginator
-from django.db.models import Q
+from django.db.models import Q, Sum
 
 from apps.students.models import Student, Guardian
 from apps.students.forms import StudentForm, GuardianForm
@@ -152,7 +152,7 @@ def student_detail(request, pk):
     from apps.communications.models import StudentConversation
     from apps.discipline.models import ClassroomDisciplineRecord, DormDisciplineRecord
     from apps.rewards.models import RewardRecord
-    from apps.scores.models import Score
+    from apps.scores.models import Score, Exam
 
     scores = Score.objects.filter(
         student=student, is_deleted=False, exam__is_deleted=False,
@@ -192,6 +192,69 @@ def student_detail(request, pk):
     for item in conversations:
         timeline.append({"date": item.date, "type": "谈话", "title": item.reason or "学生谈话", "detail": item.main_content})
     timeline.sort(key=lambda item: item["date"], reverse=True)
+
+    # ===== 历次考试折线图数据（总分/总排名 + 单科分/单科排名） =====
+    exam_chart = {"labels": [], "totals": [], "total_ranks": [], "subjects": {}, "all_subjects": []}
+    if student.school_class:
+        all_exams = Exam.objects.filter(
+            school_class=student.school_class, is_deleted=False,
+        ).order_by("date")
+        subject_series = {}
+        all_subjects = set()
+
+        for exam in all_exams:
+            own_scores = list(Score.objects.filter(
+                exam=exam, student=student, status="normal",
+                score__isnull=False, is_deleted=False,
+            ).select_related("exam_subject__subject"))
+            if not own_scores:
+                continue  # 该学生未参加或缺考，跳过这次考试
+
+            idx = len(exam_chart["labels"])
+            exam_chart["labels"].append(f"{exam.name}（{exam.date.strftime('%Y-%m-%d')}）")
+
+            # 总分
+            total = sum(float(s.score) for s in own_scores)
+            exam_chart["totals"].append(round(total, 1))
+
+            # 总分排名（与成绩分析页相同规则：并列跳名次）
+            all_totals = Score.objects.filter(
+                exam=exam, status="normal", score__isnull=False, is_deleted=False,
+            ).values("student_id").annotate(total=Sum("score")).order_by("-total")
+            total_rank = None
+            current_r = 0
+            prev_total = None
+            for position, row in enumerate(all_totals, 1):
+                if row["total"] != prev_total:
+                    current_r = position
+                    prev_total = row["total"]
+                if row["student_id"] == student.pk:
+                    total_rank = current_r
+                    break
+            exam_chart["total_ranks"].append(total_rank)
+
+            # 单科分数与单科排名
+            for s in own_scores:
+                subj = s.exam_subject.subject.name
+                all_subjects.add(subj)
+                if subj not in subject_series:
+                    subject_series[subj] = {"scores": [None] * idx, "ranks": [None] * idx}
+                subject_series[subj]["scores"].append(float(s.score))
+                better = Score.objects.filter(
+                    exam=exam, exam_subject=s.exam_subject, status="normal",
+                    score__gt=s.score, is_deleted=False,
+                ).count()
+                subject_series[subj]["ranks"].append(better + 1)
+
+            # 补齐所有科目到最新长度（该考试没考的科目用 null 占位）
+            for subj in subject_series:
+                while len(subject_series[subj]["scores"]) < len(exam_chart["labels"]):
+                    subject_series[subj]["scores"].append(None)
+                    subject_series[subj]["ranks"].append(None)
+
+        exam_chart["subjects"] = subject_series
+        exam_chart["all_subjects"] = sorted(all_subjects)
+
     return render(request, "students/student_detail.html", {
         "student": student,
         "guardian": guardian,
@@ -203,6 +266,7 @@ def student_detail(request, pk):
         "comments": comments,
         "conversations": conversations,
         "timeline": timeline[:100],
+        "exam_chart": exam_chart,
     })
 
 

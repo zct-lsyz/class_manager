@@ -26,9 +26,10 @@ from apps.students.models import Student
 
 
 WIDE_SCORE_COLUMNS = [
-    ("语文", ["语文赋分", "语文原始", "语文"], 150),
-    ("数学", ["数学赋分", "数学原始", "数学"], 150),
-    ("英语", ["英语赋分", "外语赋分", "英语原始", "外语原始", "英语", "外语"], 150),
+    # 语数英为原始分，优先匹配纯科目名列；"赋分"保留为旧格式兜底
+    ("语文", ["语文", "语文赋分", "语文原始"], 150),
+    ("数学", ["数学", "数学赋分", "数学原始"], 150),
+    ("英语", ["英语", "英语赋分", "外语赋分", "英语原始", "外语原始", "外语"], 150),
     ("日语", ["日语赋分", "日语原始", "日语"], 150),
     ("物理", ["物理赋分", "物理原始", "物理"], 100),
     ("化学", ["化学赋分", "化学原始", "化学"], 100),
@@ -49,6 +50,36 @@ def _parse_rank(value):
         return int(float(value))
     except (TypeError, ValueError, OverflowError):
         return None
+
+
+def _parse_int(value):
+    """解析正整数，空值或非法值返回 None。"""
+    value = (value or "").strip()
+    if not value:
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _compute_total_ranks(exam):
+    """计算某次考试全体学生的总分排名，返回 {student_id: rank}。
+
+    排名规则：总分降序，相同总分名次并列（跳名次）。
+    """
+    totals = Score.objects.filter(
+        exam=exam, status="normal", score__isnull=False, is_deleted=False,
+    ).values("student_id").annotate(total=Sum("score")).order_by("-total")
+    ranks = {}
+    current_rank = 0
+    prev_total = None
+    for position, row in enumerate(totals, 1):
+        if row["total"] != prev_total:
+            current_rank = position
+            prev_total = row["total"]
+        ranks[row["student_id"]] = current_rank
+    return ranks
 
 
 def _wide_match_columns(header_map, subject_name, score_aliases):
@@ -481,6 +512,36 @@ def analysis(request):
             for ec in ext_classes
         )
 
+    # 名次进退筛选（对比历史考试，按总分排名变化）
+    history_exam_id = request.GET.get("history_exam_id", "").strip()
+    history_exam = get_object_or_404(
+        Exam, pk=history_exam_id, school_class=current_class, is_deleted=False,
+    ) if history_exam_id else None
+    rank_progress_threshold = _parse_int(request.GET.get("rank_progress_threshold", ""))
+    rank_decline_threshold = _parse_int(request.GET.get("rank_decline_threshold", ""))
+    rank_change_students = []
+    if exam and history_exam and (rank_progress_threshold or rank_decline_threshold):
+        current_ranks = _compute_total_ranks(exam)
+        history_ranks = _compute_total_ranks(history_exam)
+        for sid, cur_r in current_ranks.items():
+            hist_r = history_ranks.get(sid)
+            if hist_r is None:
+                continue
+            delta = hist_r - cur_r  # 正值 = 名次提升（进步），负值 = 名次下降（退步）
+            if (rank_progress_threshold and delta >= rank_progress_threshold) or \
+               (rank_decline_threshold and delta <= -rank_decline_threshold):
+                student = Student.objects.filter(pk=sid).first()
+                if student:
+                    rank_change_students.append({
+                        "student": student,
+                        "current_rank": cur_r,
+                        "history_rank": hist_r,
+                        "delta": delta,
+                        "delta_abs": abs(delta),
+                        "category": "progress" if delta > 0 else "decline",
+                    })
+        rank_change_students.sort(key=lambda x: -x["delta"])
+
     # 学生个人趋势
     student_id = request.GET.get("student_id", "")
     student_trend = None
@@ -529,6 +590,13 @@ def analysis(request):
         "ai_config": _get_ai_config(current_class),
         "ai_subjects": _get_ai_subjects(exam),
         "latest_ai_result": _get_latest_ai_result(current_class, exam),
+        # 名次进退
+        "history_exam_id": history_exam_id,
+        "history_exam": history_exam,
+        "rank_change_students": rank_change_students,
+        "rank_progress_threshold": rank_progress_threshold,
+        "rank_decline_threshold": rank_decline_threshold,
+        "all_exams_for_comparison": exams,
     })
 
 
@@ -1043,9 +1111,15 @@ def score_import_wide_template(request):
     sheet = workbook.active
     sheet.title = "成绩导入"
     headers = ["姓名", "学号"]
+    # 语数英是原始分没有赋分，直接写科目名；选考科目保留赋分+原始两列
+    PLAIN_SUBJECTS = ("语文", "数学", "英语")
     for subject_name, _aliases, _full in WIDE_SCORE_COLUMNS:
+        if subject_name in PLAIN_SUBJECTS:
+            score_cols = [subject_name]
+        else:
+            score_cols = [f"{subject_name}赋分", f"{subject_name}原始"]
+        headers.extend(score_cols)
         headers.extend([
-            f"{subject_name}赋分", f"{subject_name}原始",
             f"{subject_name}班名次", f"{subject_name}级名次", f"{subject_name}市名次",
         ])
     sheet.append(headers)
@@ -1063,7 +1137,7 @@ def score_import_wide_template(request):
         sheet.column_dimensions[sheet.cell(1, column).column_letter].width = 12
     note_sheet = workbook.create_sheet("填写说明")
     note_sheet.append(["说明"])
-    note_sheet.append(["本模板为参考格式。上传时系统会自动匹配表头，只要你的表格表头包含科目名（如“语文赋分”“数学”“英语”）即可，不要求与本模板完全一致。"])
+    note_sheet.append(["本模板为参考格式。上传时系统会自动匹配表头，只要你的表格表头包含科目名（如“语文”“数学”“英语”）即可，不要求与本模板完全一致。"])
     note_sheet.append(["并非所有列都必须填写：没有赋分的考试可留空“赋分”列；没有市名次的考试可留空“市名次”列；某科缺考的学生该科成绩留空即可。"])
     note_sheet.append(["姓名或学号至少填写一项；同名学生必须填写学号。班名次/级名次/市名次为可选项，填了才会写入对应排名字段。"])
     note_sheet.append(["英语与日语为二选一科目：选修日语的学生填日语列，选修英语的学生填英语列，另一列留空。"])

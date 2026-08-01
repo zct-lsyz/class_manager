@@ -108,6 +108,30 @@
             </div>
 
             <div class="tab-pane fade" id="scores">
+                {% if exam_chart.labels %}
+                <div class="card mb-3">
+                    <div class="card-header">历次考试总分 & 总排名趋势</div>
+                    <div class="card-body"><canvas id="totalScoreChart" height="300"></canvas></div>
+                </div>
+                <div class="card mb-3">
+                    <div class="card-header d-flex flex-wrap justify-content-between align-items-center">
+                        <span>单科成绩趋势</span>
+                        <div id="subjectCheckboxes" class="d-flex flex-wrap gap-1">
+                            {% for subj in exam_chart.all_subjects %}
+                            <label class="form-check form-check-inline small mb-0">
+                                <input class="form-check-input subject-check" type="checkbox" value="{{ subj }}" checked> {{ subj }}
+                            </label>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    <div class="card-body"><canvas id="subjectScoreChart" height="300"></canvas></div>
+                </div>
+                <div class="card mb-3">
+                    <div class="card-header">单科排名趋势（排名越小越好）</div>
+                    <div class="card-body"><canvas id="subjectRankChart" height="300"></canvas></div>
+                </div>
+                {% endif %}
+                <h6 class="mt-3 text-muted">原始成绩记录</h6>
                 <div class="table-responsive"><table class="table table-sm"><thead><tr><th>日期</th><th>考试</th><th>科目</th><th>成绩</th><th>名次</th></tr></thead><tbody>
                     {% for item in scores %}<tr><td>{{ item.exam.date }}</td><td>{{ item.exam.name }}</td><td>{{ item.exam_subject.subject.name }}</td><td>{{ item.score|default_if_none:item.get_status_display }}</td><td>{{ item.rank|default:"-" }}</td></tr>{% empty %}<tr><td colspan="5" class="text-muted text-center">暂无成绩记录</td></tr>{% endfor %}
                 </tbody></table></div>
@@ -141,4 +165,113 @@
         </div>
     </div>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+{% if exam_chart.labels %}
+{{ exam_chart|json_script:"examChartData" }}
+<script>
+(function() {
+    const data = JSON.parse(document.getElementById('examChartData').textContent);
+    const labels = data.labels;
+
+    // ---- 总分 & 总排名双Y轴折线图 ----
+    new Chart(document.getElementById('totalScoreChart').getContext('2d'), {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [
+                {
+                    label: '总分',
+                    data: data.totals,
+                    borderColor: '#1a73e8',
+                    backgroundColor: 'rgba(26,115,232,0.1)',
+                    yAxisID: 'y',
+                    tension: 0.3,
+                    fill: false,
+                    spanGaps: false,
+                },
+                {
+                    label: '总排名',
+                    data: data.total_ranks,
+                    borderColor: '#dc3545',
+                    backgroundColor: 'rgba(220,53,69,0.1)',
+                    yAxisID: 'y1',
+                    tension: 0.3,
+                    fill: false,
+                    spanGaps: false,
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            interaction: { mode: 'index', intersect: false },
+            scales: {
+                y: { type: 'linear', position: 'left', title: { display: true, text: '总分' } },
+                y1: { type: 'linear', position: 'right', reverse: true, title: { display: true, text: '总排名' } }
+            },
+            plugins: { legend: { position: 'bottom' } }
+        }
+    });
+
+    // ---- 单科成绩 / 排名折线图（复选框动态切换） ----
+    const subjectColors = ['#1a73e8','#dc3545','#28a745','#ffc107','#6f42c1',
+        '#fd7e14','#20c997','#e83e8c','#0dcaf0','#6610f2','#198754','#0d6efd'];
+    let scoreChart = null, rankChart = null;
+
+    function buildDatasets(seriesKey) {
+        const checks = document.querySelectorAll('.subject-check');
+        const datasets = [];
+        let ci = 0;
+        checks.forEach(cb => {
+            if (cb.checked) {
+                const subj = cb.value;
+                const subjData = data.subjects[subj];
+                if (subjData) {
+                    datasets.push({
+                        label: subj,
+                        data: subjData[seriesKey],
+                        borderColor: subjectColors[ci % subjectColors.length],
+                        backgroundColor: 'rgba(0,0,0,0)',
+                        tension: 0.3,
+                        fill: false,
+                        spanGaps: false,
+                    });
+                }
+                ci++;
+            }
+        });
+        return datasets;
+    }
+
+    function updateSubjectChart() {
+        if (scoreChart) scoreChart.destroy();
+        if (rankChart) rankChart.destroy();
+        scoreChart = new Chart(document.getElementById('subjectScoreChart').getContext('2d'), {
+            type: 'line',
+            data: { labels: labels, datasets: buildDatasets('scores') },
+            options: {
+                responsive: true,
+                interaction: { mode: 'index', intersect: false },
+                scales: { y: { title: { display: true, text: '分数' } } },
+                plugins: { legend: { position: 'bottom' } }
+            }
+        });
+        rankChart = new Chart(document.getElementById('subjectRankChart').getContext('2d'), {
+            type: 'line',
+            data: { labels: labels, datasets: buildDatasets('ranks') },
+            options: {
+                responsive: true,
+                interaction: { mode: 'index', intersect: false },
+                scales: { y: { reverse: true, title: { display: true, text: '排名' } } },
+                plugins: { legend: { position: 'bottom' } }
+            }
+        });
+    }
+
+    document.querySelectorAll('.subject-check').forEach(cb => cb.addEventListener('change', updateSubjectChart));
+    updateSubjectChart();
+})();
+</script>
+{% endif %}
 {% endblock %}

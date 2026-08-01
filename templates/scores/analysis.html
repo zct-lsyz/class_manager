@@ -29,6 +29,11 @@
                 <i class="bi bi-trophy me-1"></i>优生筛选
             </button>
         </div>
+        <div class="col-md-2">
+            <button type="button" class="btn btn-info w-100" data-bs-toggle="collapse" data-bs-target="#rankChangePanel">
+                <i class="bi bi-arrow-up-down me-1"></i>名次进退
+            </button>
+        </div>
     </div>
 </form>
 
@@ -73,6 +78,84 @@
             优生条件按每个科目单独判断：某学生在某个科目满足条件，即计入该科目（及对应班级对比）的统计。
             {% if is_filtering %}<span class="text-danger">当前已开启优生筛选，以下统计均基于筛选后的优生数据。</span>{% endif %}
         </div>
+    </div>
+</div>
+
+<!-- ===== 名次进退筛选面板 ===== -->
+<div class="card mb-3 collapse {% if history_exam_id %}show{% endif %}" id="rankChangePanel">
+    <div class="card-header py-2"><i class="bi bi-arrow-up-down me-2 text-primary"></i>名次进步/退步筛选</div>
+    <div class="card-body">
+        <form method="get" class="row g-3">
+            <input type="hidden" name="exam_id" value="{{ exam.pk }}">
+            {% if student_id %}<input type="hidden" name="student_id" value="{{ student_id }}">{% endif %}
+            {% if criteria.score_threshold %}<input type="hidden" name="score_threshold" value="{{ criteria.score_threshold }}">{% endif %}
+            {% if criteria.class_rank_threshold %}<input type="hidden" name="class_rank_threshold" value="{{ criteria.class_rank_threshold }}">{% endif %}
+            {% if criteria.grade_rank_threshold %}<input type="hidden" name="grade_rank_threshold" value="{{ criteria.grade_rank_threshold }}">{% endif %}
+            {% if criteria.city_rank_threshold %}<input type="hidden" name="city_rank_threshold" value="{{ criteria.city_rank_threshold }}">{% endif %}
+            <input type="hidden" name="combine_mode" value="{{ criteria.combine_mode|default:'any' }}">
+            <div class="col-6 col-md-3">
+                <label class="form-label small">对比历史考试</label>
+                <select name="history_exam_id" class="form-select">
+                    <option value="">-- 选择历史考试 --</option>
+                    {% for e in all_exams_for_comparison %}
+                        {% if not exam or e.pk != exam.pk %}
+                        <option value="{{ e.pk }}" {% if history_exam_id == e.pk|stringformat:'s' %}selected{% endif %}>{{ e.name }}（{{ e.date }}）</option>
+                        {% endif %}
+                    {% endfor %}
+                </select>
+                <div class="form-text">本次考试与前一次考试的总排名对比</div>
+            </div>
+            <div class="col-6 col-md-2">
+                <label class="form-label small">进步阈值（名次≥）</label>
+                <input type="number" name="rank_progress_threshold" class="form-control" min="1" value="{{ rank_progress_threshold|default:'' }}" placeholder="如 20">
+            </div>
+            <div class="col-6 col-md-2">
+                <label class="form-label small">退步阈值（名次≥）</label>
+                <input type="number" name="rank_decline_threshold" class="form-control" min="1" value="{{ rank_decline_threshold|default:'' }}" placeholder="如 20">
+            </div>
+            <div class="col-6 col-md-3 d-flex align-items-end gap-2">
+                <button type="submit" class="btn btn-primary"><i class="bi bi-search me-1"></i>筛选</button>
+                <a href="{% url 'scores:analysis' %}?exam_id={{ exam.pk }}" class="btn btn-outline-secondary">清除</a>
+            </div>
+        </form>
+
+        {% if rank_change_students %}
+        <hr>
+        <div class="small text-muted mb-2">
+            <i class="bi bi-info-circle me-1"></i>
+            对比 {{ history_exam.name }}：共筛选出 {{ rank_change_students|length }} 名学生。
+        </div>
+        <div class="row g-3">
+            <div class="col-md-6">
+                <h6 class="text-success"><i class="bi bi-arrow-up-circle me-1"></i>进步学生（排名上升）</h6>
+                <div class="table-responsive"><table class="table table-sm table-bordered mb-0">
+                    <thead><tr><th>姓名</th><th>{{ history_exam.name }}排名</th><th>{{ exam.name }}排名</th><th class="text-success">进步名次 ↑</th></tr></thead>
+                    <tbody>
+                    {% for rc in rank_change_students %}{% if rc.category == 'progress' %}
+                    <tr><td>{{ rc.student.name }}</td><td>{{ rc.history_rank }}</td><td>{{ rc.current_rank }}</td>
+                        <td class="text-success fw-bold">↑{{ rc.delta_abs }}</td></tr>
+                    {% endif %}{% empty %}
+                    <tr><td colspan="4" class="text-muted text-center py-3">暂无进步学生</td></tr>
+                    {% endfor %}
+                    </tbody>
+                </table></div>
+            </div>
+            <div class="col-md-6">
+                <h6 class="text-danger"><i class="bi bi-arrow-down-circle me-1"></i>退步学生（排名下降）</h6>
+                <div class="table-responsive"><table class="table table-sm table-bordered mb-0">
+                    <thead><tr><th>姓名</th><th>{{ history_exam.name }}排名</th><th>{{ exam.name }}排名</th><th class="text-danger">退步名次 ↓</th></tr></thead>
+                    <tbody>
+                    {% for rc in rank_change_students %}{% if rc.category == 'decline' %}
+                    <tr><td>{{ rc.student.name }}</td><td>{{ rc.history_rank }}</td><td>{{ rc.current_rank }}</td>
+                        <td class="text-danger fw-bold">↓{{ rc.delta_abs }}</td></tr>
+                    {% endif %}{% empty %}
+                    <tr><td colspan="4" class="text-muted text-center py-3">暂无退步学生</td></tr>
+                    {% endfor %}
+                    </tbody>
+                </table></div>
+            </div>
+        </div>
+        {% endif %}
     </div>
 </div>
 
