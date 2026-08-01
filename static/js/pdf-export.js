@@ -31,6 +31,7 @@ function exportPageToPdf(options) {
     var pageHeight = isLandscape ? 210 : 297;  // mm
     var margin = 8;
     var contentWidth = pageWidth - margin * 2;
+    var usablePageHeight = pageHeight - margin * 2;
 
     function restoreBtn() {
         if (btn) {
@@ -45,7 +46,7 @@ function exportPageToPdf(options) {
         backgroundColor: '#ffffff',
         logging: false,
         scrollX: 0,
-        scrollY: -window.scrollY,
+        scrollY: 0,
         windowWidth: container.scrollWidth,
         onclone: function (doc) {
             // 隐藏所有标注为 no-export 的元素（筛选表单、工具栏、按钮、折叠面板等）
@@ -61,11 +62,16 @@ function exportPageToPdf(options) {
                 el.style.display = '';
                 el.style.height = 'auto';
             });
+            // 解除表格横向滚动容器的裁切，避免宽表格（如班级总成绩表）右侧列被截断
+            doc.querySelectorAll('.table-responsive').forEach(function (el) {
+                el.style.overflow = 'visible';
+            });
         },
     }).then(function (canvas) {
-        var imgData = canvas.toDataURL('image/jpeg', 0.95);
+        var imgData = canvas.toDataURL('image/jpeg', 0.92);
+        // 内容在 PDF 中的总高度（按宽度等比换算成 mm）
         var imgHeight = canvas.height * contentWidth / canvas.width;
-        var usablePageHeight = pageHeight - margin * 2;
+        var titleHeight = opts.title ? 14 : 0;   // 标题占用的顶部空间（mm）
 
         var pdf = new window.jspdf.jsPDF({
             orientation: isLandscape ? 'l' : 'p',
@@ -73,23 +79,24 @@ function exportPageToPdf(options) {
             format: 'a4',
         });
 
-        var pageIndex = 0;
         if (opts.title) {
-            pdf.setFontSize(13);
-            pdf.text(opts.title, pageWidth / 2, margin + 4, { align: 'center' });
-            pageIndex = 1; // 标题占首行，从第二行开始内容偏移（简单起见直接叠印）
+            pdf.setFontSize(14);
+            pdf.setFont('helvetica', 'bold');
+            pdf.text(opts.title, pageWidth / 2, margin + 5, { align: 'center' });
         }
 
-        // 整图分页：通过负偏移让每页显示对应切片（addImage 自动裁剪页外内容）
-        var yOffset = margin - usablePageHeight * pageIndex;
-        pdf.addImage(imgData, 'JPEG', margin, yOffset, contentWidth, imgHeight);
+        // 第 1 页：标题之后开始内容，可见内容 [0, firstPageContent]
+        var firstPageContent = usablePageHeight - titleHeight;
+        pdf.addImage(imgData, 'JPEG', margin, margin + titleHeight, contentWidth, imgHeight);
+        var drawn = firstPageContent;
 
-        var remaining = imgHeight - usablePageHeight * (pageIndex + 1);
-        while (remaining > 0) {
+        // 后续页：每页把图片整体上移「已绘制高度」，从而显示下一段内容
+        var pageIndex = 0;
+        while (drawn < imgHeight) {
             pageIndex += 1;
             pdf.addPage();
-            pdf.addImage(imgData, 'JPEG', margin, margin - usablePageHeight * pageIndex, contentWidth, imgHeight);
-            remaining -= usablePageHeight;
+            pdf.addImage(imgData, 'JPEG', margin, margin - drawn, contentWidth, imgHeight);
+            drawn += usablePageHeight;
         }
 
         pdf.save(opts.filename);
