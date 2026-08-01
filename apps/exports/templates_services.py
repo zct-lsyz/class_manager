@@ -201,15 +201,17 @@ def external_class_template(exam):
     for es in ExamSubject.objects.filter(exam=exam).select_related("subject").order_by("sort_order"):
         subject_name = es.subject.name
         headers.extend([subject_name, f"{subject_name}班名次", f"{subject_name}级名次", f"{subject_name}市名次"])
+    headers.extend(["总分", "总分班名次", "总分级排名", "总分市排名"])
 
-    examples = [["张三", 95, 1, 10, 50, 88, 3, 25, 120]]
+    examples = [["张三", 95, 1, 10, 50, 88, 3, 25, 120, 183, 1, 5, 30]]
     notes = [
         "填写说明：",
         f"1. 表头已按考试「{exam.name}」的科目生成，请勿修改表头；",
         "2. 「学生标识」可填学生姓名或编号（仅用于区分，可脱敏）；",
         "3. 每个科目后的「班名次/级名次/市名次」列可留空（没有就不填）；",
-        "4. 只填写有数据列的科目即可，其余列留空；",
-        "5. 导入前请先删除示例行。",
+        "4. 最后 4 列为总分相关（总分/总分班名次/总分级排名/总分市排名），可留空；",
+        "5. 只填写有数据列的科目即可，其余列留空；",
+        "6. 导入前请先删除示例行。",
     ]
     col_widths = [14] + [12, 12, 12, 12] * ((len(headers) - 1) // 4)
     _write_sheet(ws, headers, examples, notes, col_widths)

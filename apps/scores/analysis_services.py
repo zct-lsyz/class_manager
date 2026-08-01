@@ -4,7 +4,7 @@ import statistics
 from django.db import transaction
 from django.utils import timezone
 
-from apps.scores.models import ExternalClass, ExternalScore
+from apps.scores.models import ExamTotal, ExternalClass, ExternalScore, ExternalTotal
 
 
 def compute_score_stats(scores, full_score):
@@ -131,6 +131,18 @@ def import_external_scores(uploaded, current_class, exam, class_name, school_nam
         elif header.endswith("市名次") and header[:-3] in subject_by_name:
             column_map[idx] = (subject_by_name[header[:-3]], "city_rank")
 
+    # 总分列：总分/总分班名次/总分级排名/总分市排名（均可缺失）
+    total_cols = {}  # column_index -> field_name
+    for idx, header in enumerate(headers):
+        if header == "总分":
+            total_cols[idx] = "total_score"
+        elif header == "总分班名次":
+            total_cols[idx] = "class_rank"
+        elif header in ("总分级排名", "总分级名次"):
+            total_cols[idx] = "grade_rank"
+        elif header == "总分市排名":
+            total_cols[idx] = "city_rank"
+
     if not any(field == "score" for _, field in column_map.values()):
         raise ValueError("未找到与考试科目匹配的成绩列，请使用下载的模板填写。")
 
@@ -163,9 +175,49 @@ def import_external_scores(uploaded, current_class, exam, class_name, school_nam
                 defaults={field: value},
             )
             created += 1
+
+        # 总分列（可选）：解析总分及三种排名并写入 ExternalTotal
+        if total_cols:
+            total_defaults = {}
+            for idx, field in total_cols.items():
+                raw = row[idx] if idx < len(row) else None
+                if raw in (None, ""):
+                    continue
+                try:
+                    total_defaults[field] = float(raw) if field == "total_score" else int(float(raw))
+                except (TypeError, ValueError):
+                    continue
+            if "total_score" in total_defaults:
+                ExternalTotal.objects.update_or_create(
+                    external_class=external_class,
+                    exam=exam,
+                    student_label=label,
+                    defaults=total_defaults,
+                )
+                created += 1
     if created == 0:
         raise ValueError("未能从文件中解析出任何成绩记录。")
     return external_class, created
+
+
+def _total_stats_for(total_values, full_score):
+    """对一组成绩总分（含三种排名）计算统计量，输出与 compute_score_stats 兼容的结构。
+
+    total_values: 可迭代的 dict，含 total_score/class_rank/grade_rank/city_rank
+    """
+    from types import SimpleNamespace
+
+    objs = [
+        SimpleNamespace(
+            score=v.get("total_score"),
+            rank=v.get("class_rank"),
+            grade_rank=v.get("grade_rank"),
+            city_rank=v.get("city_rank"),
+        )
+        for v in total_values
+        if v.get("total_score") is not None
+    ]
+    return compute_score_stats(objs, full_score)
 
 
 def build_comparison_data(exam, exam_subjects, current_class, criteria=None):
@@ -174,7 +226,7 @@ def build_comparison_data(exam, exam_subjects, current_class, criteria=None):
     返回:
         class_list: [{id, name, label}] 含本班 + 外部班级
         chart_data: 每个指标的 {metric: {class_id: value}}
-        comparison_table: 每科目 × 每班级的统计
+        comparison_table: 每科目 × 每班级的统计（末尾含「总分」行）
     """
     own_scores_by_subject = {}
     for es in exam_subjects:
@@ -190,9 +242,36 @@ def build_comparison_data(exam, exam_subjects, current_class, criteria=None):
             ))
             external_scores_by_subject[(ec.id, es.id)] = scores
 
+    # 总分对比数据（ExamTotal / ExternalTotal，缺失时留空）
+    own_totals = [
+        {
+            "total_score": float(et.total_score),
+            "class_rank": et.class_rank,
+            "grade_rank": et.grade_rank,
+            "city_rank": et.city_rank,
+        }
+        for et in ExamTotal.objects.filter(exam=exam)
+    ]
+    ext_totals = {}
+    for ec in external_classes:
+        ext_totals[ec.id] = [
+            {
+                "total_score": float(et.total_score),
+                "class_rank": et.class_rank,
+                "grade_rank": et.grade_rank,
+                "city_rank": et.city_rank,
+            }
+            for et in ExternalTotal.objects.filter(external_class=ec, exam=exam)
+        ]
+
     comparison_table = []
     chart_data = {}
-    metrics = ["avg", "variance", "max", "min", "max_class_rank", "min_class_rank"]
+    metrics = [
+        "avg", "variance", "max", "min",
+        "max_class_rank", "min_class_rank",
+        "max_grade_rank", "min_grade_rank",
+        "max_city_rank", "min_city_rank",
+    ]
 
     for es in exam_subjects:
         row = {"subject": es.subject.name, "full_score": es.full_score, "classes": {}}
@@ -217,5 +296,22 @@ def build_comparison_data(exam, exam_subjects, current_class, criteria=None):
                     for ec in external_classes
                 },
             }
+
+    # 总分行
+    total_full_score = exam.total_score or sum(es.full_score for es in exam_subjects) or 0
+    total_row = {"subject": "总分", "full_score": total_full_score, "classes": {}}
+    total_row["classes"]["own"] = _total_stats_for(own_totals, None)
+    for ec in external_classes:
+        total_row["classes"][f"ext_{ec.pk}"] = _total_stats_for(ext_totals.get(ec.id, []), None)
+    comparison_table.append(total_row)
+
+    for metric in metrics:
+        chart_data.setdefault(metric, {})["总分"] = {
+            "own": total_row["classes"]["own"].get(metric),
+            **{
+                f"ext_{ec.pk}": total_row["classes"][f"ext_{ec.pk}"].get(metric)
+                for ec in external_classes
+            },
+        }
 
     return external_classes, comparison_table, chart_data

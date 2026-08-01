@@ -1,4 +1,5 @@
 ﻿import json
+from types import SimpleNamespace
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
@@ -11,7 +12,7 @@ from django.db import transaction
 
 from apps.scores.models import (
     Exam, ExamSubject, Score, SupportPlan, SupportFollowUp,
-    ExternalClass, ExternalScore, GradeLine,
+    ExternalClass, ExternalScore, ExternalTotal, ExamTotal, GradeLine,
 )
 from apps.scores.forms import ExamForm, ExamSubjectForm, ScoreForm, SupportPlanForm
 from apps.scores.analysis_services import (
@@ -86,6 +87,42 @@ def _compute_total_ranks(exam):
     return ranks
 
 
+def _get_or_compute_total_ranks(exam):
+    """获取学生总分及三种排名（总分班名次/总分级排名/总分市排名）。
+
+    优先使用已导入的 ExamTotal（官方总分与排名）；未导入的学生
+    从分科成绩聚合计算总分与班级名次（grade_rank/city_rank 为 None）。
+
+    返回 {student_id: {total_score, class_rank, grade_rank, city_rank}}
+    """
+    result = {
+        et.student_id: {
+            "total_score": float(et.total_score) if et.total_score is not None else None,
+            "class_rank": et.class_rank,
+            "grade_rank": et.grade_rank,
+            "city_rank": et.city_rank,
+        }
+        for et in ExamTotal.objects.filter(exam=exam)
+    }
+    aggregated = Score.objects.filter(
+        exam=exam, status="normal", score__isnull=False, is_deleted=False,
+    ).values("student_id").annotate(total=Sum("score")).order_by("-total")
+    current_rank = 0
+    prev_total = None
+    for position, row in enumerate(aggregated, 1):
+        if row["total"] != prev_total:
+            current_rank = position
+            prev_total = row["total"]
+        if row["student_id"] not in result:
+            result[row["student_id"]] = {
+                "total_score": float(row["total"]),
+                "class_rank": current_rank,
+                "grade_rank": None,
+                "city_rank": None,
+            }
+    return result
+
+
 def _wide_match_columns(header_map, subject_name, score_aliases):
     """灵活匹配某科目在表头中的各列（分数 + 三种名次）。
 
@@ -140,6 +177,42 @@ def _wide_match_columns(header_map, subject_name, score_aliases):
             score_header = header_text
 
     return score_header, class_rank_header, grade_rank_header, city_rank_header
+
+
+def _match_total_columns(header_map):
+    """匹配宽表中「总分」相关列。
+
+    匹配规则（表头 → 列索引）：
+      - 「总分」：总分（不含名次关键词）
+      - 「总分班名次」：总分班名次（含「总分」且含「班名次」/「班名」）
+      - 「总分级名次」「总分级排名」「总分级部名次」：总分级排名
+      - 「总分市名次」：总分市排名
+
+    返回 (total_score_col, class_rank_col, grade_rank_col, city_rank_col)，均可能为 None。
+    """
+    total_score_col = None
+    class_rank_col = None
+    grade_rank_col = None
+    city_rank_col = None
+
+    for header_text in header_map:
+        if not header_text:
+            continue
+        if "总分" not in header_text:
+            continue
+        if "班名次" in header_text or "班名" in header_text:
+            if class_rank_col is None:
+                class_rank_col = header_text
+        elif "级名次" in header_text or "级排名" in header_text or "级部名次" in header_text:
+            if grade_rank_col is None:
+                grade_rank_col = header_text
+        elif "市名次" in header_text or "市排名" in header_text:
+            if city_rank_col is None:
+                city_rank_col = header_text
+        elif total_score_col is None:
+            total_score_col = header_text
+
+    return total_score_col, class_rank_col, grade_rank_col, city_rank_col
 
 
 def get_client_ip(request):
@@ -469,16 +542,22 @@ def _filter_students(exam, exam_subjects, dimension, field, op, value):
         return v >= threshold if op == "gte" else v <= threshold
 
     if dimension == "total":
-        totals = {}
-        for row in Score.objects.filter(
-            exam=exam, status="normal", score__isnull=False, is_deleted=False,
-        ).values("student_id").annotate(total=Sum("score")):
-            totals[row["student_id"]] = row["total"]
+        total_data = _get_or_compute_total_ranks(exam)
         if field == "score":
-            return {sid for sid, t in totals.items() if _check(t)}
-        if field == "class_rank":
-            ranks = _compute_total_ranks(exam)
-            return {sid for sid in totals if ranks.get(sid) is not None and _check(ranks[sid])}
+            return {
+                sid for sid, d in total_data.items()
+                if d["total_score"] is not None and _check(d["total_score"])
+            }
+        rank_field = {
+            "class_rank": "class_rank",
+            "grade_rank": "grade_rank",
+            "city_rank": "city_rank",
+        }.get(field)
+        if rank_field:
+            return {
+                sid for sid, d in total_data.items()
+                if d[rank_field] is not None and _check(d[rank_field])
+            }
         return set()
 
     if dimension.startswith("subject:"):
@@ -559,6 +638,28 @@ def analysis(request):
                 **compute_score_stats(scores, es.full_score),
             }
 
+        # 1.5 总分统计（含导入的总分班/级/市排名，缺失时自动聚合计算）
+        total_data = _get_or_compute_total_ranks(exam)
+        if filtered_student_ids is not None:
+            total_data = {
+                sid: d for sid, d in total_data.items()
+                if sid in filtered_student_ids
+            }
+        total_score_objs = [
+            SimpleNamespace(
+                score=d["total_score"],
+                rank=d["class_rank"],
+                grade_rank=d["grade_rank"],
+                city_rank=d["city_rank"],
+            )
+            for d in total_data.values()
+            if d["total_score"] is not None
+        ]
+        analysis_data["总分"] = {
+            "full_score": exam.total_score or sum(es.full_score for es in exam_subjects) or 0,
+            **compute_score_stats(total_score_objs, None),
+        }
+
         # 2. 总分排名分布（基于筛选后的学生）
         total_scores = list(Score.objects.filter(
             exam=exam, status="normal", score__isnull=False, is_deleted=False,
@@ -629,15 +730,22 @@ def analysis(request):
             if not has_any_score:
                 continue
 
+            student_total = total_data.get(student.pk, {})
+            stored_score = student_total.get("total_score")
             class_total_table.append({
                 "student": student,
-                "total_score": round(total, 1),
+                "total_score": (
+                    stored_score if stored_score is not None else round(total, 1)
+                ),
+                "stored_class_rank": student_total.get("class_rank"),
+                "total_grade_rank": student_total.get("grade_rank"),
+                "total_city_rank": student_total.get("city_rank"),
                 "subjects": student_scores,
                 "weak_subjects": weak_subjects,
             })
 
-        # 按总分降序排名（并列跳名次）
-        class_total_table.sort(key=lambda x: -x["total_score"])
+        # 按总分降序排名（并列跳名次）；有官方导入班名次的用导入值覆盖
+        class_total_table.sort(key=lambda x: -(x["total_score"] or 0))
         prev_total = None
         for i, row in enumerate(class_total_table):
             if row["total_score"] != prev_total:
@@ -645,6 +753,10 @@ def analysis(request):
                 prev_total = row["total_score"]
             else:
                 row["rank"] = class_total_table[i - 1]["rank"]
+        for row in class_total_table:
+            if row["stored_class_rank"] is not None:
+                row["rank"] = row["stored_class_rank"]
+            row.pop("stored_class_rank", None)
 
         # 班级总分平均（用于"优秀学生"筛选）
         all_totals = [r["total_score"] for r in class_total_table]
@@ -958,6 +1070,11 @@ def class_student_overview(request):
             school_class=current_class, is_deleted=False,
         ).order_by("sort_order", "student_id")
 
+        exam_total_map = {
+            et.student_id: et
+            for et in ExamTotal.objects.filter(exam=exam)
+        }
+
         for student in students:
             weak_subjects = []
             strong_subjects = []
@@ -984,8 +1101,13 @@ def class_student_overview(request):
                 elif diff > 0:
                     strong_subjects.append(entry)
 
+            et = exam_total_map.get(student.pk)
             students_data.append({
                 "student": student,
+                "total_score": float(et.total_score) if et and et.total_score is not None else None,
+                "total_rank": et.class_rank if et else None,
+                "total_grade_rank": et.grade_rank if et else None,
+                "total_city_rank": et.city_rank if et else None,
                 "weak_subjects": weak_subjects,
                 "strong_subjects": strong_subjects,
             })
@@ -1010,6 +1132,13 @@ def student_analysis_detail(request, pk):
     ).select_related("exam", "exam_subject__subject").order_by("exam__date", "exam_subject__sort_order")
 
     # ----- 历次成绩历史 + 图表数据 -----
+    # 已导入的官方总分优先；否则用分科之和
+    exam_total_by_exam = {
+        et.exam_id: et
+        for et in ExamTotal.objects.filter(exam__in=Exam.objects.filter(
+            school_class=current_class, is_deleted=False,
+        ), student=student)
+    }
     history = []
     history_map = {}
     for record in records:
@@ -1026,6 +1155,9 @@ def student_analysis_detail(request, pk):
             item["total"] += float(record.score)
             item["full_score"] += record.exam_subject.full_score
     for item in history:
+        et = exam_total_by_exam.get(item["exam"].pk)
+        if et and et.total_score is not None:
+            item["total"] = float(et.total_score)
         item["total"] = round(item["total"], 1)
         item["score_rate"] = round(item["total"] / item["full_score"] * 100, 1) if item["full_score"] else 0
 
@@ -1055,12 +1187,17 @@ def student_analysis_detail(request, pk):
 
     total_ranks = {}
     for ei, exam in enumerate(all_exams):
-        # 总分排名
+        # 总分排名：班级名次计算或取导入值，级/市排名取导入值
         if ei not in total_ranks:
             total_ranks[ei] = _compute_total_ranks(exam)
         tr = total_ranks[ei].get(student.pk)
+        exam_total = exam_total_by_exam.get(exam.pk)
         series["总分"]["分数"][ei] = history_map.get(exam.pk, {}).get("total", None) or None
-        series["总分"]["班级排名"][ei] = tr
+        series["总分"]["班级排名"][ei] = (
+            exam_total.class_rank if exam_total and exam_total.class_rank is not None else tr
+        )
+        series["总分"]["级部排名"][ei] = exam_total.grade_rank if exam_total else None
+        series["总分"]["市排名"][ei] = exam_total.city_rank if exam_total else None
 
         # 各科
         for es in ExamSubject.objects.filter(exam=exam).select_related("subject"):
@@ -1488,6 +1625,12 @@ def score_import_wide(request):
         ))
         matched_subject_names.append(subject_name)
 
+    # 总分列匹配（总分/总分班名次/总分级排名/总分市排名，均可缺失）
+    total_score_col, total_class_rank_col, total_grade_rank_col, total_city_rank_col = (
+        _match_total_columns(header_map)
+    )
+    has_total_col = total_score_col is not None
+
     students = list(Student.objects.filter(school_class=current_class, is_deleted=False))
     student_id_map = {student.student_id: student for student in students}
     student_name_map = {}
@@ -1495,6 +1638,7 @@ def score_import_wide(request):
         student_name_map.setdefault(student.name.strip(), []).append(student)
     imported = 0
     imported_students = set()
+    total_imported = 0
     skipped = []
 
     with transaction.atomic():
@@ -1544,21 +1688,51 @@ def score_import_wide(request):
                 imported += 1
                 imported_students.add(student.pk)
 
+            # 总分列（可选）：解析总分及三种排名并写入 ExamTotal
+            if has_total_col:
+                total_idx = header_map[total_score_col]
+                raw_total = row[total_idx] if total_idx < len(row) else None
+                if raw_total is not None and _excel_text(raw_total) != "":
+                    try:
+                        total_value = float(raw_total)
+                    except (TypeError, ValueError):
+                        skipped.append(f"第{row_number}行「总分」不是数字")
+                    else:
+                        total_defaults = {"total_score": total_value}
+                        if total_class_rank_col is not None:
+                            total_defaults["class_rank"] = _parse_rank(
+                                row[header_map[total_class_rank_col]]
+                            ) if header_map[total_class_rank_col] < len(row) else None
+                        if total_grade_rank_col is not None:
+                            total_defaults["grade_rank"] = _parse_rank(
+                                row[header_map[total_grade_rank_col]]
+                            ) if header_map[total_grade_rank_col] < len(row) else None
+                        if total_city_rank_col is not None:
+                            total_defaults["city_rank"] = _parse_rank(
+                                row[header_map[total_city_rank_col]]
+                            ) if header_map[total_city_rank_col] < len(row) else None
+                        ExamTotal.objects.update_or_create(
+                            exam=exam, student=student,
+                            defaults=total_defaults,
+                        )
+                        total_imported += 1
+
         # 仅在文件未提供「班名次」列时才自动计算班级名次，避免覆盖导入的官方名次
         for exam_subject, _column_index, _column_name, class_rank_idx, *_rest in subject_columns:
             if class_rank_idx is None:
                 _update_ranks(exam_subject)
 
+    total_part = f"，总分 {total_imported} 条" if total_imported else ""
     OperationLog.objects.create(
         user=request.user, action="batch_import", module="scores",
         object_repr=f"{exam.name} - 多科成绩",
-        detail=f"宽表导入：{len(imported_students)}名学生，{imported}条成绩，{len(skipped)}项跳过；匹配科目：{'、'.join(matched_subject_names) or '无'}",
+        detail=f"宽表导入：{len(imported_students)}名学生，{imported}条成绩{total_part}，{len(skipped)}项跳过；匹配科目：{'、'.join(matched_subject_names) or '无'}",
         ip_address=get_client_ip(request), success=True,
     )
     if skipped:
-        messages.warning(request, f"已导入 {len(imported_students)} 名学生的 {imported} 条成绩；另有 {len(skipped)} 项未导入：" + "；".join(skipped[:8]))
+        messages.warning(request, f"已导入 {len(imported_students)} 名学生的 {imported} 条成绩{total_part}；另有 {len(skipped)} 项未导入：" + "；".join(skipped[:8]))
     else:
-        messages.success(request, f"已导入 {len(imported_students)} 名学生的 {imported} 条成绩。")
+        messages.success(request, f"已导入 {len(imported_students)} 名学生的 {imported} 条成绩{total_part}。")
     return redirect(f"/scores/entry/?exam_id={exam.pk}")
 
 
@@ -1585,6 +1759,8 @@ def score_import_wide_template(request):
         headers.extend([
             f"{subject_name}班名次", f"{subject_name}级名次", f"{subject_name}市名次",
         ])
+    # 总分列（最后，在所有科目列之后；均可留空）
+    headers.extend(["总分", "总分班名次", "总分级排名", "总分市排名"])
     sheet.append(headers)
     for student in Student.objects.filter(school_class=current_class, is_deleted=False).order_by("student_id") if current_class else []:
         sheet.append([student.name, student.student_id])
@@ -1603,6 +1779,7 @@ def score_import_wide_template(request):
     note_sheet.append(["本模板为参考格式。上传时系统会自动匹配表头，只要你的表格表头包含科目名（如“语文”“数学”“英语”）即可，不要求与本模板完全一致。"])
     note_sheet.append(["并非所有列都必须填写：没有赋分的考试可留空“赋分”列；没有市名次的考试可留空“市名次”列；某科缺考的学生该科成绩留空即可。"])
     note_sheet.append(["姓名或学号至少填写一项；同名学生必须填写学号。班名次/级名次/市名次为可选项，填了才会写入对应排名字段。"])
+    note_sheet.append(["最后 4 列为总分相关（总分/总分班名次/总分级排名/总分市排名），可留空；留空时系统按分科成绩自动计算总分与班级名次。"])
     note_sheet.append(["英语与日语为二选一科目：选修日语的学生填日语列，选修英语的学生填英语列，另一列留空。"])
     note_sheet.column_dimensions["A"].width = 110
 

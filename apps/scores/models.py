@@ -252,6 +252,58 @@ class ExternalScore(BaseModel):
     def __str__(self):
         return f"{self.external_class} - {self.exam_subject.subject.name}: {self.score}"
 
+
+class ExamTotal(BaseModel):
+    """学生考试总分及总分排名（与单科 Score 分开存储，支持导入或自动计算）"""
+    exam = models.ForeignKey(
+        Exam, on_delete=models.CASCADE,
+        related_name="exam_totals", verbose_name="考试",
+    )
+    student = models.ForeignKey(
+        Student, on_delete=models.CASCADE,
+        related_name="exam_totals", verbose_name="学生",
+    )
+    total_score = models.DecimalField("总分", max_digits=8, null=True, blank=True, decimal_places=1)
+    class_rank = models.IntegerField("总分班名次", null=True, blank=True)
+    grade_rank = models.IntegerField("总分级排名", null=True, blank=True)
+    city_rank = models.IntegerField("总分市排名", null=True, blank=True)
+
+    class Meta:
+        verbose_name = "考试总分"
+        verbose_name_plural = "考试总分"
+        unique_together = [("exam", "student")]
+        ordering = ["-total_score"]
+
+    def __str__(self):
+        return f"{self.student.name} - {self.exam.name}: 总分{self.total_score}"
+
+
+class ExternalTotal(BaseModel):
+    """外部班级学生总分及总分排名（与 ExternalScore 分开存储）"""
+    external_class = models.ForeignKey(
+        ExternalClass, on_delete=models.CASCADE,
+        related_name="exam_totals", verbose_name="外部班级",
+    )
+    exam = models.ForeignKey(
+        Exam, on_delete=models.CASCADE,
+        related_name="external_totals", verbose_name="考试",
+    )
+    student_label = models.CharField("学生标识", max_length=50, blank=True, default="")
+    total_score = models.FloatField("总分", null=True, blank=True)
+    class_rank = models.IntegerField("总分班名次", null=True, blank=True)
+    grade_rank = models.IntegerField("总分级排名", null=True, blank=True)
+    city_rank = models.IntegerField("总分市排名", null=True, blank=True)
+
+    class Meta:
+        verbose_name = "外部班级总分"
+        verbose_name_plural = "外部班级总分"
+        unique_together = [("external_class", "exam", "student_label")]
+        ordering = ["external_class", "student_label"]
+
+    def __str__(self):
+        return f"{self.external_class} - {self.exam.name}: 总分{self.total_score}"
+
+
 class GradeLine(BaseModel):
     """本科线/合格线设置，与考试科目关联"""
     exam_subject = models.OneToOneField(

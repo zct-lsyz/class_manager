@@ -28,6 +28,10 @@
                 <th style="width:140px">学号</th>
                 <th style="width:100px">姓名</th>
                 <th style="width:60px">性别</th>
+                <th style="width:70px">总分</th>
+                <th style="width:80px">总分班名次</th>
+                <th style="width:80px">总分级排名</th>
+                <th style="width:80px">总分市排名</th>
                 <th>弱势学科</th>
                 <th style="width:100px">操作</th>
             </tr>
@@ -44,6 +48,10 @@
                     <span class="badge bg-danger-soft">女</span>
                     {% endif %}
                 </td>
+                <td class="text-center fw-bold">{{ row.total_score|default:"—" }}</td>
+                <td class="text-center">{{ row.total_rank|default:"—" }}</td>
+                <td class="text-center">{{ row.total_grade_rank|default:"—" }}</td>
+                <td class="text-center">{{ row.total_city_rank|default:"—" }}</td>
                 <td>
                     {% if row.weak_subjects %}
                     {% for subj in row.weak_subjects %}

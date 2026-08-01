@@ -156,3 +156,100 @@ class WideScoreImportTests(TestCase):
 
         self.assertContains(response, "李四成绩详情")
         self.assertContains(response, "数学")
+
+
+class ExamTotalTests(TestCase):
+    """总分及总分排名（班/级/市）导入与分析测试"""
+
+    def setUp(self):
+        from apps.scores.models import ExamTotal
+        self.ExamTotal = ExamTotal
+        self.user = get_user_model().objects.create_user(username="total-importer", password="pass")
+        self.client.force_login(self.user)
+        self.cls = SchoolClass.objects.create(created_by=self.user, name="总分班", is_current=True)
+        self.sem = Semester.objects.create(
+            school_class=self.cls, academic_year="2026-2027", semester_type="first", is_current=True,
+        )
+        self.exam = Exam.objects.create(
+            school_class=self.cls, semester=self.sem, name="月考", date="2026-08-01",
+        )
+        self.student = Student.objects.create(
+            school_class=self.cls, student_id="2026000", name="王五", gender="male",
+        )
+
+    def _upload_wide(self, headers, rows):
+        workbook = Workbook()
+        sheet = workbook.active
+        sheet.append(headers)
+        for row in rows:
+            sheet.append(row)
+        output = io.BytesIO()
+        workbook.save(output)
+        uploaded = SimpleUploadedFile(
+            "scores.xlsx", output.getvalue(),
+            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+        return self.client.post(reverse("scores:score_import_wide"), {
+            "exam_id": self.exam.pk, "file": uploaded,
+        })
+
+    def test_wide_import_stores_total_and_ranks(self):
+        """宽表导入总分/班/级/市排名写入 ExamTotal"""
+        response = self._upload_wide(
+            ["姓名", "学号", "语文", "数学", "总分", "总分班名次", "总分级排名", "总分市排名"],
+            [["王五", "2026000", 120, 130, 630, 1, 15, 80]],
+        )
+        self.assertEqual(response.status_code, 302)
+        et = self.ExamTotal.objects.get(exam=self.exam, student=self.student)
+        self.assertEqual(float(et.total_score), 630)
+        self.assertEqual(et.class_rank, 1)
+        self.assertEqual(et.grade_rank, 15)
+        self.assertEqual(et.city_rank, 80)
+
+    def test_wide_import_without_total_falls_back(self):
+        """不提供总分列时不写 ExamTotal，分析仍可聚合计算"""
+        response = self._upload_wide(
+            ["姓名", "学号", "语文", "数学"],
+            [["王五", "2026000", 120, 130]],
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertFalse(self.ExamTotal.objects.filter(exam=self.exam).exists())
+
+        from apps.scores.views import _get_or_compute_total_ranks
+        data = _get_or_compute_total_ranks(self.exam)
+        self.assertEqual(data[self.student.pk]["total_score"], 250.0)
+        self.assertEqual(data[self.student.pk]["class_rank"], 1)
+        self.assertIsNone(data[self.student.pk]["grade_rank"])
+
+    def test_wide_template_has_total_columns(self):
+        """宽表模板最后 4 列为总分相关"""
+        response = self.client.get(reverse("scores:score_import_wide_template"))
+        self.assertEqual(response.status_code, 200)
+        from openpyxl import load_workbook
+        from io import BytesIO
+        wb = load_workbook(BytesIO(response.content), read_only=True)
+        header = [str(h) for h in next(wb[wb.sheetnames[0]].iter_rows(values_only=True)) if h]
+        self.assertEqual(header[-4:], ["总分", "总分班名次", "总分级排名", "总分市排名"])
+
+    def test_analysis_page_shows_total_row(self):
+        """分析页渲染总分及三种排名"""
+        self._upload_wide(
+            ["姓名", "学号", "语文", "数学", "总分", "总分班名次", "总分级排名", "总分市排名"],
+            [["王五", "2026000", 120, 130, 630, 1, 15, 80]],
+        )
+        response = self.client.get(reverse("scores:analysis"), {"exam_id": self.exam.pk})
+        self.assertEqual(response.status_code, 200)
+        for token in ["总分", "630", "总分班名次", "总分级排名", "总分市排名"]:
+            self.assertContains(response, token)
+
+    def test_student_detail_uses_stored_total_ranks(self):
+        """个人详情图表中总分级/市排名取导入值"""
+        self._upload_wide(
+            ["姓名", "学号", "语文", "数学", "总分", "总分班名次", "总分级排名", "总分市排名"],
+            [["王五", "2026000", 120, 130, 630, 1, 15, 80]],
+        )
+        response = self.client.get(reverse("scores:student_analysis_detail", args=[self.student.pk]))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "630")
+        # chart_data JSON 中总分级部排名应为 15
+        self.assertIn(b"15", response.content)
