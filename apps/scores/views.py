@@ -673,8 +673,92 @@ def external_delete(request, pk):
 
 
 @login_required
+def class_student_overview(request):
+    """班级学生情况总览：逐生展示弱势学科（低于班级均分）标签"""
+    current_class = SchoolClass.objects.filter(is_current=True).first()
+    exam_id = request.GET.get("exam_id", "")
+
+    exam = None
+    if exam_id:
+        exam = Exam.objects.filter(
+            pk=exam_id, school_class=current_class, is_deleted=False,
+        ).first()
+
+    # 考试列表（用于切换）
+    exams = Exam.objects.filter(
+        school_class=current_class, is_deleted=False,
+    ).order_by("-date")[:20] if current_class else []
+
+    # 每个学科班级平均分
+    subject_avgs = {}
+    exam_subjects = []
+    if exam:
+        exam_subjects = list(ExamSubject.objects.filter(
+            exam=exam,
+        ).select_related("subject").order_by("sort_order"))
+
+        from apps.scores.analysis_services import compute_score_stats
+        for es in exam_subjects:
+            scores_qs = Score.objects.filter(
+                exam_subject=es, status="normal", score__isnull=False,
+                is_deleted=False,
+            ).select_related("student")
+            stats = compute_score_stats(list(scores_qs), es.full_score)
+            subject_avgs[es.subject.name] = {
+                "avg": stats["avg"],
+                "full_score": es.full_score,
+                "exam_subject_id": es.pk,
+            }
+
+    # 逐生构建数据
+    students_data = []
+    if exam:
+        students = Student.objects.filter(
+            school_class=current_class, is_deleted=False,
+        ).order_by("sort_order", "student_id")
+
+        for student in students:
+            weak_subjects = []
+            strong_subjects = []
+            for es in exam_subjects:
+                score = Score.objects.filter(
+                    exam_subject=es, student=student,
+                    status="normal", score__isnull=False, is_deleted=False,
+                ).first()
+                if score is None:
+                    continue
+                subject_name = es.subject.name
+                avg = subject_avgs.get(subject_name, {}).get("avg")
+                if avg is None:
+                    continue
+                diff = round(float(score.score) - avg, 1)
+                entry = {
+                    "name": subject_name,
+                    "score": float(score.score),
+                    "avg": avg,
+                    "diff": diff,
+                }
+                if diff < 0:
+                    weak_subjects.append(entry)
+                elif diff > 0:
+                    strong_subjects.append(entry)
+
+            students_data.append({
+                "student": student,
+                "weak_subjects": weak_subjects,
+                "strong_subjects": strong_subjects,
+            })
+
+    return render(request, "scores/class_student_overview.html", {
+        "exam": exam,
+        "exams": exams,
+        "students_data": students_data,
+    })
+
+
+@login_required
 def student_analysis_detail(request, pk):
-    """学生历次成绩、趋势和手动 AI 分析。"""
+    """学生历次成绩、趋势和手动 AI 分析（含优势/弱势学科 + 动态图表）。"""
     current_class = SchoolClass.objects.filter(is_current=True).first()
     student = get_object_or_404(
         Student, pk=pk, school_class=current_class, is_deleted=False,
@@ -683,6 +767,8 @@ def student_analysis_detail(request, pk):
         student=student, exam__school_class=current_class, exam__is_deleted=False,
         is_deleted=False,
     ).select_related("exam", "exam_subject__subject").order_by("exam__date", "exam_subject__sort_order")
+
+    # ----- 历次成绩历史 + 图表数据 -----
     history = []
     history_map = {}
     for record in records:
@@ -702,22 +788,112 @@ def student_analysis_detail(request, pk):
         item["total"] = round(item["total"], 1)
         item["score_rate"] = round(item["total"] / item["full_score"] * 100, 1) if item["full_score"] else 0
 
+    # ----- 全部考试列表（按日期升序） -----
+    all_exams = list(Exam.objects.filter(
+        school_class=current_class, is_deleted=False,
+    ).order_by("date"))
+
+    # ----- 全部科目 -----
+    all_subjects = sorted(set(
+        Score.objects.filter(
+            student=student, exam__school_class=current_class,
+            exam__is_deleted=False, is_deleted=False, status="normal", score__isnull=False,
+        ).values_list("exam_subject__subject__name", flat=True)
+    ))
+
+    # ----- 构建图表 JSON 数据 -----
+    # 结构: series[subject_name][metric] = [val per exam (None if no data)]
+    from apps.scores.analysis_services import compute_score_stats
+    metrics = ["分数", "班级排名", "级部排名", "市排名"]
+    series = {}
+    # 总分
+    series["总分"] = {m: [None] * len(all_exams) for m in metrics}
+    # 各科
+    for subj in all_subjects:
+        series[subj] = {m: [None] * len(all_exams) for m in metrics}
+
+    total_ranks = {}
+    for ei, exam in enumerate(all_exams):
+        # 总分排名
+        if ei not in total_ranks:
+            total_ranks[ei] = _compute_total_ranks(exam)
+        tr = total_ranks[ei].get(student.pk)
+        series["总分"]["分数"][ei] = history_map.get(exam.pk, {}).get("total", None) or None
+        series["总分"]["班级排名"][ei] = tr
+
+        # 各科
+        for es in ExamSubject.objects.filter(exam=exam).select_related("subject"):
+            subj_name = es.subject.name
+            if subj_name not in series:
+                continue
+            score = Score.objects.filter(
+                exam_subject=es, student=student, status="normal",
+                score__isnull=False, is_deleted=False,
+            ).first()
+            if score:
+                series[subj_name]["分数"][ei] = float(score.score)
+                series[subj_name]["班级排名"][ei] = score.rank
+                series[subj_name]["级部排名"][ei] = score.grade_rank
+                series[subj_name]["市排名"][ei] = score.city_rank
+
+    # ----- 优势/弱势学科（最近一次考试） -----
+    weak_subjects = []
+    strong_subjects = []
+    if history:
+        latest_item = history[-1]
+        latest_exam_obj = latest_item["exam"]
+        for es in ExamSubject.objects.filter(exam=latest_exam_obj).select_related("subject"):
+            subj_name = es.subject.name
+            scores_qs = Score.objects.filter(
+                exam_subject=es, status="normal", score__isnull=False, is_deleted=False,
+            )
+            if not scores_qs.exists():
+                continue
+            stats = compute_score_stats(list(scores_qs), es.full_score)
+            class_avg = stats["avg"]
+            student_score = Score.objects.filter(
+                exam_subject=es, student=student, status="normal",
+                score__isnull=False, is_deleted=False,
+            ).first()
+            if not student_score:
+                continue
+            diff = round(float(student_score.score) - class_avg, 1)
+            entry = {
+                "name": subj_name,
+                "score": float(student_score.score),
+                "avg": class_avg,
+                "diff": diff,
+            }
+            if diff < 0:
+                weak_subjects.append(entry)
+            elif diff > 0:
+                strong_subjects.append(entry)
+
+    # 按差值绝对值排序
+    weak_subjects.sort(key=lambda x: x["diff"])
+    strong_subjects.sort(key=lambda x: -x["diff"])
+
+    # ----- JSON 图表数据 -----
+    chart_data = {
+        "exams": [{"id": e.pk, "name": e.name, "date": str(e.date)} for e in all_exams],
+        "subjects": ["总分"] + all_subjects,
+        "metrics": metrics,
+        "series": series,
+    }
+
     from apps.scores.ai_models import AIAnalysisRecord
     latest_ai_result = AIAnalysisRecord.objects.filter(
         school_class=current_class, student=student, analysis_type="student", success=True,
     ).order_by("-created_at").first()
-    latest_exam = Exam.objects.filter(
-        school_class=current_class, is_deleted=False,
-    ).order_by("-date").first()
-    chart_data = {
-        "labels": [f"{item['exam'].name}（{item['exam'].date:%Y-%m-%d}）" for item in history],
-        "rates": [item["score_rate"] for item in history],
-        "totals": [item["total"] for item in history],
-    }
+    latest_exam = all_exams[-1] if all_exams else None
+
     return render(request, "scores/student_analysis_detail.html", {
         "student": student, "history": history, "chart_data": chart_data,
         "latest_ai_result": latest_ai_result, "latest_exam": latest_exam,
         "ai_config": _get_ai_config(current_class),
+        "all_exams": all_exams,  # 供模板渲染考试选择器
+        "weak_subjects": weak_subjects,
+        "strong_subjects": strong_subjects,
     })
 
 

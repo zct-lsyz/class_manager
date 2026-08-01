@@ -1,0 +1,22 @@
+[
+    {
+        "merged": "com.classmanager.app-merged_res-21:/layout_activity_main.xml.flat",
+        "source": "com.classmanager.app-main-23:/layout/activity_main.xml"
+    },
+    {
+        "merged": "com.classmanager.app-merged_res-21:/drawable_ic_notification.xml.flat",
+        "source": "com.classmanager.app-main-23:/drawable/ic_notification.xml"
+    },
+    {
+        "merged": "com.classmanager.app-merged_res-21:/layout_dialog_server_url.xml.flat",
+        "source": "com.classmanager.app-main-23:/layout/dialog_server_url.xml"
+    },
+    {
+        "merged": "com.classmanager.app-merged_res-21:/mipmap-anydpi-v26_ic_launcher.xml.flat",
+        "source": "com.classmanager.app-main-23:/mipmap-anydpi-v26/ic_launcher.xml"
+    },
+    {
+        "merged": "com.classmanager.app-merged_res-21:/drawable_ic_launcher_foreground.xml.flat",
+        "source": "com.classmanager.app-main-23:/drawable/ic_launcher_foreground.xml"
+    }
+]

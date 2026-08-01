@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}设备验证{% endblock %}
+{% block login_content %}
+<div class="container py-5">
+    <div class="row justify-content-center">
+        <div class="col-md-5">
+            <div class="text-center mb-4">
+                <i class="bi bi-shield-check text-primary" style="font-size:3rem"></i>
+                <h5 class="mt-2">设备验证</h5>
+                <p class="text-muted small">班级教学管理平台</p>
+            </div>
+            <div class="card">
+                <div class="card-body p-4">
+                    {% if messages %}
+                    {% for msg in messages %}
+                    <div class="alert alert-{{ msg.tags|default:'info' }} py-2 small">{{ msg }}</div>
+                    {% endfor %}
+                    {% endif %}
+                    {% if pending_user %}
+                    <div class="alert alert-info small mb-3">
+                        <i class="bi bi-envelope-check me-1"></i>
+                        验证邮件已发送至 <strong>{{ pending_user.email }}</strong>，请查收。
+                    </div>
+                    {% endif %}
+                    <p class="small text-muted mb-3">
+                        您正在一台新设备上登录。请输入邮件中的验证码完成验证。
+                    </p>
+                    <form method="post">
+                        {% csrf_token %}
+                        <div class="mb-3">
+                            <input type="text" name="code" class="form-control" placeholder="请输入6位验证码" required autofocus>
+                        </div>
+                        <button type="submit" class="btn btn-primary w-100">验证并登录</button>
+                    </form>
+                </div>
+                <div class="card-footer text-center py-2">
+                    <small><a href="{% url 'accounts:login' %}">返回登录</a></small>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

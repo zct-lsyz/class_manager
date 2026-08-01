@@ -8,6 +8,7 @@ import json
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.shortcuts import render, redirect, get_object_or_404
+from django.utils import timezone
 from django.views.decorators.http import require_POST
 
 from apps.scores.ai_models import AIAnalysisConfig, AIAnalysisRecord

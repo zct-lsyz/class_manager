@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}注销账号{% endblock %}
+{% block content %}
+<h4 class="mt-3 mb-4"><i class="bi bi-exclamation-triangle-fill me-2 text-danger"></i>注销账号</h4>
+
+<div class="row">
+    <div class="col-md-6">
+        <div class="card border-danger">
+            <div class="card-header bg-danger text-white">
+                <i class="bi bi-shield-exclamation me-2"></i>此操作不可撤销
+            </div>
+            <div class="card-body">
+                <ul class="small mb-3">
+                    <li>您的账号 <strong>{{ user.username }}</strong> 将被永久删除。</li>
+                    <li>您创建的<strong>所有数据</strong>（待办、AI 分析、备份、操作日志等）将被一并清除。</li>
+                    <li>此操作无法恢复。</li>
+                </ul>
+                <form method="post" onsubmit="return confirm('确认注销账号？此操作不可撤销！')">
+                    {% csrf_token %}
+                    <div class="mb-3">
+                        <label class="form-label small">请输入密码确认：</label>
+                        <input type="password" name="password" class="form-control" placeholder="当前密码" required>
+                    </div>
+                    <button type="submit" class="btn btn-danger">
+                        <i class="bi bi-trash me-1"></i>确认注销我的账号
+                    </button>
+                    <a href="{% url 'accounts:settings' %}" class="btn btn-outline-secondary ms-2">取消</a>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

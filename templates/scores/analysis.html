@@ -34,6 +34,13 @@
                 <i class="bi bi-arrow-up-down me-1"></i>名次进退
             </button>
         </div>
+        {% if exam %}
+        <div class="col-md-2">
+            <a href="{% url 'scores:class_student_overview' %}?exam_id={{ exam.pk }}" class="btn btn-outline-info w-100">
+                <i class="bi bi-people-fill me-1"></i>班级学生情况
+            </a>
+        </div>
+        {% endif %}
     </div>
 </form>
 
@@ -172,7 +179,6 @@
                     <th>科目</th><th>满分</th><th>人数</th>
                     <th>平均分</th><th>中位数</th><th>方差</th><th>最高分</th><th>最低分</th>
                     <th>及格率</th><th>优秀率</th>
-                    <th>最高班名次</th><th>最低班名次</th>
                     <th>最高级部名次</th><th>最低级部名次</th>
                     <th>最高市名次</th><th>最低市名次</th>
                 </tr>
@@ -190,14 +196,12 @@
                 <td>{{ data.min|default:"—" }}</td>
                 <td>{{ data.pass_rate }}%</td>
                 <td>{{ data.excellent_rate }}%</td>
-                <td>{{ data.max_class_rank|default:"—" }}</td>
-                <td>{{ data.min_class_rank|default:"—" }}</td>
                 <td>{{ data.max_grade_rank|default:"—" }}</td>
                 <td>{{ data.min_grade_rank|default:"—" }}</td>
                 <td>{{ data.max_city_rank|default:"—" }}</td>
                 <td>{{ data.min_city_rank|default:"—" }}</td>
             </tr>
-            {% empty %}<tr><td colspan="16" class="text-muted text-center">暂无数据</td></tr>
+            {% empty %}<tr><td colspan="14" class="text-muted text-center">暂无数据</td></tr>
             {% endfor %}
             </tbody>
         </table>
@@ -219,8 +223,6 @@
                     <option value="variance">方差</option>
                     <option value="max">最高分</option>
                     <option value="min">最低分</option>
-                    <option value="max_class_rank">最高班名次</option>
-                    <option value="min_class_rank">最低班名次</option>
                     <option value="max_grade_rank">最高级部名次</option>
                     <option value="min_grade_rank">最低级部名次</option>
                     <option value="max_city_rank">最高市名次</option>
@@ -247,7 +249,7 @@
                 </tr>
                 <tr>
                     {% for cc in comparison_classes %}
-                    <th>人数</th><th>均分</th><th>方差</th><th>最高</th><th>最低</th><th>最高班名次</th>
+                    <th>人数</th><th>均分</th><th>方差</th><th>最高</th><th>最低</th>
                     {% endfor %}
                 </tr>
             </thead>

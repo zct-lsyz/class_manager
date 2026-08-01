@@ -11,7 +11,7 @@ from django.contrib.auth import (
 )
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.models import User
-from django.shortcuts import render, redirect
+from django.shortcuts import render, redirect, get_object_or_404
 from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
@@ -20,7 +20,11 @@ from apps.accounts.forms import (
     LoginForm,
     CustomPasswordChangeForm,
     UsernameChangeForm,
+    RegisterForm,
 )
+from apps.accounts.models import TrustedDevice, EmailVerificationToken
+from apps.accounts.device import get_device_id, get_device_name, get_client_ip as device_get_ip
+from apps.accounts.email import send_verification_email
 from apps.audit.models import OperationLog
 
 logger = logging.getLogger(__name__)
@@ -90,6 +94,26 @@ def login_view(request):
             password = form.cleaned_data["password"]
             user = authenticate(request, username=username, password=password)
             if user is not None and user.is_active:
+                # 设备信任检查
+                dev_id = get_device_id(request)
+                if TrustedDevice.objects.filter(user=user, device_id=dev_id).exists():
+                    # 已信任设备 → 正常登录
+                    TrustedDevice.objects.filter(user=user, device_id=dev_id).update(
+                        last_used_at=timezone.now(),
+                    )
+                elif user.email:
+                    # 新设备 → 发送验证邮件
+                    token = EmailVerificationToken.create_for_user(
+                        user, dev_id, get_device_name(request), "device_verify",
+                    )
+                    send_verification_email(user.email, token, get_device_name(request), "device_verify")
+                    request.session["pending_user_id"] = user.pk
+                    request.session["pending_device_id"] = dev_id
+                    return redirect("accounts:verify_device")
+                else:
+                    # 无邮箱 → 直接放行（首次初始化场景；admin 创建的账号可能无邮箱）
+                    pass
+
                 auth_login(request, user)
                 # 清除失败次数记录
                 if attempt_key in request.session:
@@ -218,3 +242,241 @@ def username_change(request):
     else:
         form = UsernameChangeForm(instance=request.user)
     return render(request, "accounts/username_change.html", {"form": form})
+
+
+# ============================================================
+# 注册 + 邮箱验证 + 设备信任
+# ============================================================
+
+def register(request):
+    """注册新账号 → 发送验证邮件"""
+    if request.user.is_authenticated:
+        return redirect("dashboard:index")
+
+    if request.method == "POST":
+        form = RegisterForm(request.POST)
+        if form.is_valid():
+            user = User.objects.create_user(
+                username=form.cleaned_data["username"],
+                email=form.cleaned_data["email"],
+                password=form.cleaned_data["password1"],
+                is_active=False,
+            )
+            dev_id = get_device_id(request)
+            token = EmailVerificationToken.create_for_user(
+                user, dev_id, get_device_name(request), "register",
+            )
+            send_verification_email(user.email, token, get_device_name(request), "register")
+            request.session["pending_user_id"] = user.pk
+            request.session["pending_device_id"] = dev_id
+            messages.info(request, f"验证邮件已发送至 {user.email}，请查收。")
+            return redirect("accounts:verify_device")
+    else:
+        form = RegisterForm()
+    return render(request, "accounts/register.html", {"form": form})
+
+
+def verify_email(request):
+    """邮件验证链接入口（?token=xxx）"""
+    token_str = request.GET.get("token", "").strip()
+    if not token_str:
+        messages.error(request, "缺少验证码。")
+        return redirect("accounts:login")
+
+    token_obj = EmailVerificationToken.objects.filter(
+        token=token_str, is_used=False,
+    ).select_related("user").first()
+
+    if not token_obj:
+        messages.error(request, "验证链接无效。")
+        return redirect("accounts:login")
+    if token_obj.is_expired:
+        messages.error(request, "验证链接已过期，请重新登录或注册。")
+        return redirect("accounts:login")
+
+    user = token_obj.user
+    token_obj.is_used = True
+    token_obj.save(update_fields=["is_used"])
+
+    # 激活用户（如果是注册验证）
+    if token_obj.purpose == "register" and not user.is_active:
+        user.is_active = True
+        user.save(update_fields=["is_active"])
+
+    # 信任当前设备
+    dev_id = token_obj.device_id or get_device_id(request)
+    TrustedDevice.objects.get_or_create(
+        user=user, device_id=dev_id,
+        defaults={
+            "device_name": token_obj.device_name or get_device_name(request),
+            "ip_address": get_client_ip(request),
+        },
+    )
+    # 更新 last_used_at
+    TrustedDevice.objects.filter(user=user, device_id=dev_id).update(
+        last_used_at=timezone.now(),
+    )
+
+    # 自动登录
+    auth_login(request, user)
+    # 清除 pending
+    request.session.pop("pending_user_id", None)
+    request.session.pop("pending_device_id", None)
+
+    OperationLog.objects.create(
+        user=user, action="login", module="accounts",
+        object_repr=user.username,
+        detail=f"邮箱验证登录成功 (IP: {get_client_ip(request)})",
+        ip_address=get_client_ip(request), success=True,
+    )
+    messages.success(request, f"验证成功，欢迎回来，{user.username}！")
+    return redirect("dashboard:index")
+
+
+def verify_device(request):
+    """设备验证页面——输入验证码"""
+    pending_user_id = request.session.get("pending_user_id")
+    user = User.objects.filter(pk=pending_user_id).first() if pending_user_id else None
+
+    if user and request.user.is_authenticated and request.user.pk == user.pk:
+        # 已验证过（可能点了邮件链接）→ 跳过
+        request.session.pop("pending_user_id", None)
+        request.session.pop("pending_device_id", None)
+        return redirect("dashboard:index")
+
+    if request.method == "POST":
+        code = request.POST.get("code", "").strip()
+        dev_id = request.session.get("pending_device_id", get_device_id(request))
+        token_obj = EmailVerificationToken.objects.filter(
+            token=code, user=user, is_used=False,
+        ).first()
+
+        if token_obj and not token_obj.is_expired:
+            return _complete_verification(request, token_obj, dev_id)
+
+        messages.error(request, "验证码无效或已过期，请重新登录。")
+        return redirect("accounts:login")
+
+    return render(request, "accounts/verify_device.html", {
+        "pending_user": user,
+    })
+
+
+def _complete_verification(request, token_obj, dev_id):
+    """完成设备验证——信任设备 + 登录"""
+    user = token_obj.user
+    token_obj.is_used = True
+    token_obj.save(update_fields=["is_used"])
+
+    if token_obj.purpose == "register" and not user.is_active:
+        user.is_active = True
+        user.save(update_fields=["is_active"])
+
+    TrustedDevice.objects.get_or_create(
+        user=user, device_id=dev_id,
+        defaults={
+            "device_name": token_obj.device_name,
+            "ip_address": get_client_ip(request),
+        },
+    )
+    TrustedDevice.objects.filter(user=user, device_id=dev_id).update(
+        last_used_at=timezone.now(),
+    )
+
+    auth_login(request, user)
+    request.session.pop("pending_user_id", None)
+    request.session.pop("pending_device_id", None)
+
+    OperationLog.objects.create(
+        user=user, action="login", module="accounts",
+        object_repr=user.username,
+        detail=f"设备验证登录 (IP: {get_client_ip(request)})",
+        ip_address=get_client_ip(request), success=True,
+    )
+    messages.success(request, f"设备验证成功，欢迎回来，{user.username}！")
+    return redirect("dashboard:index")
+
+
+# ============================================================
+# 信任设备管理
+# ============================================================
+
+@login_required
+@require_POST
+def device_delete(request, pk):
+    """删除受信任设备"""
+    device = get_object_or_404(TrustedDevice, pk=pk, user=request.user)
+    name = device.device_name
+    device.delete()
+    messages.success(request, f"已删除受信任设备「{name}」，该设备下次登录需重新验证。")
+    return redirect("accounts:settings")
+
+
+# ============================================================
+# 注销账号 + 数据级联清理
+# ============================================================
+
+@login_required
+def delete_account(request):
+    """注销账号——需密码确认，不可撤销"""
+    if request.method == "POST":
+        password = request.POST.get("password", "")
+        if not request.user.check_password(password):
+            messages.error(request, "密码错误，无法注销账号。")
+            return redirect("accounts:settings")
+
+        # 级联清理所有关联数据
+        _cascade_delete_user_data(request.user)
+        username = request.user.username
+        request.user.delete()
+        messages.success(request, f"账号「{username}」已注销，所有关联数据已清除。")
+        return redirect("accounts:login")
+
+    return render(request, "accounts/delete_account.html")
+
+
+def _cascade_delete_user_data(user):
+    """删除用户创建/拥有的所有数据"""
+    # TodoItem —— 唯一 CASCADE 的
+    try:
+        from apps.todos.models import TodoItem
+        TodoItem.objects.filter(created_by=user).delete()
+    except Exception:
+        pass
+    # DutyRoster
+    try:
+        from apps.duty.models import DutyRoster
+        DutyRoster.objects.filter(created_by=user).delete()
+    except Exception:
+        pass
+    # AI 分析
+    try:
+        from apps.scores.ai_models import AIAnalysisRecord, AIExamAnalysisSource
+        AIAnalysisRecord.objects.filter(created_by=user).delete()
+        AIExamAnalysisSource.objects.filter(created_by=user).delete()
+    except Exception:
+        pass
+    # 备份
+    try:
+        from apps.backups.models import BackupRecord, MediaArchiveExport, MediaArchiveImport
+        BackupRecord.objects.filter(user=user).delete()
+        MediaArchiveExport.objects.filter(user=user).delete()
+        MediaArchiveImport.objects.filter(user=user).delete()
+    except Exception:
+        pass
+    # 操作日志
+    try:
+        from apps.audit.models import OperationLog, SoftDeleteRecord
+        OperationLog.objects.filter(user=user).delete()
+        SoftDeleteRecord.objects.filter(deleted_by=user).delete()
+    except Exception:
+        pass
+    # 导出
+    try:
+        from apps.exports.models import ExportTask
+        ExportTask.objects.filter(user=user).delete()
+    except Exception:
+        pass
+    # 验证令牌和信任设备
+    EmailVerificationToken.objects.filter(user=user).delete()
+    TrustedDevice.objects.filter(user=user).delete()

@@ -368,9 +368,12 @@ def template_download(request, template_type):
     """下载标准 Excel 导入模板"""
     from apps.exports.templates_services import (
         students_template, guardians_template, score_import_template,
+        student_info_template,
     )
     try:
-        if template_type == "students":
+        if template_type == "student_info":
+            return student_info_template()
+        elif template_type == "students":
             return students_template()
         elif template_type == "guardians":
             return guardians_template()
@@ -387,18 +390,28 @@ def template_download(request, template_type):
 def import_data(request):
     """数据导入：上传 → 预览 → 确认 → 正式导入"""
     current_class = SchoolClass.objects.filter(is_current=True).first()
-    import_type = request.GET.get("type", "students")
+    import_type = request.GET.get("type", "student_info")
 
     # 确认导入
     if request.method == "POST" and request.POST.get("confirm") == "1":
         preview_key = request.POST.get("preview_key", "")
-        import_type = request.POST.get("import_type", "students")
+        import_type = request.POST.get("import_type", "student_info")
         preview_data = request.session.get(f"import_preview_{preview_key}")
         if not preview_data:
             messages.error(request, "预览数据已过期，请重新上传。")
             return redirect(f"{request.path}?type={import_type}")
 
-        if import_type == "students":
+        if import_type == "student_info":
+            from apps.exports.import_services import import_student_info
+            count = import_student_info(preview_data["valid_rows"], current_class)
+            OperationLog.objects.create(
+                user=request.user, action="batch_import", module="students",
+                object_repr=f"导入学生信息 {count} 名",
+                detail=f"Excel批量导入学生信息（含联系人），成功 {count} 名",
+                ip_address=get_client_ip(request), success=True,
+            )
+            messages.success(request, f"成功导入 {count} 名学生信息！")
+        elif import_type == "students":
             from apps.exports.import_services import import_students
             count = import_students(preview_data["valid_rows"], current_class)
             OperationLog.objects.create(
@@ -427,17 +440,20 @@ def import_data(request):
     preview_data = None
     if request.method == "POST" and request.FILES.get("file"):
         uploaded = request.FILES["file"]
-        import_type = request.POST.get("import_type", "students")
+        import_type = request.POST.get("import_type", "student_info")
 
         try:
             from apps.exports.import_services import (
                 parse_uploaded_file, validate_students, validate_guardians,
+                validate_student_info,
             )
             headers, data_rows = parse_uploaded_file(uploaded)
             if not data_rows:
                 messages.error(request, "文件中没有数据行。")
             else:
-                if import_type == "students":
+                if import_type == "student_info":
+                    valid_rows, errors = validate_student_info(data_rows)
+                elif import_type == "students":
                     valid_rows, errors = validate_students(data_rows)
                 else:
                     valid_rows, errors = validate_guardians(data_rows)

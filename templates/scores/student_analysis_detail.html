@@ -3,15 +3,109 @@
 {% block content %}
 <h4 class="mt-3 mb-4"><i class="bi bi-person-lines-fill me-2 text-primary"></i>{{ student.name }}成绩详情</h4>
 
-{% if history %}
+{% if weak_subjects or strong_subjects %}
+<div class="row g-3 mb-3">
+    {% if weak_subjects %}
+    <div class="col-md-6">
+        <div class="card border-danger-subtle h-100">
+            <div class="card-header py-2 bg-danger-subtle"><i class="bi bi-arrow-down-circle me-1 text-danger"></i>弱势学科（低于班级均分）</div>
+            <div class="card-body py-2">
+                {% for subj in weak_subjects %}
+                <span class="badge fs-6 me-2 mb-1 subject-tag-{{ subj.name|escape }}" style="background:var(--sj-bg);color:var(--sj-fg)">
+                    {{ subj.name }} {{ subj.score|floatformat:1 }}
+                    <small class="opacity-75">低 {{ subj.diff|floatformat:1 }}</small>
+                </span>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+    {% endif %}
+    {% if strong_subjects %}
+    <div class="col-md-6">
+        <div class="card border-success-subtle h-100">
+            <div class="card-header py-2 bg-success-subtle"><i class="bi bi-arrow-up-circle me-1 text-success"></i>优势学科（高于班级均分）</div>
+            <div class="card-body py-2">
+                {% for subj in strong_subjects %}
+                <span class="badge fs-6 me-2 mb-1 subject-tag-{{ subj.name|escape }}" style="background:var(--sj-bg);color:var(--sj-fg)">
+                    {{ subj.name }} {{ subj.score|floatformat:1 }}
+                    <small class="opacity-75">高 +{{ subj.diff|floatformat:1 }}</small>
+                </span>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endif %}
+
+{% if all_exams %}
 <div class="card mb-3">
-    <div class="card-header"><i class="bi bi-graph-up me-2"></i>成绩变化趋势</div>
-    <div class="card-body"><canvas id="studentScoreTrend" height="110"></canvas></div>
+    <div class="card-header py-2"><i class="bi bi-calendar-check me-2"></i>选择考试</div>
+    <div class="card-body py-2">
+        <div class="d-flex flex-wrap gap-1" id="examCheckboxes">
+            {% for e in all_exams %}
+            <label class="form-check form-check-inline small mb-0">
+                <input class="form-check-input exam-check" type="checkbox" value="{{ e.pk }}" checked> {{ e.name }}
+            </label>
+            {% endfor %}
+        </div>
+        <div class="mt-1">
+            <button type="button" class="btn btn-sm btn-outline-secondary me-1" onclick="document.querySelectorAll('.exam-check').forEach(c=>c.checked=true);rebuildChart()">全选</button>
+            <button type="button" class="btn btn-sm btn-outline-secondary" onclick="document.querySelectorAll('.exam-check').forEach(c=>c.checked=false);rebuildChart()">取消全选</button>
+        </div>
+    </div>
 </div>
 {% endif %}
 
 <div class="card mb-3">
-    <div class="card-header d-flex justify-content-between align-items-center"><span>AI 成绩分析文字</span>
+    <div class="card-header py-2"><i class="bi bi-graph-up me-2"></i>成绩趋势</div>
+    <div class="card-body"><canvas id="studentAnalysisChart" height="260"></canvas></div>
+</div>
+
+<div class="card mb-3">
+    <div class="card-header py-2"><i class="bi bi-sliders2 me-2"></i>图表内容选择</div>
+    <div class="card-body py-2">
+        <div class="row g-2">
+            <div class="col-md-6">
+                <small class="fw-bold d-block mb-1">科目</small>
+                <div class="d-flex flex-wrap gap-1" id="subjectCheckboxes">
+                    {% for subj in chart_data.subjects %}
+                    <label class="form-check form-check-inline small mb-0">
+                        <input class="form-check-input subject-check" type="checkbox" value="{{ subj }}" {% if subj == '总分' %}checked{% endif %}> {{ subj }}
+                    </label>
+                    {% endfor %}
+                </div>
+            </div>
+            <div class="col-md-6">
+                <small class="fw-bold d-block mb-1">显示内容</small>
+                <div class="d-flex flex-wrap gap-1" id="metricCheckboxes">
+                    {% for m in chart_data.metrics %}
+                    <label class="form-check form-check-inline small mb-0">
+                        <input class="form-check-input metric-check" type="checkbox" value="{{ m }}" {% if m == '分数' %}checked{% endif %}> {{ m }}
+                    </label>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% if history %}
+<div class="card mb-4">
+    <div class="card-header py-2">历次成绩记录</div>
+    <div class="card-body p-0 table-responsive"><table class="table mb-0 align-middle">
+        <thead class="table-light"><tr><th>考试</th><th>日期</th><th>科目成绩</th><th>总分</th><th>得分率</th></tr></thead>
+        <tbody>{% for item in history %}<tr>
+            <td>{{ item.exam.name }}</td><td class="text-nowrap">{{ item.exam.date|date:"Y-m-d" }}</td>
+            <td>{% for record in item.subjects %}<span class="badge text-bg-light border me-1 mb-1">{{ record.exam_subject.subject.name }}：{% if record.score is not None %}{{ record.score }}（第{{ record.rank|default:"-" }}名）{% else %}{{ record.get_status_display }}{% endif %}</span>{% endfor %}</td>
+            <td>{{ item.total }} / {{ item.full_score }}</td><td>{{ item.score_rate }}%</td>
+        </tr>{% empty %}<tr><td colspan="5" class="text-center text-muted py-4">暂无成绩记录</td></tr>{% endfor %}</tbody>
+    </table></div>
+</div>
+{% endif %}
+
+<div class="card mb-4">
+    <div class="card-header d-flex justify-content-between align-items-center py-2"><span>AI 成绩分析文字</span>
         {% if ai_config and ai_config.is_enabled and ai_config.has_key and latest_exam %}
         <form method="post" action="{% url 'scores:ai_generate' %}">{% csrf_token %}
             <input type="hidden" name="analysis_type" value="student"><input type="hidden" name="exam_id" value="{{ latest_exam.pk }}"><input type="hidden" name="student_id" value="{{ student.pk }}">
@@ -21,33 +115,128 @@
     </div>
     <div class="card-body">
         {% if latest_ai_result %}<div class="text-muted small mb-2">{{ latest_ai_result.created_at|date:"Y-m-d H:i" }} · {{ latest_ai_result.model_name }}</div><div style="white-space:pre-wrap">{{ latest_ai_result.result }}</div>
-        {% elif not ai_config or not ai_config.is_enabled or not ai_config.has_key %}<div class="text-muted">请先在 AI 分析设置中启用功能并配置服务器环境变量。</div>
+        {% elif not ai_config or not ai_config.is_enabled or not ai_config.has_key %}<div class="text-muted">请先在 AI 分析设置中启用功能并配置 API Key。</div>
         {% else %}<div class="text-muted">尚未生成分析，点击右上角按钮后才会调用 LLM。</div>{% endif %}
     </div>
 </div>
 
-<div class="card mb-4">
-    <div class="card-header">历次成绩记录</div>
-    <div class="card-body p-0 table-responsive"><table class="table mb-0 align-middle">
-        <thead><tr><th>考试</th><th>日期</th><th>科目成绩</th><th>总分</th><th>得分率</th></tr></thead>
-        <tbody>{% for item in history %}<tr>
-            <td>{{ item.exam.name }}</td><td>{{ item.exam.date }}</td>
-            <td>{% for record in item.subjects %}<span class="badge text-bg-light border me-1 mb-1">{{ record.exam_subject.subject.name }}：{% if record.score is not None %}{{ record.score }}（第{{ record.rank|default:"-" }}名）{% else %}{{ record.get_status_display }}{% endif %}</span>{% endfor %}</td>
-            <td>{{ item.total }} / {{ item.full_score }}</td><td>{{ item.score_rate }}%</td>
-        </tr>{% empty %}<tr><td colspan="5" class="text-center text-muted py-4">暂无成绩记录</td></tr>{% endfor %}</tbody>
-    </table></div>
-</div>
-{{ chart_data|json_script:"student-score-chart-data" }}
+{{ chart_data|json_script:"student-chart-data" }}
 {% endblock %}
+
 {% block extra_js %}
-{% if history %}<script>
-const studentScoreData = JSON.parse(document.getElementById('student-score-chart-data').textContent);
-new Chart(document.getElementById('studentScoreTrend'), {
-    type: 'line',
-    data: { labels: studentScoreData.labels, datasets: [
-        { label: '得分率(%)', data: studentScoreData.rates, borderColor: '#1a73e8', backgroundColor: 'rgba(26,115,232,.12)', fill: true, tension: .3 }
-    ] },
-    options: { responsive: true, scales: { y: { beginAtZero: true, suggestedMax: 100 } } }
+<script>
+const chartData = JSON.parse(document.getElementById('student-chart-data').textContent);
+
+const SUBJECT_COLORS = {
+    '总分':  { bg: '#e8eaf6', text: '#283593', line: '#1a73e8' },
+    '语文': { bg: '#fce4ec', text: '#c62828', line: '#e53935' },
+    '数学': { bg: '#e3f2fd', text: '#1565c0', line: '#1e88e5' },
+    '英语': { bg: '#e8f5e9', text: '#2e7d32', line: '#43a047' },
+    '物理': { bg: '#f3e5f5', text: '#7b1fa2', line: '#8e24aa' },
+    '化学': { bg: '#fff3e0', text: '#e65100', line: '#fb8c00' },
+    '生物': { bg: '#e0f7fa', text: '#00838f', line: '#00acc1' },
+    '历史': { bg: '#fffde7', text: '#f9a825', line: '#fdd835' },
+    '政治': { bg: '#ffebee', text: '#c62828', line: '#ef5350' },
+    '地理': { bg: '#efebe9', text: '#5d4037', line: '#8d6e63' },
+    '日语': { bg: '#eceff1', text: '#546e7a', line: '#78909c' },
+    '信息': { bg: '#e8eaf6', text: '#283593', line: '#5c6bc0' },
+};
+const FALLBACK_COLOR = { bg: '#f5f5f5', text: '#616161', line: '#9e9e9e' };
+
+function colorFor(subj) {
+    return SUBJECT_COLORS[subj] || FALLBACK_COLOR;
+}
+
+function getSelectedIds(selector) {
+    return Array.from(document.querySelectorAll(selector + ':checked')).map(c => c.value);
+}
+
+function rebuildChart() {
+    const examIds = getSelectedIds('.exam-check');
+    const subjects = getSelectedIds('.subject-check');
+    const metrics = getSelectedIds('.metric-check');
+    const selectedExams = chartData.exams.filter(e => examIds.includes(String(e.id)));
+
+    if (!selectedExams.length || !subjects.length || !metrics.length) {
+        if (window._chart) { window._chart.destroy(); window._chart = null; }
+        return;
+    }
+
+    const hasRank = metrics.some(m => m.includes('排名'));
+    const datasets = [];
+    for (const subj of subjects) {
+        const c = colorFor(subj);
+        const data = chartData.series[subj];
+        if (!data) continue;
+        for (const metric of metrics) {
+            const values = selectedExams.map(e => {
+                const idx = chartData.exams.findIndex(x => x.id === e.id);
+                return idx >= 0 ? data[metric][idx] : null;
+            });
+            datasets.push({
+                label: subj + '·' + metric,
+                data: values,
+                borderColor: c.line,
+                backgroundColor: c.line + '20',
+                tension: 0.3,
+                fill: false,
+                pointRadius: 3,
+                spanGaps: false,
+            });
+        }
+    }
+
+    const ctx = document.getElementById('studentAnalysisChart');
+    if (window._chart) window._chart.destroy();
+
+    const isSingleExam = selectedExams.length === 1;
+    window._chart = new Chart(ctx, {
+        type: isSingleExam ? 'bar' : 'line',
+        data: {
+            labels: selectedExams.map(e => e.name + '（' + e.date + '）'),
+            datasets: datasets,
+        },
+        options: {
+            responsive: true,
+            interaction: { mode: 'index', intersect: false },
+            plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } } },
+            scales: {
+                y: {
+                    reverse: hasRank && !isSingleExam,
+                    beginAtZero: !hasRank,
+                    title: { display: true, text: metrics.join(' / ') },
+                },
+            },
+        },
+    });
+}
+
+// 绑定事件
+document.querySelectorAll('.exam-check, .subject-check, .metric-check').forEach(el => {
+    el.addEventListener('change', rebuildChart);
 });
-</script>{% endif %}
+
+// 初始渲染
+rebuildChart();
+</script>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+.subject-tag-语文  { --sj-bg: #fce4ec; --sj-fg: #c62828; }
+.subject-tag-数学 { --sj-bg: #e3f2fd; --sj-fg: #1565c0; }
+.subject-tag-英语 { --sj-bg: #e8f5e9; --sj-fg: #2e7d32; }
+.subject-tag-物理 { --sj-bg: #f3e5f5; --sj-fg: #7b1fa2; }
+.subject-tag-化学 { --sj-bg: #fff3e0; --sj-fg: #e65100; }
+.subject-tag-生物 { --sj-bg: #e0f7fa; --sj-fg: #00838f; }
+.subject-tag-历史 { --sj-bg: #fffde7; --sj-fg: #f9a825; }
+.subject-tag-政治 { --sj-bg: #ffebee; --sj-fg: #c62828; }
+.subject-tag-地理 { --sj-bg: #efebe9; --sj-fg: #5d4037; }
+.subject-tag-日语 { --sj-bg: #eceff1; --sj-fg: #546e7a; }
+.subject-tag-信息 { --sj-bg: #e8eaf6; --sj-fg: #283593; }
+.bg-danger-subtle { background: #fce4ec; }
+.bg-success-subtle { background: #e8f5e9; }
+.border-danger-subtle { border-color: #f8bbd0 !important; }
+.border-success-subtle { border-color: #a5d6a7 !important; }
+</style>
 {% endblock %}

@@ -9,12 +9,16 @@
             <div class="card-header">选择导入类型</div>
             <div class="card-body">
                 <div class="list-group">
+                    <a href="?type=student_info" class="list-group-item list-group-item-action {% if import_type == 'student_info' %}active{% endif %}">
+                        <i class="bi bi-person-lines-fill me-2"></i>学生信息上传
+                        <small class="d-block text-muted">学号、姓名、性别、身高、视力、联系人等</small>
+                    </a>
                     <a href="?type=students" class="list-group-item list-group-item-action {% if import_type == 'students' %}active{% endif %}">
-                        <i class="bi bi-people me-2"></i>学生花名册
+                        <i class="bi bi-people me-2"></i>学生花名册（旧版）
                         <small class="d-block text-muted">学号、姓名、性别、身高、视力、电话等</small>
                     </a>
                     <a href="?type=guardians" class="list-group-item list-group-item-action {% if import_type == 'guardians' %}active{% endif %}">
-                        <i class="bi bi-telephone me-2"></i>家长联系方式
+                        <i class="bi bi-telephone me-2"></i>家长联系方式（旧版）
                         <small class="d-block text-muted">父母姓名、电话、家庭地址</small>
                     </a>
                 </div>
@@ -37,7 +41,9 @@
                     <div class="mb-3">
                         <input type="file" name="file" class="form-control" accept=".xlsx,.xls" required>
                         <div class="form-text">
-                            {% if import_type == 'students' %}
+                            {% if import_type == 'student_info' %}
+                            表头需包含：姓名、性别（男/女）。可选：学号、出生日期、身高(cm)、视力、座位需求、职务、宿舍、床位、联系人关系、联系人电话、备用联系人关系、备用联系人电话、备注
+                            {% elif import_type == 'students' %}
                             表头需包含：学号、姓名、性别（男/女）。可选：出生日期、身高(cm)、视力、座位需求、职务、宿舍、床位、联系人、联系电话、备注
                             {% else %}
                             表头需包含：学号。可选：父亲姓名、父亲电话、母亲姓名、母亲电话、其他监护人、家庭地址、备注
@@ -66,12 +72,48 @@
                 {% if preview_data.valid_rows %}
                 <div class="table-responsive mb-3">
                     <table class="table table-sm table-bordered">
+                        {% if preview_data.import_type == 'student_info' %}
+                        <thead><tr><th>#</th><th>学号</th><th>姓名</th><th>性别</th><th>联系人关系</th><th>联系人电话</th><th>备用联系人</th><th>备用电话</th></tr></thead>
+                        <tbody>
+                        {% for v in preview_data.valid_rows|slice:":10" %}
+                        <tr>
+                            <td>{{ v.row }}</td>
+                            <td>{{ v.student_id|default:"—" }}</td>
+                            <td>{{ v.name }}</td>
+                            <td>{% if v.gender == 'male' %}男{% else %}女{% endif %}</td>
+                            <td>{{ v.primary_contact|default:"—" }}</td>
+                            <td>{{ v.primary_phone|default:"—" }}</td>
+                            <td>{{ v.secondary_contact|default:"—" }}</td>
+                            <td>{{ v.secondary_phone|default:"—" }}</td>
+                        </tr>
+                        {% empty %}
+                        <tr><td colspan="8" class="text-muted text-center">没有有效数据</td></tr>
+                        {% endfor %}
+                        </tbody>
+                        {% elif preview_data.import_type == 'guardians' %}
+                        <thead><tr><th>#</th><th>学号</th><th>姓名</th><th>父亲姓名</th><th>父亲电话</th><th>母亲姓名</th><th>母亲电话</th></tr></thead>
+                        <tbody>
+                        {% for v in preview_data.valid_rows|slice:":10" %}
+                        <tr>
+                            <td>{{ v.row }}</td>
+                            <td>{{ v.student_id|default:"—" }}</td>
+                            <td>{{ v.student_name|default:"—" }}</td>
+                            <td>{{ v.father_name|default:"—" }}</td>
+                            <td>{{ v.father_phone|default:"—" }}</td>
+                            <td>{{ v.mother_name|default:"—" }}</td>
+                            <td>{{ v.mother_phone|default:"—" }}</td>
+                        </tr>
+                        {% empty %}
+                        <tr><td colspan="7" class="text-muted text-center">没有有效数据</td></tr>
+                        {% endfor %}
+                        </tbody>
+                        {% else %}
                         <thead><tr><th>#</th><th>学号</th><th>姓名</th><th>性别</th><th>联系电话</th></tr></thead>
                         <tbody>
                         {% for v in preview_data.valid_rows|slice:":10" %}
                         <tr>
                             <td>{{ v.row }}</td>
-                            <td>{{ v.student_id }}</td>
+                            <td>{{ v.student_id|default:"—" }}</td>
                             <td>{{ v.name }}</td>
                             <td>{% if v.gender == 'male' %}男{% else %}女{% endif %}</td>
                             <td>{{ v.primary_phone|default:"-" }}</td>
@@ -80,6 +122,7 @@
                         <tr><td colspan="5" class="text-muted text-center">没有有效数据</td></tr>
                         {% endfor %}
                         </tbody>
+                        {% endif %}
                     </table>
                     {% if preview_data.valid_rows|length > 10 %}
                     <small class="text-muted">仅显示前 10 行，共 {{ preview_data.valid_rows|length }} 行</small>

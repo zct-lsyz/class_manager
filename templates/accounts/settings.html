@@ -23,6 +23,10 @@
                         <td><strong>{{ user.username }}</strong></td>
                     </tr>
                     <tr>
+                        <td class="text-muted">邮箱</td>
+                        <td>{{ user.email|default:"未设置" }}</td>
+                    </tr>
+                    <tr>
                         <td class="text-muted">最后登录</td>
                         <td>{{ user.last_login|date:"Y-m-d H:i:s"|default:"首次登录" }}</td>
                     </tr>
@@ -50,7 +54,55 @@
                     <a href="{% url 'accounts:logout' %}" class="btn btn-outline-danger">
                         <i class="bi bi-box-arrow-right me-2"></i>退出登录
                     </a>
+                    <hr class="my-1">
+                    <a href="{% url 'accounts:delete_account' %}" class="btn btn-outline-danger">
+                        <i class="bi bi-trash me-2"></i>注销账号
+                    </a>
                 </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-12">
+        <div class="card mb-4">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span><i class="bi bi-laptop me-2"></i>受信任设备</span>
+                <small class="text-muted">已验证的设备登录时无需邮箱验证</small>
+            </div>
+            <div class="card-body p-0">
+                {% with devices=user.trusted_devices.all %}
+                {% if devices %}
+                <table class="table mb-0 align-middle">
+                    <thead class="table-light">
+                        <tr><th>设备名称</th><th>IP 地址</th><th>验证时间</th><th>最近使用</th><th style="width:80px">操作</th></tr>
+                    </thead>
+                    <tbody>
+                        {% for dev in devices %}
+                        <tr>
+                            <td><i class="bi bi-display me-1 text-muted"></i>{{ dev.device_name }}</td>
+                            <td class="text-muted small">{{ dev.ip_address }}</td>
+                            <td class="text-muted small">{{ dev.verified_at|date:"Y-m-d H:i" }}</td>
+                            <td class="text-muted small">{{ dev.last_used_at|date:"Y-m-d H:i" }}</td>
+                            <td>
+                                <form method="post" action="{% url 'accounts:device_delete' dev.pk %}" onsubmit="return confirm('确认删除此设备？\n\n该设备下次登录时将需要邮箱验证。')">
+                                    {% csrf_token %}
+                                    <button type="submit" class="btn btn-sm btn-outline-danger" title="删除">
+                                        <i class="bi bi-x-lg"></i>
+                                    </button>
+                                </form>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                {% else %}
+                <div class="p-4 text-center text-muted small">
+                    暂无受信任设备。登录并完成邮箱验证后，设备将自动加入此列表。
+                </div>
+                {% endif %}
+                {% endwith %}
             </div>
         </div>
     </div>

@@ -169,13 +169,17 @@ def validate_guardians(data_rows):
         if mother_phone and not PHONE_RE.match(mother_phone):
             errors.append({"row": idx, "field": "母亲电话", "value": mother_phone, "error": "手机号必须为11位纯数字"})
             continue
+        # 用可序列化字段代替 Student ORM 实例，避免 session JSON 序列化崩溃
         valid_rows.append({
-            "row": idx, "student": student,
+            "row": idx,
+            "student_id": student.student_id,
+            "student_name": student.name,
             "father_name": str(row.get("父亲姓名", "") or "").strip(),
             "father_phone": father_phone,
             "mother_name": str(row.get("母亲姓名", "") or "").strip(),
             "mother_phone": mother_phone,
             "other_guardian": str(row.get("其他监护人", "") or "").strip(),
+            "primary_contact": str(row.get("主要联系人", "") or "").strip(),
             "home_address": str(row.get("家庭地址", "") or "").strip(),
             "remarks": str(row.get("备注", "") or "").strip(),
         })
@@ -187,14 +191,125 @@ def import_guardians(valid_rows):
     """正式导入家长数据"""
     created = 0
     for item in valid_rows:
+        student = Student.objects.get(student_id=item["student_id"])
         Guardian.objects.create(
-            student=item["student"],
+            student=student,
             father_name=item["father_name"],
             father_phone=item["father_phone"],
             mother_name=item["mother_name"],
             mother_phone=item["mother_phone"],
             other_guardian=item["other_guardian"],
+            primary_contact=item.get("primary_contact", ""),
             home_address=item["home_address"],
+            remarks=item["remarks"],
+        )
+        created += 1
+    return created
+
+
+def validate_student_info(data_rows):
+    """
+    统一校验学生信息（含简化联系人）。
+    合并原 validate_students 和 validate_guardians 的字段：
+    花名册字段 + 联系人关系/电话 + 备用联系人（选填）。
+    """
+    valid_rows = []
+    errors = []
+    existing_ids = set(Student.objects.values_list("student_id", flat=True))
+
+    for idx, row in enumerate(data_rows, start=2):
+        student_id = str(row.get("学号", "") or "").strip()
+        name = str(row.get("姓名", "") or "").strip()
+        gender = str(row.get("性别", "") or "").strip()
+
+        # 必填：姓名
+        if not name:
+            errors.append({"row": idx, "field": "姓名", "value": name, "error": "姓名不能为空"})
+            continue
+        # 学号格式（非空时校验；为空则允许，后续补录）
+        if student_id and not STUDENT_ID_RE.match(student_id):
+            errors.append({"row": idx, "field": "学号", "value": student_id, "error": "学号必须为19位纯数字"})
+            continue
+        # 学号重复（非空时校验）
+        if student_id and student_id in existing_ids:
+            errors.append({"row": idx, "field": "学号", "value": student_id, "error": f"学号 {student_id} 已存在"})
+            continue
+        # 性别
+        if gender not in ("男", "女"):
+            errors.append({"row": idx, "field": "性别", "value": gender, "error": "性别必须为「男」或「女」"})
+            continue
+        # 手机号格式（如果有）
+        phone = str(row.get("联系人电话", "") or "").strip()
+        if phone and not PHONE_RE.match(phone):
+            errors.append({"row": idx, "field": "联系人电话", "value": phone, "error": "手机号必须为11位纯数字"})
+            continue
+        backup_phone = str(row.get("备用联系人电话", "") or "").strip()
+        if backup_phone and not PHONE_RE.match(backup_phone):
+            errors.append({"row": idx, "field": "备用联系人电话", "value": backup_phone, "error": "手机号必须为11位纯数字"})
+            continue
+        # 身高
+        height = row.get("身高(cm)", "")
+        if height not in ("", None):
+            try:
+                height_value = float(str(height).strip())
+                if not height_value.is_integer():
+                    raise ValueError
+                height = int(height_value)
+            except (ValueError, TypeError, OverflowError):
+                errors.append({"row": idx, "field": "身高(cm)", "value": height, "error": "身高必须为整数"})
+                continue
+            if not 50 <= height <= 250:
+                errors.append({"row": idx, "field": "身高(cm)", "value": height, "error": "身高必须为50至250之间的整数"})
+                continue
+
+        valid_rows.append({
+            "row": idx,
+            "student_id": student_id or None,
+            "name": name,
+            "gender": "male" if gender == "男" else "female",
+            "birth_date": row.get("出生日期", "") or None,
+            "height": height if height not in ("", None) else None,
+            "vision": str(row.get("视力", "") or "").strip(),
+            "seat_requirement": str(row.get("座位需求", "") or "").strip(),
+            "class_position": str(row.get("职务", "") or "").strip(),
+            "dormitory": str(row.get("宿舍", "") or "").strip(),
+            "bed_number": str(row.get("床位", "") or "").strip(),
+            "primary_contact": str(row.get("联系人关系", "") or "").strip(),
+            "primary_phone": phone,
+            "secondary_contact": str(row.get("备用联系人关系", "") or "").strip(),
+            "secondary_phone": backup_phone,
+            "remarks": str(row.get("备注", "") or "").strip(),
+        })
+        if student_id:
+            existing_ids.add(student_id)
+
+    return valid_rows, errors
+
+
+@transaction.atomic
+def import_student_info(valid_rows, school_class):
+    """统一导入学生信息（含联系人）"""
+    created = 0
+    for item in valid_rows:
+        birth_date = item["birth_date"]
+        if isinstance(birth_date, datetime):
+            birth_date = birth_date.date()
+        Student.objects.create(
+            school_class=school_class,
+            student_id=item["student_id"],
+            name=item["name"],
+            gender=item["gender"],
+            birth_date=birth_date,
+            height=item["height"],
+            vision=item["vision"],
+            seat_requirement=item["seat_requirement"],
+            class_position=item["class_position"],
+            dormitory=item["dormitory"],
+            bed_number=item["bed_number"],
+            primary_contact=item["primary_contact"],
+            primary_phone=item["primary_phone"],
+            secondary_contact=item["secondary_contact"],
+            secondary_phone=item["secondary_phone"],
             remarks=item["remarks"],
         )
         created += 1

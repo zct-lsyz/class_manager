@@ -4,5 +4,4 @@
 <td>{% if stat and stat.variance %}{{ stat.variance }}{% else %}—{% endif %}</td>
 <td>{% if stat %}{{ stat.max|default:"—" }}{% else %}—{% endif %}</td>
 <td>{% if stat %}{{ stat.min|default:"—" }}{% else %}—{% endif %}</td>
-<td>{% if stat %}{{ stat.max_class_rank|default:"—" }}{% else %}—{% endif %}</td>
 {% endwith %}
