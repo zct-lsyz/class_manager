@@ -115,6 +115,11 @@ TIME_ZONE = "Asia/Shanghai"
 USE_I18N = True
 USE_TZ = True
 
+# 覆盖 zh-hans 的日期输入格式（见 config/formats/zh_Hans/formats.py）。
+# zh-hans 默认第一位是 %Y/%m/%d（斜杠），而 HTML5 <input type="date">
+# 只接受 ISO 横杠格式，导致编辑时已存日期无法回显。
+FORMAT_MODULE_PATH = "config.formats"
+
 # 静态文件
 STATIC_URL = "static/"
 STATICFILES_DIRS = [BASE_DIR / "static"]
