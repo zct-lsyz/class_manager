@@ -48,8 +48,8 @@
 29-->D:\class_manager\class_manager\android\app\src\main\AndroidManifest.xml:13:9-35
 30        android:theme="@style/Theme.ClassManager"
 30-->D:\class_manager\class_manager\android\app\src\main\AndroidManifest.xml:15:9-50
-31        android:usesCleartextTraffic="false" >
-31-->D:\class_manager\class_manager\android\app\src\main\AndroidManifest.xml:14:9-45
+31        android:usesCleartextTraffic="true" >
+31-->D:\class_manager\class_manager\android\app\src\main\AndroidManifest.xml:14:9-44
 32        <activity
 32-->D:\class_manager\class_manager\android\app\src\main\AndroidManifest.xml:17:9-26:20
 33            android:name="com.classmanager.app.MainActivity"

@@ -45,14 +45,18 @@ class RegisterForm(forms.ModelForm):
 
     def clean_username(self):
         username = self.cleaned_data.get("username", "").strip()
-        if User.objects.filter(username=username).exists():
+        existing = User.objects.filter(username=username).first()
+        if existing and existing.is_active:
             raise forms.ValidationError("该用户名已被使用。")
+        # 未激活的账号允许覆盖（重新注册）
         return username
 
     def clean_email(self):
         email = self.cleaned_data.get("email", "").strip()
-        if User.objects.filter(email=email).exists():
+        existing = User.objects.filter(email=email).first()
+        if existing and existing.is_active:
             raise forms.ValidationError("该邮箱已被注册。")
+        # 未激活的账号允许覆盖
         return email
 
     def clean_password1(self):

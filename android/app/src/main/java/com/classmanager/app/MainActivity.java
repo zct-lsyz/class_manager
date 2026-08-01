@@ -33,7 +33,7 @@ public class MainActivity extends AppCompatActivity {
 
     public static final String PREFS = "class_manager_prefs";
     public static final String KEY_SERVER_URL = "server_url";
-    public static final String DEFAULT_SERVER_URL = "https://你的服务器域名/";
+    public static final String DEFAULT_SERVER_URL = "http://120.27.231.112/";
 
     private WebView webView;
 
@@ -133,7 +133,7 @@ public class MainActivity extends AppCompatActivity {
 
         new AlertDialog.Builder(this)
                 .setTitle("设置服务器地址")
-                .setMessage("请输入班级管理平台的网址（需为 https）")
+                .setMessage("请输入班级管理平台的网址，如 http://120.27.231.112")
                 .setView(dialogView)
                 .setPositiveButton("保存", (dialog, which) -> {
                     String url = input.getText().toString().trim();

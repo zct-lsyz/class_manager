@@ -140,6 +140,25 @@ def login_view(request):
                     next_url = "dashboard:index"
                 return redirect(next_url)
         # 登录失败
+        # 检查是否是注册了但没验证邮箱的用户
+        inactive_user = User.objects.filter(
+            username=request.POST.get("username", ""), is_active=False,
+        ).first()
+        if inactive_user and inactive_user.check_password(request.POST.get("password", "")):
+            # 重发验证邮件
+            dev_id = get_device_id(request)
+            token = EmailVerificationToken.create_for_user(
+                inactive_user, dev_id, get_device_name(request), "register",
+            )
+            send_verification_email(inactive_user.email, token, get_device_name(request), "register")
+            request.session["pending_user_id"] = inactive_user.pk
+            request.session["pending_device_id"] = dev_id
+            messages.warning(
+                request,
+                f"该账号尚未验证邮箱。一封新的验证邮件已发送至 {inactive_user.email}，请查收。",
+            )
+            return redirect("accounts:verify_device")
+
         attempts = recent_failures.count() + 1
         request.session[attempt_key] = attempts
         remaining = max(0, limit - attempts)
@@ -256,9 +275,15 @@ def register(request):
     if request.method == "POST":
         form = RegisterForm(request.POST)
         if form.is_valid():
+            # 如果存在未激活的同名/同邮箱账号，先删掉
+            username = form.cleaned_data["username"]
+            email = form.cleaned_data["email"]
+            User.objects.filter(username=username, is_active=False).delete()
+            User.objects.filter(email=email, is_active=False).delete()
+
             user = User.objects.create_user(
-                username=form.cleaned_data["username"],
-                email=form.cleaned_data["email"],
+                username=username,
+                email=email,
                 password=form.cleaned_data["password1"],
                 is_active=False,
             )
