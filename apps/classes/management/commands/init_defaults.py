@@ -18,12 +18,16 @@ class Command(BaseCommand):
     def add_arguments(self, parser):
         parser.add_argument("--class-name", type=str, default="高一(1)班", help="班级名称")
         parser.add_argument("--academic-year", type=str, default="2026-2027", help="学年")
+        parser.add_argument("--username", type=str, required=True, help="创建班级的用户名")
         parser.add_argument("--force", action="store_true", help="已存在数据时仍执行")
 
     def handle(self, *args, **options):
+        from django.contrib.auth.models import User
+        user = User.objects.get(username=options["username"])
+
         # ---------- 1. 班级 ----------
         cls, created = SchoolClass.objects.get_or_create(
-            name=options["class_name"],
+            name=options["class_name"], created_by=user,
             defaults={"grade": "高一", "is_current": True},
         )
         if created:

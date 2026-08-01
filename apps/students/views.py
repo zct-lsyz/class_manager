@@ -44,7 +44,7 @@ def student_list(request):
     page = request.GET.get("page", 1)
     page_obj = paginator.get_page(page)
 
-    classes = SchoolClass.objects.all()
+    classes = SchoolClass.objects.filter(created_by=request.user)
 
     context = {
         "page_obj": page_obj,

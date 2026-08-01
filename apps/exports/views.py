@@ -457,7 +457,7 @@ def import_data(request):
                 elif import_type == "students":
                     valid_rows, errors = validate_students(data_rows)
                 else:
-                    valid_rows, errors = validate_guardians(data_rows)
+                    valid_rows, errors = validate_guardians(data_rows, current_class)
 
                 import uuid
                 key = uuid.uuid4().hex[:8]

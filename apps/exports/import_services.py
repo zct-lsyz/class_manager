@@ -140,11 +140,14 @@ def import_students(valid_rows, school_class):
     return created
 
 
-def validate_guardians(data_rows):
+def validate_guardians(data_rows, current_class=None):
     """校验家长联系方式数据"""
     valid_rows = []
     errors = []
-    student_map = {s.student_id: s for s in Student.objects.all()}
+    qs = Student.objects.all()
+    if current_class:
+        qs = qs.filter(school_class=current_class)
+    student_map = {s.student_id: s for s in qs}
 
     for idx, row in enumerate(data_rows, start=2):
         student_id = str(row.get("学号", "") or "").strip()

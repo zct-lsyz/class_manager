@@ -69,14 +69,14 @@ def class_create(request):
 @login_required
 def class_edit(request, pk):
     """编辑班级"""
-    cls = get_object_or_404(SchoolClass, pk=pk)
+    cls = get_object_or_404(SchoolClass, pk=pk, created_by=request.user)
     if request.method == "POST":
         form = SchoolClassForm(request.POST, instance=cls)
         if form.is_valid():
             old_name = cls.name
             cls = form.save()
             if cls.is_current:
-                SchoolClass.objects.exclude(pk=cls.pk).update(is_current=False)
+                SchoolClass.objects.filter(created_by=request.user).exclude(pk=cls.pk).update(is_current=False)
             messages.success(request, f"班级「{cls.name}」更新成功。")
             OperationLog.objects.create(
                 user=request.user, action="edit", module="classes",
