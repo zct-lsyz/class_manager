@@ -16,8 +16,8 @@ def get_client_ip(request):
 
 @login_required
 def log_list(request):
-    """操作日志列表"""
-    logs = OperationLog.objects.select_related("user").all()
+    """操作日志列表（仅当前用户）"""
+    logs = OperationLog.objects.select_related("user").filter(user=request.user)
 
     # 筛选
     module = request.GET.get("module", "")
@@ -39,8 +39,8 @@ def log_list(request):
     page = request.GET.get("page", 1)
     page_obj = paginator.get_page(page)
 
-    # 模块列表和操作类型列表（用于筛选下拉框）
-    module_choices = OperationLog.objects.values_list("module", flat=True).distinct().order_by("module")
+    # 模块列表和操作类型列表（用于筛选下拉框，也按当前用户过滤）
+    module_choices = OperationLog.objects.filter(user=request.user).values_list("module", flat=True).distinct().order_by("module")
     action_choices = OperationLog.ACTION_CHOICES
 
     context = {
@@ -59,8 +59,10 @@ def log_list(request):
 
 @login_required
 def trash_list(request):
-    """回收站列表"""
-    records = SoftDeleteRecord.objects.filter(is_permanently_deleted=False)
+    """回收站列表（仅当前用户的删除记录）"""
+    records = SoftDeleteRecord.objects.filter(
+        is_permanently_deleted=False, deleted_by=request.user,
+    )
 
     module = request.GET.get("module", "")
     if module:
@@ -70,7 +72,9 @@ def trash_list(request):
     page = request.GET.get("page", 1)
     page_obj = paginator.get_page(page)
 
-    module_choices = SoftDeleteRecord.objects.values_list("module", flat=True).distinct().order_by("module")
+    module_choices = SoftDeleteRecord.objects.filter(
+        deleted_by=request.user,
+    ).values_list("module", flat=True).distinct().order_by("module")
 
     return render(request, "audit/trash_list.html", {
         "page_obj": page_obj,
@@ -82,7 +86,7 @@ def trash_list(request):
 @login_required
 def trash_restore(request, pk):
     """从回收站恢复"""
-    record = get_object_or_404(SoftDeleteRecord, pk=pk)
+    record = get_object_or_404(SoftDeleteRecord, pk=pk, deleted_by=request.user)
     if request.method == "POST":
         try:
             restored = _restore_object(record)
@@ -109,7 +113,7 @@ def _restore_object(record):
 @login_required
 def trash_delete(request, pk):
     """永久删除（二次确认 + 需输入对象名称）"""
-    record = get_object_or_404(SoftDeleteRecord, pk=pk)
+    record = get_object_or_404(SoftDeleteRecord, pk=pk, deleted_by=request.user)
     if request.method == "POST":
         confirm_name = request.POST.get("confirm_name", "")
         if confirm_name.strip() != record.object_repr:

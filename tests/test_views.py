@@ -43,12 +43,16 @@ class CorePageSmokeTests(TestCase):
             reverse("scores:exam_analysis"),
             reverse("activities:activities"),
             reverse("exports:export_center"),
-            reverse("exports:full_export"),
         ]
         for url in urls:
             with self.subTest(url=url):
                 response = self.client.get(url)
                 self.assertEqual(response.status_code, 200)
+
+    def test_full_export_get_redirects_to_center(self):
+        """全量导出 GET 不再渲染独立页面，而是重定向到导出中心。"""
+        response = self.client.get(reverse("exports:full_export"))
+        self.assertIn(response.status_code, (200, 302))
 
 
 class ExamCreateGuardTests(TestCase):

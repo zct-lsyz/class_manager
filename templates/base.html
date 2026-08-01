@@ -40,6 +40,9 @@
                     {% if current_semester %}
                     — {{ current_semester.get_display_name }}
                     {% endif %}
+                    {% if teaching_week %}
+                    — 第{{ teaching_week }}周
+                    {% endif %}
                 </span>
                 {% endif %}
                 <div class="dropdown">
@@ -256,12 +259,7 @@
                     <ul class="nav flex-column nav-section-menu">
                         <li class="nav-item">
                             <a class="nav-link" href="{% url 'exports:export_center' %}">
-                                <i class="bi bi-download me-2"></i>模块数据导出
-                            </a>
-                        </li>
-                        <li class="nav-item">
-                            <a class="nav-link" href="{% url 'exports:full_export' %}">
-                                <i class="bi bi-archive me-2"></i>全量数据导出
+                                <i class="bi bi-download me-2"></i>数据导出
                             </a>
                         </li>
                         <li class="nav-item">

@@ -315,10 +315,11 @@ def full_export(request):
         messages.error(request, "请先设置当前班级。")
         return redirect("exports:export_center")
     if request.method != "POST":
-        return render(request, "exports/full_export.html", {"module_count": len(MODULE_EXPORTS)})
+        # 全量导出表单已集成到模块导出中心
+        return redirect("exports:export_center")
     if request.POST.get("confirm") != "1":
         messages.error(request, "请确认导出范围和敏感数据风险。")
-        return redirect("exports:full_export")
+        return redirect("exports:export_center")
 
     module_files = []
     include_attachments = request.POST.get("include_attachments") == "1"

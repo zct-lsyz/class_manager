@@ -3,9 +3,27 @@
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mt-3 mb-4">
     <h4 class="mb-0"><i class="bi bi-download me-2 text-primary"></i>模块数据导出</h4>
-    <a href="{% url 'exports:full_export' %}" class="btn btn-primary btn-sm">
-        <i class="bi bi-archive me-1"></i>一键全量导出
-    </a>
+</div>
+
+<!-- 全量数据导出 -->
+<div class="card mb-4">
+    <div class="card-header"><i class="bi bi-archive me-2"></i>一键全量导出</div>
+    <div class="card-body">
+        <p class="small text-muted">一次导出全部模块数据（ZIP 含 Excel 文件 + 清单 + SHA-256 校验），包含附件时文件可能较大。</p>
+        <div class="alert alert-warning py-2 small">导出包包含学生姓名、成绩、纪律等敏感信息，请妥善保管。</div>
+        <form method="post" action="{% url 'exports:full_export' %}">
+            {% csrf_token %}
+            <div class="form-check mb-2">
+                <input class="form-check-input" type="checkbox" name="include_attachments" value="1" id="includeAttachments">
+                <label class="form-check-label small" for="includeAttachments">同时包含照片、证明材料及 AI 分析原始附件</label>
+            </div>
+            <div class="form-check mb-3">
+                <input class="form-check-input" type="checkbox" name="confirm" value="1" id="confirmExport" required>
+                <label class="form-check-label small" for="confirmExport">我确认导出全部敏感数据并会妥善保管</label>
+            </div>
+            <button type="submit" class="btn btn-primary btn-sm"><i class="bi bi-archive me-1"></i>执行全量导出</button>
+        </form>
+    </div>
 </div>
 
 <div class="row g-2">
