@@ -329,16 +329,30 @@ def restore_backup(record, user=None):
         db_replaced = False
         media_replaced = False
         try:
-            # 4. 关闭连接后在同一文件系统内原子替换，并保留回滚副本
+            # 4. 关闭连接后替换数据库（文件可原子重命名）
             connections.close_all()
             if db_path.exists():
                 os.replace(db_path, rollback_db)
             os.replace(staged_db, db_path)
             db_replaced = True
 
+            # 5. 替换 media 目录内容。
+            #    Docker 中 /app/media 常为 volume 挂载点，目录本身不能重命名（Device or resource busy），
+            #    因此采用「备份副本 + 清空 + 复制新内容」的方式，而不是重命名挂载点。
+            if rollback_media.exists():
+                shutil.rmtree(rollback_media, ignore_errors=True)
             if media_root.exists():
-                os.replace(media_root, rollback_media)
-            os.replace(staged_media, media_root)
+                shutil.copytree(media_root, rollback_media, dirs_exist_ok=True)
+                # 清空 media_root 内所有内容（保留挂载点目录本身）
+                for child in media_root.iterdir():
+                    if child.is_dir():
+                        shutil.rmtree(child, ignore_errors=True)
+                    else:
+                        child.unlink(missing_ok=True)
+            else:
+                media_root.mkdir(parents=True, exist_ok=True)
+            if staged_media.exists():
+                shutil.copytree(staged_media, media_root, dirs_exist_ok=True)
             media_replaced = True
 
             _validate_sqlite(db_path)
@@ -349,9 +363,13 @@ def restore_backup(record, user=None):
             if rollback_db.exists():
                 os.replace(rollback_db, db_path)
             if media_replaced and media_root.exists():
-                shutil.rmtree(media_root, ignore_errors=True)
+                for child in media_root.iterdir():
+                    if child.is_dir():
+                        shutil.rmtree(child, ignore_errors=True)
+                    else:
+                        child.unlink(missing_ok=True)
             if rollback_media.exists():
-                os.replace(rollback_media, media_root)
+                shutil.copytree(rollback_media, media_root, dirs_exist_ok=True)
             raise
         finally:
             _safe_remove(staged_db)
