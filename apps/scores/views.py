@@ -172,8 +172,19 @@ def exam_create(request):
         messages.error(request, "请先在班级与学期设置中指定当前班级。")
         return redirect("classes:settings")
     if not current_semester:
-        messages.error(request, "请先为当前班级指定当前学期。")
-        return redirect("classes:settings")
+        # 尝试智能匹配：如果该班级只有一个未归档的学期，自动使用它
+        semesters = Semester.objects.filter(
+            school_class=current_class, is_archived=False,
+        ).order_by("-academic_year", "-semester_type")
+        if semesters.count() == 1:
+            semesters.update(is_current=True)
+            current_semester = semesters.first()
+        else:
+            messages.error(
+                request,
+                "当前班级没有指定「当前学期」。请在「班级与学期设置」中为该班级的学期勾选「设为当前学期」。",
+            )
+            return redirect("classes:settings")
 
     if request.method == "POST":
         form = ExamForm(request.POST)

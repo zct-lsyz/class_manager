@@ -96,9 +96,19 @@ def semester_create(request):
     if request.method == "POST":
         form = SemesterForm(request.POST)
         if form.is_valid():
-            sem = form.save()
+            sem = form.save(commit=False)
+            # 如果该班级没有当前学期，自动将新创建的学期设为当前学期
+            if not sem.is_current:
+                has_current = Semester.objects.filter(
+                    school_class=sem.school_class, is_current=True,
+                ).exists()
+                if not has_current:
+                    sem.is_current = True
+            sem.save()
             if sem.is_current:
-                Semester.objects.exclude(pk=sem.pk).update(is_current=False)
+                Semester.objects.filter(
+                    school_class=sem.school_class,
+                ).exclude(pk=sem.pk).update(is_current=False)
             messages.success(request, f"学期「{sem.get_display_name()}」创建成功。")
             OperationLog.objects.create(
                 user=request.user, action="create", module="semesters",
@@ -121,8 +131,10 @@ def semester_edit(request, pk):
         if form.is_valid():
             sem = form.save()
             if sem.is_current:
-                Semester.objects.exclude(pk=sem.pk).update(is_current=False)
-            messages.success(request, f"学期更新成功。")
+                Semester.objects.filter(
+                    school_class=sem.school_class,
+                ).exclude(pk=sem.pk).update(is_current=False)
+            messages.success(request, f"学期「{sem.get_display_name()}」更新成功。")
             return redirect("classes:settings")
     else:
         form = SemesterForm(instance=sem)
