@@ -18,14 +18,11 @@
 {% elif f.name == "student" %}
 <div class="mb-3">
     <label class="form-label small">{{ f.label }}（可多选）</label>
-    <div class="student-chip-select">
-        <select id="studentPicker" class="form-select form-select-sm mb-1"></select>
-        <div id="selectedStudents" class="d-flex flex-wrap gap-1 border rounded p-2">
-            <span class="text-muted small">先选宿舍，再从下拉选择学生，可多选；点 ✕ 取消选中。</span>
-        </div>
-    </div>
+    <button type="button" class="btn btn-outline-secondary btn-sm" id="scsButton">选择学生</button>
+    <div class="border rounded mt-1 bg-white p-2 d-none" id="scsPanel" style="max-width:380px;"></div>
+    <div class="d-flex flex-wrap gap-1 mt-1" id="scsSummary"></div>
     <div class="form-text">选择「全体学生」将对宿舍内每名学生同步登记并同步加减分；选择个别学生则只对选中的学生生效。</div>
-    <input type="hidden" name="student_mode" id="studentMode" value="one">
+    <input type="hidden" name="student_mode" id="scsMode" value="one">
     {% if f.errors %}<div class="text-danger small">{{ f.errors.0 }}</div>{% endif %}
 </div>
 {% else %}
@@ -44,18 +41,18 @@
 {% block extra_js %}
 {{ dorm_room_students|json_script:"room-students-data" }}
 <script src="{% static 'js/student-chip-select.js' %}"></script>
+<script src="{% static 'js/student-checkbox-select.js' %}"></script>
 <script>
 const ROOM_STUDENTS = JSON.parse(document.getElementById('room-students-data').textContent);
 (function() {
-    // 宿舍→学生 芯片多选
-    initStudentChipSelect({
-        pickerId: 'studentPicker',
-        chipsId: 'selectedStudents',
-        modeId: 'studentMode',
+    // 宿舍→学生 复选框下拉多选
+    initStudentCheckboxSelect({
+        buttonId: 'scsButton', panelId: 'scsPanel', summaryId: 'scsSummary',
         studentsName: 'students',
         roomSelectId: 'id_dorm_room',
         studentsByRoom: ROOM_STUDENTS,
         allLabel: '全体学生（同步给宿舍每名学生）',
+        modeId: 'scsMode',
     });
 
     // 条目→严重程度/扣分自动匹配

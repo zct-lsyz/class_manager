@@ -1,4 +1,6 @@
 {% extends "base.html" %}{% block title %}新建谈话{% endblock %}
 {% block content %}<div class="row justify-content-center mt-3"><div class="col-md-8">
-  <div class="card"><div class="card-header">新建谈话记录</div><div class="card-body"><form method="post">{% csrf_token %}{% for f in form %}<div class="mb-3"><label class="form-label small">{{ f.label }}</label>{{ f }}</div>{% endfor %}<button class="btn btn-primary">保存</button></form></div></div>
+  <div class="card"><div class="card-header">新建谈话记录</div><div class="card-body"><form method="post">{% csrf_token %}
+  {% for f in form %}{% if f.name == "student" %}{% include "_student_checkbox_field.html" with field=f %}{% else %}<div class="mb-3"><label class="form-label small">{{ f.label }}</label>{{ f }}</div>{% endif %}{% endfor %}
+  <button class="btn btn-primary">保存</button></form></div></div>
 </div></div>{% endblock %}

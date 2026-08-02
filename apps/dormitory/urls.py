@@ -9,6 +9,7 @@ urlpatterns = [
     path("room/create/", views.room_create, name="room_create"),
     path("room/<int:pk>/", views.room_detail, name="room_detail"),
     path("bed/<int:pk>/assign/", views.bed_assign, name="bed_assign"),
+    path("bed/<int:pk>/monitor/", views.bed_set_monitor, name="bed_set_monitor"),
     path("hygiene/", views.hygiene, name="hygiene"),
     path("hygiene/items/", views.hygiene_items, name="hygiene_items"),
     path("hygiene/items/<int:pk>/delete/", views.hygiene_item_delete, name="hygiene_item_delete"),

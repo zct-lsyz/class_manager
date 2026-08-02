@@ -233,7 +233,11 @@ def export_student_excel(student):
 
     # 科目集合
     subjects = sorted({r.exam_subject.subject.name for r in records})
-    headers = ["考试", "日期"] + subjects + ["总分", "得分率%"]
+    # 每科：分数 + 班名次 + 级名次 + 市名次（与上传数据完备性一致）
+    headers = ["考试", "日期"]
+    for s in subjects:
+        headers += [s, f"{s}班名次", f"{s}级名次", f"{s}市名次"]
+    headers += ["总分", "得分率%"]
     ws.append(headers)
     for cell in ws[1]:
         cell.fill = header_fill
@@ -242,9 +246,21 @@ def export_student_excel(student):
         cell.border = border
 
     for item in history_map.values():
-        scores_by_subj = {r.exam_subject.subject.name: float(r.score) for r in item["subjects"] if r.score is not None}
+        info_by_subj = {}
+        for r in item["subjects"]:
+            info_by_subj[r.exam_subject.subject.name] = r
         line = [item["exam"].name, item["exam"].date.strftime("%Y-%m-%d")]
-        line += [scores_by_subj.get(s, "") for s in subjects]
+        for s in subjects:
+            r = info_by_subj.get(s)
+            if r and r.score is not None:
+                line += [
+                    float(r.score),
+                    r.rank if r.rank is not None else "",
+                    r.grade_rank if r.grade_rank is not None else "",
+                    r.city_rank if r.city_rank is not None else "",
+                ]
+            else:
+                line += ["", "", "", ""]
         rate = item["total"] / item["full_score"] * 100 if item["full_score"] else 0
         line += [round(item["total"], 1), round(rate, 1)]
         ws.append(line)
@@ -255,14 +271,190 @@ def export_student_excel(student):
     ws.column_dimensions["A"].width = 16
     ws.column_dimensions["B"].width = 12
     for col in range(3, len(headers) + 1):
-        ws.column_dimensions[chr(64 + col)].width = 12
+        ws.column_dimensions[chr(64 + col)].width = 10
 
     output = io.BytesIO()
     wb.save(output)
     return output.getvalue(), f"{student.name}_成绩分析.xlsx"
 
 
+def export_student_pdf(student):
+    """生成学生个人历次成绩 PDF（各科+总分折线图 + 历史表）。"""
+    import fitz
+    from apps.scores.models import Score
+
+    records = list(Score.objects.filter(
+        student=student, exam__is_deleted=False, is_deleted=False,
+    ).select_related("exam", "exam_subject__subject").order_by("exam__date"))
+
+    # 按考试组织
+    history_map = {}
+    for record in records:
+        item = history_map.setdefault(record.exam_id, {
+            "exam": record.exam, "subjects": [], "total": 0.0, "full_score": 0,
+        })
+        item["subjects"].append(record)
+        if record.status == "normal" and record.score is not None:
+            item["total"] += float(record.score)
+            item["full_score"] += record.exam_subject.full_score
+
+    exam_items = [history_map[k] for k in sorted(history_map.keys(),
+                  key=lambda eid: history_map[eid]["exam"].date)]
+    if not exam_items:
+        return None, None
+
+    exam_labels = [item["exam"].date.strftime("%m-%d") for item in exam_items]
+    subjects = sorted({r.exam_subject.subject.name for r in records})
+
+    # 构建序列
+    series = {"总分": [round(item["total"], 1) for item in exam_items]}
+    for s in subjects:
+        vals = []
+        for item in exam_items:
+            rec = next((r for r in item["subjects"] if r.exam_subject.subject.name == s and r.score is not None), None)
+            vals.append(float(rec.score) if rec else None)
+        series[s] = vals
+
+    chart_png = _chart_student_trends(exam_labels, series)
+
+    doc = fitz.open()
+    page = doc.new_page(width=595, height=842)
+    y = 50
+    page.insert_text((36, y), f"{student.name} 历次成绩分析", fontsize=16, fontname=CJK_FONT, color=(0.1, 0.2, 0.4))
+    y += 12
+    page.insert_text((36, y), f"共 {len(exam_items)} 次考试", fontsize=11, fontname=CJK_FONT)
+    y += 30
+
+    if chart_png:
+        tmp = tempfile.NamedTemporaryFile(suffix=".png", delete=False)
+        tmp.write(chart_png)
+        tmp.close()
+        img_w = 523
+        img_h = int(img_w * 380 / 820)
+        page.insert_text((36, y), "各科与总分趋势", fontsize=13, fontname=CJK_FONT)
+        y += 8
+        page.insert_image(fitz.Rect(36, y, 36 + img_w, y + img_h), filename=tmp.name)
+        os.unlink(tmp.name)
+        y += img_h + 14
+
+    # 历史成绩表
+    if y > 600:
+        page = doc.new_page(width=595, height=842)
+        y = 40
+    page.insert_text((36, y), "历次成绩明细", fontsize=13, fontname=CJK_FONT)
+    y += 8
+    headers = ["考试", "日期"] + subjects + ["总分", "得分率%"]
+    col_widths = [90, 50] + [45] * len(subjects) + [50, 50]
+    rows = []
+    for item in exam_items:
+        info = {r.exam_subject.subject.name: r for r in item["subjects"]}
+        line = [item["exam"].name, item["exam"].date.strftime("%Y-%m-%d")]
+        for s in subjects:
+            r = info.get(s)
+            line.append(float(r.score) if r and r.score is not None else "")
+        rate = item["total"] / item["full_score"] * 100 if item["full_score"] else 0
+        line += [round(item["total"], 1), round(rate, 1)]
+        rows.append(line)
+    _write_pdf_table(page, y, headers, rows, col_widths, font_size=8)
+
+    output = io.BytesIO()
+    doc.save(output)
+    doc.close()
+    return output.getvalue(), f"{student.name}_成绩分析.pdf"
+
+
 # ==================== PDF 导出（PyMuPDF + Pillow） ====================
+
+def _chart_student_trends(exam_labels, series):
+    """生成学生历次成绩折线图 PNG（各科 + 总分，多线）。"""
+    from PIL import Image, ImageDraw, ImageFont
+    names = [n for n, vals in series.items() if any(v is not None for v in vals)]
+    if not names or not exam_labels:
+        return None
+    W, H = 820, 380
+    margin_l, margin_b, margin_t, margin_r = 56, 44, 30, 30
+    plot_w = W - margin_l - margin_r
+    plot_h = H - margin_t - margin_b
+    img = Image.new("RGB", (W, H), "white")
+    draw = ImageDraw.Draw(img)
+
+    cjk_font_path = _find_cjk_font()
+    try:
+        font = ImageFont.truetype(cjk_font_path, 14) if cjk_font_path else ImageFont.load_default()
+        font_small = ImageFont.truetype(cjk_font_path, 11) if cjk_font_path else font
+    except Exception:
+        font = font_small = ImageFont.load_default()
+
+    # 数值范围
+    all_vals = [v for vals in series.values() for v in vals if v is not None]
+    if not all_vals:
+        return None
+    lo, hi = min(all_vals), max(all_vals)
+    if hi == lo:
+        hi = lo + 10
+    pad = (hi - lo) * 0.1
+    lo -= pad
+    hi += pad
+
+    def x_of(i):
+        if len(exam_labels) == 1:
+            return margin_l + plot_w / 2
+        return margin_l + plot_w * i / (len(exam_labels) - 1)
+
+    def y_of(v):
+        return margin_t + plot_h - plot_h * (v - lo) / (hi - lo)
+
+    # 网格 + Y 刻度
+    for i in range(0, 6):
+        val = lo + (hi - lo) * i / 5
+        y = y_of(val)
+        draw.line([(margin_l, y), (W - margin_r, y)], fill="#eeeeee")
+        draw.text((4, y - 7), f"{val:.0f}", fill="gray", font=font_small)
+    # X 刻度
+    for i, label in enumerate(exam_labels):
+        draw.text((x_of(i), margin_t + plot_h + 8), str(label)[:6], fill="#333", font=font_small, anchor="ma")
+
+    colors = ["#1a73e8", "#dc3545", "#28a745", "#f57c00", "#7c3aed", "#00acc1", "#e91e63", "#5e35b1", "#8d6e63", "#c0ca33"]
+    legend_y = margin_t
+    for idx, (name, vals) in enumerate(series.items()):
+        if not any(v is not None for v in vals):
+            continue
+        color = colors[idx % len(colors)]
+        points = []
+        for i, v in enumerate(vals):
+            if v is None:
+                continue
+            points.append((x_of(i), y_of(v)))
+        if len(points) == 1:
+            draw.ellipse([points[0][0] - 3, points[0][1] - 3, points[0][0] + 3, points[0][1] + 3], fill=color)
+        elif len(points) >= 2:
+            draw.line(points, fill=color, width=2)
+            for p in points:
+                draw.ellipse([p[0] - 2, p[1] - 2, p[0] + 2, p[1] + 2], fill=color)
+        # 图例
+        draw.rectangle([margin_l + idx * 95, legend_y, margin_l + idx * 95 + 14, legend_y + 10], fill=color)
+        draw.text((margin_l + idx * 95 + 18, legend_y - 3), name, fill="#333", font=font_small)
+
+    buf = io.BytesIO()
+    img.convert("RGB").save(buf, format="PNG")
+    return buf.getvalue()
+
+
+def _find_cjk_font():
+    """查找系统可用的中文字体文件路径。"""
+    candidates = [
+        r"C:\Windows\Fonts\msyh.ttc",     # 微软雅黑
+        r"C:\Windows\Fonts\simhei.ttf",   # 黑体
+        r"C:\Windows\Fonts\simsun.ttc",   # 宋体
+        "/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc",
+        "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+        "/System/Library/Fonts/PingFang.ttc",
+    ]
+    for path in candidates:
+        if os.path.exists(path):
+            return path
+    return None
+
 
 def _chart_avg_bar(analysis_data):
     """生成各科均分柱状图 PNG（Pillow）。"""
@@ -279,9 +471,13 @@ def _chart_avg_bar(analysis_data):
     plot_w = W - margin * 2
     plot_h = H - margin * 2
     bar_w = plot_w / len(subjects) * 0.6
+    cjk_font_path = _find_cjk_font()
     try:
-        font = ImageFont.truetype("simhei.ttf", 16)
-        font_small = ImageFont.truetype("simhei.ttf", 13)
+        if cjk_font_path:
+            font = ImageFont.truetype(cjk_font_path, 16)
+            font_small = ImageFont.truetype(cjk_font_path, 13)
+        else:
+            raise OSError("no cjk font")
     except Exception:
         font = font_small = ImageFont.load_default()
 
@@ -306,37 +502,40 @@ def _chart_avg_bar(analysis_data):
     return buf.getvalue()
 
 
+CJK_FONT = "china-s"  # PyMuPDF 内置简体中文字体
+
+
 def _write_pdf_table(page, y, headers, rows, col_widths, font_size=9):
-    """在 PyMuPDF 页面绘制表格，返回结束 y 坐标。"""
-    from pymupdf import Point, Rect
+    """在 PyMuPDF 页面绘制表格（中文字体），返回结束 y 坐标。"""
+    from pymupdf import Rect
+    doc = page.parent
     page_height = page.rect.height
     left = 36
     row_h = 20 if font_size > 9 else 16
     header_h = 24
     table_w = sum(col_widths)
 
+    def draw_header(p, start_y):
+        for i, h in enumerate(headers):
+            r = Rect(left + sum(col_widths[:i]), start_y, left + sum(col_widths[:i + 1]), start_y + header_h)
+            p.draw_rect(r, color=(0.1, 0.45, 0.91), fill=(0.1, 0.45, 0.91))
+            p.insert_textbox(r + (1, 3, -1, -3), str(h), fontsize=font_size, fontname=CJK_FONT, color=(1, 1, 1), align=1)
+
     # 表头
-    for i, h in enumerate(headers):
-        r = Rect(left + sum(col_widths[:i]), y, left + sum(col_widths[:i + 1]), y + header_h)
-        page.draw_rect(r, color=(0.1, 0.45, 0.91), fill=(0.1, 0.45, 0.91))
-        page.insert_textbox(r + (-0, 3, 0, -3), str(h), fontsize=font_size, color=(1, 1, 1), align=1)
+    draw_header(page, y)
     y += header_h
 
     # 数据行（跨页时切新页）
     for row in rows:
         if y + row_h > page_height - 40:
-            page = page.parent.new_page(width=page.rect.width, height=page.rect.height)
-            # 重新画表头
-            for i, h in enumerate(headers):
-                r = Rect(left + sum(col_widths[:i]), 36, left + sum(col_widths[:i + 1]), 36 + header_h)
-                page.draw_rect(r, color=(0.1, 0.45, 0.91), fill=(0.1, 0.45, 0.91))
-                page.insert_textbox(r + (-0, 3, 0, -3), str(h), fontsize=font_size, color=(1, 1, 1), align=1)
+            page = doc.new_page(width=page.rect.width, height=page.rect.height)
+            draw_header(page, 36)
             y = 36 + header_h
         for i, val in enumerate(row):
             r = Rect(left + sum(col_widths[:i]), y, left + sum(col_widths[:i + 1]), y + row_h)
             page.draw_rect(r, color=(0.8, 0.8, 0.8))
             text = str(val) if val is not None else ""
-            page.insert_textbox(r + (2, 2, -2, -2), text, fontsize=font_size, color=(0.2, 0.2, 0.2), align=1)
+            page.insert_textbox(r + (2, 2, -2, -2), text, fontsize=font_size, fontname=CJK_FONT, color=(0.2, 0.2, 0.2), align=1)
         y += row_h
     return y
 

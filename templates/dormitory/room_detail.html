@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load custom_filters %}
 {% block title %}宿舍床位分配{% endblock %}
 {% block content %}
 <div class="mt-3"><a href="{% url 'dormitory:index' %}">&larr; 返回宿舍管理</a></div>
@@ -17,19 +18,30 @@
             <div class="card-body">
                 <div class="row g-2">
                     {% for bed in beds %}
+                    {% with student=assigned_map|get_item:bed.id %}
                     <div class="col-6 col-md-3">
-                        <div class="card {% if bed.id in assigned_map %}border-success{% else %}border-secondary{% endif %}">
+                        <div class="card {% if student %}border-success{% else %}border-secondary{% endif %}">
                             <div class="card-body text-center py-3">
-                                <div class="small text-muted">{% if bed.id in assigned_map %}{{ assigned_map|dictsort:"0" }}{% else %}床位 {{ bed.bed_number }}{% endif %}</div>
-                                {% if bed.id in assigned_map %}
-                                {% for aid, student in assigned_map.items %}
-                                {% if aid == bed.id %}
+                                <div class="small text-muted">床位 {{ bed.bed_number }} 号</div>
+                                {% if student %}
                                 <div class="fw-bold mt-1">{{ student.name }}</div>
-                                <button class="btn btn-sm btn-outline-danger mt-2" data-bs-toggle="modal" data-bs-target="#assignModal{{ bed.pk }}">
-                                    <i class="bi bi-arrow-repeat"></i> 更换
-                                </button>
-                                {% endif %}
-                                {% endfor %}
+                                {% if room.monitor_id == student.pk %}<div><span class="badge bg-warning text-dark mt-1">🏠 舍长</span></div>{% endif %}
+                                <div class="d-flex flex-column gap-1 mt-2">
+                                    <button class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#assignModal{{ bed.pk }}">
+                                        <i class="bi bi-arrow-repeat"></i> 更换
+                                    </button>
+                                    {% if room.monitor_id == student.pk %}
+                                    <form method="post" action="{% url 'dormitory:bed_set_monitor' bed.pk %}">
+                                        {% csrf_token %}<input type="hidden" name="action" value="clear">
+                                        <button class="btn btn-sm btn-outline-warning w-100"><i class="bi bi-person-dash"></i> 取消舍长</button>
+                                    </form>
+                                    {% else %}
+                                    <form method="post" action="{% url 'dormitory:bed_set_monitor' bed.pk %}">
+                                        {% csrf_token %}<input type="hidden" name="action" value="set">
+                                        <button class="btn btn-sm btn-warning w-100"><i class="bi bi-star"></i> 设为舍长</button>
+                                    </form>
+                                    {% endif %}
+                                </div>
                                 {% else %}
                                 <div class="text-muted mt-1">空床</div>
                                 <button class="btn btn-sm btn-outline-primary mt-2" data-bs-toggle="modal" data-bs-target="#assignModal{{ bed.pk }}">
@@ -39,6 +51,7 @@
                             </div>
                         </div>
                     </div>
+                    {% endwith %}
 
                     <!-- 分配弹窗 -->
                     <div class="modal fade" id="assignModal{{ bed.pk }}" tabindex="-1">

@@ -122,6 +122,32 @@ def room_detail(request, pk):
 
 
 @login_required
+def bed_set_monitor(request, pk):
+    """从床位一键设置/取消该床学生为宿舍长。"""
+    current_class = get_current_class(request.user)
+    bed = get_object_or_404(
+        DormBed, pk=pk, room__building__school_class=current_class,
+    )
+    room = bed.room
+    if request.method == "POST":
+        action = request.POST.get("action", "set")
+        if action == "clear":
+            room.monitor = None
+            messages.info(request, f"{room.room_number} 已取消宿舍长。")
+        else:
+            assignment = DormAssignment.objects.filter(
+                bed=bed, room=room, is_current=True,
+            ).select_related("student").first()
+            if assignment:
+                room.monitor = assignment.student
+                messages.success(request, f"已将 {assignment.student.name} 设为 {room.room_number} 宿舍长。")
+            else:
+                messages.error(request, "该床位暂无学生，无法设置舍长。")
+        room.save(update_fields=["monitor", "updated_at"])
+    return redirect("dormitory:room_detail", pk=room.pk)
+
+
+@login_required
 @transaction.atomic
 def bed_assign(request, pk):
     """分配床位"""

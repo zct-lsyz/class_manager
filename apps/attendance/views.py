@@ -83,13 +83,53 @@ def index(request):
 @login_required
 @require_current_class
 def create(request):
-    """录入考勤"""
+    """录入考勤（支持一次为多个学生登记）"""
     current_class = get_current_class(request.user)
+    current_semester = Semester.objects.filter(
+        school_class=current_class, is_current=True,
+    ).first()
+
     if request.method == "POST":
+        # 多选学生模式：students[] 为选中学生 id 列表
+        student_ids = request.POST.getlist("students")
+        if student_ids:
+            students = Student.objects.filter(
+                pk__in=student_ids, school_class=current_class, is_deleted=False,
+            ).distinct()
+            if students.exists():
+                date = request.POST.get("date", "") or timezone.localdate()
+                period = request.POST.get("period", "all_day")
+                status = request.POST.get("status", "late")
+                points = 0
+                try:
+                    points = int(request.POST.get("points_deducted", "0") or "0")
+                except (ValueError, TypeError):
+                    points = 0
+                reason = request.POST.get("reason", "").strip()
+                proof = request.FILES.get("leave_proof")
+                created = 0
+                from django.db import transaction
+                with transaction.atomic():
+                    for st in students:
+                        record = AttendanceRecord(
+                            school_class=current_class, semester=current_semester,
+                            student=st, date=date, period=period, status=status,
+                            points_deducted=points, reason=reason,
+                        )
+                        if proof:
+                            record.leave_proof = proof
+                        record.save()
+                        _sync_attendance_points(record)
+                        created += 1
+                messages.success(request, f"已为 {created} 名学生登记异常考勤。")
+                return redirect("attendance:index")
+
+        # 单学生模式
         form = AttendanceForm(request.POST, request.FILES, current_class=current_class)
         if form.is_valid():
             record = form.save(commit=False)
             record.school_class = current_class
+            record.semester = current_semester
             record.save()
             _sync_attendance_points(record)
             messages.success(request, "考勤记录已保存。")
@@ -101,8 +141,15 @@ def create(request):
         if student_id:
             form.fields["student"].initial = student_id
 
+    students_json = [
+        {"id": s.pk, "name": s.name} for s in Student.objects.filter(
+            school_class=current_class, is_deleted=False,
+        ).order_by("student_id")
+    ] if current_class else []
     reasons = AttendanceReason.objects.filter(school_class=current_class, is_active=True) if current_class else []
-    return render(request, "attendance/form.html", {"form": form, "title": "新增异常考勤", "reasons": reasons})
+    return render(request, "attendance/form.html", {
+        "form": form, "title": "新增异常考勤", "reasons": reasons, "students_json": students_json,
+    })
 
 
 @login_required
@@ -121,8 +168,17 @@ def edit(request, pk):
             return redirect("attendance:index")
     else:
         form = AttendanceForm(instance=record, current_class=current_class)
+    students_json = [
+        {"id": s.pk, "name": s.name} for s in Student.objects.filter(
+            school_class=current_class, is_deleted=False,
+        ).order_by("student_id")
+    ] if current_class else []
+    initial_selected = [{"id": record.student.pk, "name": record.student.name}]
     reasons = AttendanceReason.objects.filter(school_class=current_class, is_active=True) if current_class else []
-    return render(request, "attendance/form.html", {"form": form, "title": "修改异常考勤", "reasons": reasons})
+    return render(request, "attendance/form.html", {
+        "form": form, "title": "修改异常考勤", "reasons": reasons,
+        "students_json": students_json, "initial_selected": initial_selected,
+    })
 
 
 @login_required

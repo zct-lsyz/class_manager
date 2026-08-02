@@ -910,17 +910,25 @@ def comparison_export(request):
 
 
 @login_required
-def student_analysis_export(request, pk):
-    """导出学生历次成绩 Excel。"""
-    from apps.scores.analysis_exports import export_student_excel
+def student_analysis_export(request, pk, fmt="excel"):
+    """导出学生历次成绩（Excel / PDF，含各科+总分折线图）。"""
+    from apps.scores.analysis_exports import export_student_excel, export_student_pdf
     from django.http import HttpResponse
     from urllib.parse import quote
     current_class = get_current_class(request.user)
     student = get_object_or_404(
         Student, pk=pk, school_class=current_class, is_deleted=False,
     )
-    content, filename = export_student_excel(student)
-    response = HttpResponse(content, content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    if fmt == "pdf":
+        content, filename = export_student_pdf(student)
+        if content is None:
+            messages.error(request, "该学生暂无成绩记录。")
+            return redirect("scores:student_analysis_detail", pk=student.pk)
+        content_type = "application/pdf"
+    else:
+        content, filename = export_student_excel(student)
+        content_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    response = HttpResponse(content, content_type=content_type)
     response["Content-Disposition"] = f"attachment; filename*=UTF-8''{quote(filename)}"
     return response
 

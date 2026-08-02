@@ -8,6 +8,7 @@ from apps.communications.forms import ConversationForm, HomeSchoolContactForm, C
 from apps.classes.utils import get_current_class
 from apps.classes.models import SchoolClass, Semester
 from apps.classes.decorators import require_current_class
+from apps.students.models import Student
 from apps.audit.services import soft_delete
 
 
@@ -36,6 +37,29 @@ def conversation_create(request):
     ).first()
 
     if request.method == "POST":
+        student_ids = request.POST.getlist("students")
+        if student_ids:
+            students = Student.objects.filter(
+                pk__in=student_ids, school_class=current_class, is_deleted=False,
+            ).distinct()
+            if students.exists():
+                from apps.communications.models import StudentConversation
+                from django.db import transaction
+                with transaction.atomic():
+                    created = 0
+                    for st in students:
+                        StudentConversation.objects.create(
+                            school_class=current_class, semester=current_semester,
+                            student=st, date=request.POST.get("date", "") or timezone.localdate(),
+                            location=request.POST.get("location", ""),
+                            reason=request.POST.get("reason", ""),
+                            main_content=request.POST.get("main_content", ""),
+                            follow_up_actions=request.POST.get("follow_up_actions", ""),
+                        )
+                        created += 1
+                messages.success(request, f"已为 {created} 名学生保存谈话记录。")
+                return redirect("communications:conversations")
+
         form = ConversationForm(request.POST)
         if form.is_valid():
             c = form.save(commit=False)
@@ -47,7 +71,12 @@ def conversation_create(request):
     else:
         form = ConversationForm()
 
-    return render(request, "communications/conversation_form.html", {"form": form})
+    students_json = [
+        {"id": s.pk, "name": s.name} for s in Student.objects.filter(
+            school_class=current_class, is_deleted=False,
+        ).order_by("student_id")
+    ] if current_class else []
+    return render(request, "communications/conversation_form.html", {"form": form, "students_json": students_json})
 
 
 @login_required
@@ -92,6 +121,29 @@ def home_school_create(request):
     ).first()
 
     if request.method == "POST":
+        student_ids = request.POST.getlist("students")
+        if student_ids:
+            students = Student.objects.filter(
+                pk__in=student_ids, school_class=current_class, is_deleted=False,
+            ).distinct()
+            if students.exists():
+                from apps.communications.models import HomeSchoolContact
+                from django.db import transaction
+                with transaction.atomic():
+                    created = 0
+                    for st in students:
+                        HomeSchoolContact.objects.create(
+                            school_class=current_class, semester=current_semester,
+                            student=st, contact_date=request.POST.get("contact_date", "") or timezone.localdate(),
+                            contact_person=request.POST.get("contact_person", ""),
+                            contact_method=request.POST.get("contact_method", ""),
+                            content=request.POST.get("content", ""),
+                            follow_up=request.POST.get("follow_up", ""),
+                        )
+                        created += 1
+                messages.success(request, f"已为 {created} 名学生保存家校沟通记录。")
+                return redirect("communications:home_school")
+
         form = HomeSchoolContactForm(request.POST)
         if form.is_valid():
             c = form.save(commit=False)
@@ -103,7 +155,12 @@ def home_school_create(request):
     else:
         form = HomeSchoolContactForm()
 
-    return render(request, "communications/home_school_form.html", {"form": form})
+    students_json = [
+        {"id": s.pk, "name": s.name} for s in Student.objects.filter(
+            school_class=current_class, is_deleted=False,
+        ).order_by("student_id")
+    ] if current_class else []
+    return render(request, "communications/home_school_form.html", {"form": form, "students_json": students_json})
 
 
 # ====== 重点关注 ======
@@ -138,6 +195,31 @@ def concern_create(request):
         school_class=current_class, is_current=True,
     ).first()
     if request.method == "POST":
+        student_ids = request.POST.getlist("students")
+        if student_ids:
+            students = Student.objects.filter(
+                pk__in=student_ids, school_class=current_class, is_deleted=False,
+            ).distinct()
+            if students.exists():
+                from apps.communications.models import ConcernRecord
+                from django.db import transaction
+                with transaction.atomic():
+                    created = 0
+                    for st in students:
+                        ConcernRecord.objects.create(
+                            school_class=current_class, semester=current_semester,
+                            student=st,
+                            concern_type=request.POST.get("concern_type", ""),
+                            level=request.POST.get("level", "medium"),
+                            observation=request.POST.get("observation", ""),
+                            conversation_notes=request.POST.get("conversation_notes", ""),
+                            action_plan=request.POST.get("action_plan", ""),
+                            status=request.POST.get("status", "open"),
+                        )
+                        created += 1
+                messages.success(request, f"已为 {created} 名学生创建重点关注记录。")
+                return redirect("communications:concerns")
+
         form = ConcernRecordForm(request.POST)
         if form.is_valid():
             c = form.save(commit=False)
@@ -148,7 +230,12 @@ def concern_create(request):
             return redirect("communications:concerns")
     else:
         form = ConcernRecordForm()
-    return render(request, "communications/concern_form.html", {"form": form})
+    students_json = [
+        {"id": s.pk, "name": s.name} for s in Student.objects.filter(
+            school_class=current_class, is_deleted=False,
+        ).order_by("student_id")
+    ] if current_class else []
+    return render(request, "communications/concern_form.html", {"form": form, "students_json": students_json})
 
 
 @login_required
@@ -175,4 +262,12 @@ def concern_update(request, pk):
             return redirect("communications:concerns")
     else:
         form = ConcernRecordForm(instance=record)
-    return render(request, "communications/concern_form.html", {"form": form, "record": record})
+    students_json = [
+        {"id": s.pk, "name": s.name} for s in Student.objects.filter(
+            school_class=current_class, is_deleted=False,
+        ).order_by("student_id")
+    ] if current_class else []
+    return render(request, "communications/concern_form.html", {
+        "form": form, "record": record, "students_json": students_json,
+        "initial_selected": [{"id": record.student.pk, "name": record.student.name}],
+    })

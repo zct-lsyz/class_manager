@@ -8,6 +8,7 @@ from apps.comments.forms import StudentCommentForm, CommentTemplateForm
 from apps.classes.utils import get_current_class
 from apps.classes.models import SchoolClass, Semester
 from apps.classes.decorators import require_current_class, require_current_semester
+from apps.students.models import Student
 from apps.audit.services import soft_delete
 
 
@@ -40,6 +41,29 @@ def create(request):
     ).first()
 
     if request.method == "POST":
+        student_ids = request.POST.getlist("students")
+        if student_ids:
+            students = Student.objects.filter(
+                pk__in=student_ids, school_class=current_class, is_deleted=False,
+            ).distinct()
+            if students.exists():
+                from apps.comments.models import StudentComment
+                comment_type = request.POST.get("comment_type", "daily")
+                content = request.POST.get("content", "")
+                status = request.POST.get("status", "draft")
+                from django.db import transaction
+                with transaction.atomic():
+                    created = 0
+                    for st in students:
+                        StudentComment.objects.create(
+                            school_class=current_class, semester=current_semester,
+                            student=st, comment_type=comment_type,
+                            content=content, status=status,
+                        )
+                        created += 1
+                messages.success(request, f"已为 {created} 名学生保存评语。")
+                return redirect("comments:list")
+
         form = StudentCommentForm(request.POST)
         if form.is_valid():
             c = form.save(commit=False)
@@ -51,7 +75,12 @@ def create(request):
     else:
         form = StudentCommentForm()
 
-    return render(request, "comments/form.html", {"form": form})
+    students_json = [
+        {"id": s.pk, "name": s.name} for s in Student.objects.filter(
+            school_class=current_class, is_deleted=False,
+        ).order_by("student_id")
+    ] if current_class else []
+    return render(request, "comments/form.html", {"form": form, "students_json": students_json})
 
 
 @login_required

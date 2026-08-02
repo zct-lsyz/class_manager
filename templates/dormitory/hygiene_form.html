@@ -9,8 +9,17 @@
     <div class="card-header">检查信息</div>
     <div class="card-body">
         <div class="row g-3">
-            <div class="col-md-4"><label class="form-label small">宿舍 <span class="text-danger">*</span></label>{{ form.room }}
-                <div class="form-text">先选择宿舍，学生列表会自动更新为该宿舍成员。</div></div>
+            <div class="col-md-5">
+                <label class="form-label small">宿舍 <span class="text-danger">*</span></label>{{ form.room }}
+                <div class="form-text">先选择宿舍，学生列表会自动更新为该宿舍成员。</div>
+            </div>
+            <div class="col-md-7">
+                <label class="form-label small"><strong>扣分对象（可多选）</strong></label>
+                <button type="button" class="btn btn-outline-secondary btn-sm" id="scsButton">选择学生</button>
+                <div class="border rounded mt-1 bg-white p-2 d-none" id="scsPanel" style="max-width:380px;"></div>
+                <div class="d-flex flex-wrap gap-1 mt-1" id="scsSummary"></div>
+                <input type="hidden" name="student_mode" id="scsMode" value="one">
+            </div>
             <div class="col-md-4"><label class="form-label small">日期</label>{{ form.date }}</div>
             <div class="col-md-4"><label class="form-label small">时间</label>{{ form.check_time }}</div>
             <div class="col-md-4"><label class="form-label small">检查人</label>{{ form.inspector }}</div>
@@ -18,21 +27,6 @@
             <div class="col-md-4"><label class="form-label small">整改期限</label>{{ form.rectification_deadline }}</div>
             <div class="col-md-4"><label class="form-label small">现场照片（可多选）</label>{{ form.photos }}{% if form.photos.errors %}<div class="text-danger small">{{ form.photos.errors.0 }}</div>{% endif %}<div class="form-text">单张过大时将自动压缩至约 3MB 以内。</div></div>
             <div class="col-12"><label class="form-label small">备注</label>{{ form.remarks }}</div>
-        </div>
-
-        <hr>
-        <div class="row g-3">
-            <div class="col-12">
-                <label class="form-label small"><strong>扣分对象（可多选）</strong></label>
-                <div class="student-chip-select">
-                    <select id="studentPicker" class="form-select form-select-sm mb-1"></select>
-                    <div id="selectedStudents" class="d-flex flex-wrap gap-1 border rounded p-2">
-                        <span class="text-muted small">先选宿舍，再从下拉选择学生，可多选；点 ✕ 取消选中。</span>
-                    </div>
-                </div>
-                <div class="form-text">若本次卫生检查不达标（有扣分），将给选中的学生同步扣分；选择「全体学生」则宿舍内每名学生都扣分。不选则不扣分。</div>
-                <input type="hidden" name="student_mode" id="studentMode" value="one">
-            </div>
         </div>
     </div>
 
@@ -61,19 +55,18 @@
 
 {% block extra_js %}
 {{ dorm_room_students|json_script:"room-students-data" }}
-<script src="{% static 'js/student-chip-select.js' %}"></script>
+<script src="{% static 'js/student-checkbox-select.js' %}"></script>
 <script>
 const ROOM_STUDENTS = JSON.parse(document.getElementById('room-students-data').textContent);
 (function() {
-    // 宿舍→学生 芯片多选
-    initStudentChipSelect({
-        pickerId: 'studentPicker',
-        chipsId: 'selectedStudents',
-        modeId: 'studentMode',
+    // 宿舍→学生 复选框下拉多选
+    initStudentCheckboxSelect({
+        buttonId: 'scsButton', panelId: 'scsPanel', summaryId: 'scsSummary',
         studentsName: 'students',
         roomSelectId: 'id_room',
         studentsByRoom: ROOM_STUDENTS,
         allLabel: '全体学生（宿舍内每名学生）',
+        modeId: 'scsMode',
     });
 })();
 </script>

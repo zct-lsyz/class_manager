@@ -8,17 +8,7 @@
 <form method="post">{% csrf_token %}
 {% for f in form %}
 {% if f.name == "student" %}
-<div class="mb-3">
-    <label class="form-label small">{{ f.label }}（可多选）</label>
-    <div class="student-chip-select">
-        <select id="studentPicker" class="form-select form-select-sm mb-1"></select>
-        <div id="selectedStudents" class="d-flex flex-wrap gap-1 border rounded p-2">
-            <span class="text-muted small">从上方下拉选择学生，可多选；点 ✕ 取消选中。</span>
-        </div>
-    </div>
-    <input type="hidden" name="student_mode" id="studentMode" value="one">
-    {% if f.errors %}<div class="text-danger small">{{ f.errors.0 }}</div>{% endif %}
-</div>
+{% include "_student_checkbox_field.html" with field=f %}
 {% else %}
 <div class="mb-3">
     <label class="form-label small">{{ f.label }}</label>
@@ -33,20 +23,4 @@
 {% include "discipline/_item_auto_fill.html" %}
 {% endblock %}
 
-{% block extra_js %}
-{{ students_json|json_script:"classroom-students-data" }}
-<script src="{% static 'js/student-chip-select.js' %}"></script>
-<script>
-(function() {
-    const students = JSON.parse(document.getElementById('classroom-students-data').textContent);
-    initStudentChipSelect({
-        pickerId: 'studentPicker',
-        chipsId: 'selectedStudents',
-        modeId: 'studentMode',
-        studentsName: 'students',
-        staticStudents: students,
-        allLabel: '全体学生（同步给班内每名学生）',
-    });
-})();
-</script>
-{% endblock %}
+{% block extra_js %}{% endblock %}

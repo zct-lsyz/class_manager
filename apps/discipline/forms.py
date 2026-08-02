@@ -68,7 +68,7 @@ class DormDisciplineForm(forms.ModelForm):
     class Meta:
         model = DormDisciplineRecord
         fields = [
-            "student", "dorm_room", "date", "time",
+            "dorm_room", "student", "date", "time",
             "item", "custom_content", "severity", "description",
             "action_taken", "points_deducted", "needs_follow_up",
             "follow_up_date", "follow_up_result", "remarks",
