@@ -38,6 +38,77 @@ def _build_grid(layout, assignments):
 
 
 @login_required
+def plan_export(request):
+    """导出当前座位方案为 Excel。"""
+    current_class = get_current_class(request.user)
+    current_plan = SeatPlan.objects.filter(
+        school_class=current_class, is_active=True,
+    ).first() if current_class else None
+    if not current_plan or not current_plan.layout:
+        messages.error(request, "暂无可用座位方案。")
+        return redirect("seating:index")
+
+    layout = current_plan.layout
+    assignments = list(SeatAssignment.objects.filter(
+        seat_plan=current_plan,
+    ).select_related("student"))
+    grid = _build_grid(layout, assignments)
+
+    from openpyxl import Workbook
+    from openpyxl.styles import Alignment, Font, PatternFill, Border, Side
+    from django.http import HttpResponse
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "座位表"
+    thin = Side(style="thin", color="CCCCCC")
+    border = Border(left=thin, right=thin, top=thin, bottom=thin)
+    header_fill = PatternFill("solid", start_color="1A73E8")
+
+    # 讲台行
+    if layout.podium_position == "back":
+        ws.cell(1, 1, "讲台").font = Font(bold=True, color="FFFFFF")
+        ws.cell(1, 1).fill = header_fill
+        ws.cell(1, 1).alignment = Alignment(horizontal="center", vertical="center")
+        ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=layout.cols)
+        start_row = 2
+    else:
+        start_row = 1
+
+    rows = range(layout.rows - 1, -1, -1) if layout.podium_position == "back" else range(layout.rows)
+    for i, r in enumerate(rows):
+        row_idx = start_row + i
+        for c in range(layout.cols):
+            student = grid.get(r, {}).get(c)
+            cell = ws.cell(row_idx, c + 1)
+            cell.border = border
+            cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+            if student:
+                cell.value = student.name
+                cell.font = Font(bold=True)
+
+    # 讲台（在前方）
+    if layout.podium_position != "back":
+        podium_row = start_row + layout.rows
+        ws.cell(podium_row, 1, "讲台").font = Font(bold=True, color="FFFFFF")
+        ws.cell(podium_row, 1).fill = header_fill
+        ws.cell(podium_row, 1).alignment = Alignment(horizontal="center", vertical="center")
+        ws.merge_cells(start_row=podium_row, start_column=1, end_row=podium_row, end_column=layout.cols)
+
+    for c in range(1, layout.cols + 1):
+        ws.column_dimensions[chr(64 + c)].width = 14
+    for i in range(start_row, start_row + layout.rows + 1):
+        ws.row_dimensions[i].height = 22
+
+    response = HttpResponse(
+        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
+    response["Content-Disposition"] = 'attachment; filename="seating_plan.xlsx"'
+    wb.save(response)
+    return response
+
+
+@login_required
 def index(request):
     """座位表 - 可视化排座"""
     current_class = get_current_class(request.user)
@@ -150,7 +221,8 @@ def plan_create(request):
 @login_required
 def plan_activate(request, pk):
     """激活历史座位方案"""
-    plan = get_object_or_404(SeatPlan, pk=pk)
+    current_class = get_current_class(request.user)
+    plan = get_object_or_404(SeatPlan, pk=pk, school_class=current_class)
     if request.method == "POST":
         SeatPlan.objects.filter(school_class=plan.school_class).update(is_active=False)
         plan.is_active = True

@@ -75,7 +75,8 @@ def reward_create(request):
 @login_required
 def reward_edit(request, pk):
     """编辑奖励记录"""
-    record = get_object_or_404(RewardRecord, pk=pk)
+    current_class = get_current_class(request.user)
+    record = get_object_or_404(RewardRecord, pk=pk, school_class=current_class)
     if request.method == "POST":
         form = RewardRecordForm(
             request.POST, request.FILES, instance=record,
@@ -96,7 +97,8 @@ def reward_edit(request, pk):
 @login_required
 def reward_delete(request, pk):
     """删除奖励记录（软删除）"""
-    record = get_object_or_404(RewardRecord, pk=pk)
+    current_class = get_current_class(request.user)
+    record = get_object_or_404(RewardRecord, pk=pk, school_class=current_class)
     if request.method == "POST":
         PointRecord.objects.filter(source_type="reward", source_id=record.pk).update(is_deleted=True)
         soft_delete(

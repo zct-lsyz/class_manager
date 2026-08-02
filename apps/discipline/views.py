@@ -9,7 +9,9 @@ from apps.discipline.forms import ConfigurableItemForm, ClassroomDisciplineForm,
 from apps.classes.utils import get_current_class
 from apps.classes.models import SchoolClass, Semester
 from apps.classes.decorators import require_current_class
+from apps.students.models import Student
 from apps.audit.services import soft_delete
+from apps.audit.models import OperationLog
 
 
 def get_client_ip(request):
@@ -83,16 +85,112 @@ def classroom_list(request):
     return render(request, "discipline/classroom_list.html", {"page_obj": page_obj})
 
 
+def _create_classroom_discipline_records(current_class, current_semester, students, request, points, item):
+    """为多个学生创建课堂纪律记录并同步积分。返回创建条数。"""
+    from datetime import date as _date, time as _time
+    from django.db import transaction as db_transaction
+
+    def _as_date(name, default=None):
+        v = request.POST.get(name, "")
+        try:
+            return _date.fromisoformat(v) if v else default
+        except ValueError:
+            return default
+
+    def _as_time(name):
+        v = request.POST.get(name, "")
+        try:
+            hh, mm = v.split(":")
+            return _time(int(hh), int(mm))
+        except (ValueError, TypeError):
+            return None
+
+    created = 0
+    with db_transaction.atomic():
+        for st in students:
+            record = ClassroomDisciplineRecord.objects.create(
+                school_class=current_class,
+                semester=current_semester,
+                student=st,
+                date=_as_date("date", timezone.localdate()),
+                time=_as_time("time"),
+                period=request.POST.get("period", "").strip(),
+                subject=request.POST.get("subject", "").strip(),
+                item=item,
+                custom_content=request.POST.get("custom_content", "").strip(),
+                severity=request.POST.get("severity", "moderate"),
+                description=request.POST.get("description", "").strip(),
+                action_taken=request.POST.get("action_taken", "").strip(),
+                points_deducted=points,
+                needs_follow_up=request.POST.get("needs_follow_up") == "on",
+                follow_up_date=_as_date("follow_up_date"),
+                follow_up_result=request.POST.get("follow_up_result", "").strip(),
+                remarks=request.POST.get("remarks", "").strip(),
+            )
+            _sync_discipline_points(record)
+            created += 1
+    return created
+
+
 @login_required
 @require_current_class
 def classroom_create(request):
-    """登记课堂纪律"""
+    """登记课堂纪律（支持多选学生或全体）"""
     current_class = get_current_class(request.user)
     current_semester = Semester.objects.filter(
         school_class=current_class, is_current=True,
     ).first()
+    students_json = [
+        {"id": s.pk, "name": s.name} for s in Student.objects.filter(
+            school_class=current_class, is_deleted=False,
+        ).order_by("student_id")
+    ] if current_class else []
 
     if request.method == "POST":
+        student_mode = request.POST.get("student_mode", "one")
+
+        if student_mode in ("all", "selected"):
+            item = None
+            item_id = request.POST.get("item", "")
+            if item_id:
+                item = ConfigurableItem.objects.filter(
+                    pk=item_id, module="classroom_discipline", school_class=current_class,
+                ).first()
+            try:
+                points = int(request.POST.get("points_deducted", "0") or "0")
+            except (ValueError, TypeError):
+                points = 0
+
+            if student_mode == "all":
+                students = Student.objects.filter(
+                    school_class=current_class, is_deleted=False,
+                )
+            else:
+                student_ids = request.POST.getlist("students")
+                students = Student.objects.filter(
+                    pk__in=student_ids, school_class=current_class, is_deleted=False,
+                ).distinct()
+
+            if not students.exists():
+                messages.error(request, "请选择至少一名学生。")
+                return redirect("discipline:classroom_create")
+
+            created = _create_classroom_discipline_records(
+                current_class, current_semester, students, request, points, item,
+            )
+            messages.success(
+                request,
+                f"已为 {created} 名学生登记课堂纪律（每人{'扣' if points else '加'} {abs(points)} 分）。",
+            )
+            OperationLog.objects.create(
+                user=request.user, action="create", module="discipline",
+                object_repr="课堂纪律",
+                detail=f"课堂纪律多学生登记：{created} 人，{points} 分",
+                ip_address=get_client_ip(request), success=True,
+            )
+            return redirect("discipline:classroom_list")
+
+        # 单学生模式
         form = ClassroomDisciplineForm(request.POST)
         if form.is_valid():
             record = form.save(commit=False)
@@ -102,16 +200,21 @@ def classroom_create(request):
             _sync_discipline_points(record)
             messages.success(request, "课堂纪律记录已保存。")
             return redirect("discipline:classroom_list")
-    else:
-        form = ClassroomDisciplineForm()
+        return render(request, "discipline/classroom_form.html", {
+            "form": form, "title": "登记课堂纪律", "students_json": students_json,
+        })
 
-    return render(request, "discipline/classroom_form.html", {"form": form, "title": "登记课堂纪律"})
+    form = ClassroomDisciplineForm()
+    return render(request, "discipline/classroom_form.html", {
+        "form": form, "title": "登记课堂纪律", "students_json": students_json,
+    })
 
 
 @login_required
 def classroom_edit(request, pk):
     """编辑课堂纪律事件"""
-    record = get_object_or_404(ClassroomDisciplineRecord, pk=pk)
+    current_class = get_current_class(request.user)
+    record = get_object_or_404(ClassroomDisciplineRecord, pk=pk, school_class=current_class)
     if request.method == "POST":
         form = ClassroomDisciplineForm(request.POST, instance=record)
         if form.is_valid():
@@ -127,7 +230,8 @@ def classroom_edit(request, pk):
 @login_required
 def classroom_delete(request, pk):
     """删除课堂纪律事件（软删除）"""
-    record = get_object_or_404(ClassroomDisciplineRecord, pk=pk)
+    current_class = get_current_class(request.user)
+    record = get_object_or_404(ClassroomDisciplineRecord, pk=pk, school_class=current_class)
     if request.method == "POST":
         from apps.rewards.services import unsync_source_point
         unsync_source_point("classroom_discipline", record.pk)
@@ -144,7 +248,8 @@ def classroom_delete(request, pk):
 @login_required
 def classroom_follow_up(request, pk):
     """处理跟进"""
-    record = get_object_or_404(ClassroomDisciplineRecord, pk=pk)
+    current_class = get_current_class(request.user)
+    record = get_object_or_404(ClassroomDisciplineRecord, pk=pk, school_class=current_class)
     if request.method == "POST":
         record.follow_up_date = request.POST.get("follow_up_date") or None
         record.follow_up_result = request.POST.get("follow_up_result", "").strip()
@@ -224,7 +329,8 @@ def dorm_create(request):
 @login_required
 def dorm_edit(request, pk):
     """编辑宿舍纪律"""
-    record = get_object_or_404(DormDisciplineRecord, pk=pk)
+    current_class = get_current_class(request.user)
+    record = get_object_or_404(DormDisciplineRecord, pk=pk, school_class=current_class)
     if request.method == "POST":
         form = DormDisciplineForm(request.POST, instance=record)
         if form.is_valid():
@@ -240,7 +346,8 @@ def dorm_edit(request, pk):
 @login_required
 def dorm_delete(request, pk):
     """删除宿舍纪律"""
-    record = get_object_or_404(DormDisciplineRecord, pk=pk)
+    current_class = get_current_class(request.user)
+    record = get_object_or_404(DormDisciplineRecord, pk=pk, school_class=current_class)
     if request.method == "POST":
         from apps.rewards.services import unsync_source_point
         unsync_source_point("dorm_discipline", record.pk)
@@ -257,7 +364,8 @@ def dorm_delete(request, pk):
 @login_required
 def dorm_follow_up(request, pk):
     """宿舍纪律跟进处理"""
-    record = get_object_or_404(DormDisciplineRecord, pk=pk)
+    current_class = get_current_class(request.user)
+    record = get_object_or_404(DormDisciplineRecord, pk=pk, school_class=current_class)
     if request.method == "POST":
         record.follow_up_date = request.POST.get("follow_up_date") or None
         record.follow_up_result = request.POST.get("follow_up_result", "").strip()

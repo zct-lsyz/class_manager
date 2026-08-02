@@ -288,9 +288,12 @@ def exam_detail(request, pk):
     for es in exam_subjects:
         es.score_count = Score.objects.filter(exam_subject=es, is_deleted=False).count()
 
-    # 未加入考试的科目
+    # 未加入考试的科目（本用户 + 系统默认）
     added_subject_ids = exam_subjects.values_list("subject_id", flat=True)
-    available_subjects = Subject.objects.filter(is_active=True).exclude(id__in=added_subject_ids)
+    available_subjects = Subject.objects.filter(
+        Q(created_by=request.user) | Q(created_by__isnull=True),
+        is_active=True,
+    ).exclude(id__in=added_subject_ids)
 
     # 发布/取消发布
     if request.method == "POST" and request.POST.get("toggle_publish"):
@@ -357,7 +360,10 @@ def exam_subject_create(request, pk):
 @login_required
 def exam_subject_delete(request, pk):
     """删除考试科目"""
-    es = get_object_or_404(ExamSubject, pk=pk)
+    current_class = get_current_class(request.user)
+    es = get_object_or_404(
+        ExamSubject, pk=pk, exam__school_class=current_class,
+    )
     exam_pk = es.exam.pk
     if request.method == "POST":
         has_scores = Score.objects.filter(exam_subject=es, is_deleted=False).exists()
@@ -1315,8 +1321,10 @@ def _get_ai_subjects(exam):
 
 @login_required
 def subject_settings(request):
-    """科目设置"""
-    subjects = Subject.objects.all().order_by("sort_order")
+    """科目设置（仅本用户 + 系统默认科目）"""
+    subjects = Subject.objects.filter(
+        Q(created_by=request.user) | Q(created_by__isnull=True),
+    ).order_by("sort_order")
 
     if request.method == "POST":
         name = request.POST.get("name", "")
@@ -1327,7 +1335,10 @@ def subject_settings(request):
         except (ValueError, TypeError):
             sort_order = 0
         if name:
-            Subject.objects.create(name=name, short_name=short_name, sort_order=sort_order)
+            Subject.objects.create(
+                name=name, short_name=short_name, sort_order=sort_order,
+                created_by=request.user,
+            )
             messages.success(request, f"科目「{name}」已添加。")
             return redirect("scores:subject_settings")
 
@@ -1336,8 +1347,8 @@ def subject_settings(request):
 
 @login_required
 def subject_edit(request, pk):
-    """修改科目"""
-    subject = get_object_or_404(Subject, pk=pk)
+    """修改科目（仅自己的）"""
+    subject = get_object_or_404(Subject, pk=pk, created_by=request.user)
     if request.method == "POST":
         name = request.POST.get("name", "").strip()
         short_name = request.POST.get("short_name", "").strip()
@@ -1361,8 +1372,8 @@ def subject_edit(request, pk):
 
 @login_required
 def subject_delete(request, pk):
-    """删除/停用科目"""
-    subject = get_object_or_404(Subject, pk=pk)
+    """删除/停用科目（仅自己的）"""
+    subject = get_object_or_404(Subject, pk=pk, created_by=request.user)
     if request.method == "POST":
         from apps.scores.models import ExamSubject
         if ExamSubject.objects.filter(subject=subject).exists():
@@ -1379,6 +1390,7 @@ def subject_delete(request, pk):
 def score_import(request):
     """Excel 批量导入成绩"""
     if request.method == "POST":
+        current_class = get_current_class(request.user)
         exam_id = request.POST.get("exam_id", "")
         subject_id = request.POST.get("subject_id", "")
         uploaded = request.FILES.get("file")
@@ -1387,7 +1399,9 @@ def score_import(request):
             messages.error(request, "请选择考试、科目并上传文件。")
             return redirect(f"{request.path}?exam_id={exam_id}&subject_id={subject_id}")
 
-        exam = get_object_or_404(Exam, pk=exam_id, is_deleted=False)
+        exam = get_object_or_404(
+            Exam, pk=exam_id, school_class=current_class, is_deleted=False,
+        )
         exam_subject = get_object_or_404(
             ExamSubject, pk=subject_id, exam=exam
         )
@@ -1555,10 +1569,15 @@ def _wide_exam_subject(exam, subject_name, full_score, sort_order):
     ).select_related("subject").first()
     if exam_subject:
         return exam_subject
-    subject = Subject.objects.filter(name__in=names).order_by("sort_order", "pk").first()
+    owner = exam.school_class.created_by
+    subject = Subject.objects.filter(
+        Q(created_by=owner) | Q(created_by__isnull=True),
+        name__in=names,
+    ).order_by("sort_order", "pk").first()
     if not subject:
         subject = Subject.objects.create(
             name=subject_name, short_name=subject_name, sort_order=sort_order,
+            created_by=owner,
         )
     return ExamSubject.objects.create(
         exam=exam, subject=subject, full_score=full_score, sort_order=sort_order,

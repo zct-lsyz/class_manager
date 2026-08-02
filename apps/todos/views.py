@@ -112,7 +112,8 @@ def todo_add(request):
 @login_required
 def todo_toggle(request, pk):
     """切换完成状态"""
-    todo = get_object_or_404(TodoItem, pk=pk, is_deleted=False)
+    current_class = get_current_class(request.user)
+    todo = get_object_or_404(TodoItem, pk=pk, school_class=current_class, is_deleted=False)
     todo.is_completed = not todo.is_completed
     if todo.is_completed:
         todo.completed_at = timezone.now()
@@ -128,7 +129,8 @@ def todo_toggle(request, pk):
 @login_required
 def todo_delete(request, pk):
     """软删除待办"""
-    todo = get_object_or_404(TodoItem, pk=pk, is_deleted=False)
+    current_class = get_current_class(request.user)
+    todo = get_object_or_404(TodoItem, pk=pk, school_class=current_class, is_deleted=False)
     todo.is_deleted = True
     todo.save(update_fields=["is_deleted", "updated_at"])
     messages.info(request, f"待办「{todo.title}」已删除。")
@@ -138,7 +140,8 @@ def todo_delete(request, pk):
 @login_required
 def todo_edit(request, pk):
     """编辑待办"""
-    todo = get_object_or_404(TodoItem, pk=pk, is_deleted=False)
+    current_class = get_current_class(request.user)
+    todo = get_object_or_404(TodoItem, pk=pk, school_class=current_class, is_deleted=False)
     if request.method == "POST":
         title = request.POST.get("title", "").strip()
         if not title:

@@ -11,4 +11,5 @@ urlpatterns = [
     path("save/", views.save_plan, name="save_plan"),
     path("auto-arrange/", views.auto_arrange, name="auto_arrange"),
     path("print/", views.print_plan, name="print"),
+    path("export/", views.plan_export, name="export"),
 ]

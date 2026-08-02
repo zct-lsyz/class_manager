@@ -198,6 +198,11 @@
                             </a>
                         </li>
                         <li class="nav-item">
+                            <a class="nav-link {% if request.resolver_match.app_name == 'evaluation' %}active{% endif %}" href="{% url 'evaluation:index' %}">
+                                <i class="bi bi-award-fill me-2"></i>评选管理
+                            </a>
+                        </li>
+                        <li class="nav-item">
                             <a class="nav-link" href="{% url 'scores:ai_settings' %}">
                                 <i class="bi bi-stars me-2"></i>AI 分析设置
                             </a>
@@ -212,6 +217,11 @@
                     <!-- 成长记录 -->
                     <button class="nav-section-title nav-section-toggle" type="button"><span>成长记录</span><i class="bi bi-caret-right-fill nav-toggle-icon"></i></button>
                     <ul class="nav flex-column nav-section-menu">
+                        <li class="nav-item">
+                            <a class="nav-link {% if request.resolver_match.url_name == 'growth' %}active{% endif %}" href="{% url 'students:growth' %}">
+                                <i class="bi bi-signpost-2 me-2"></i>成长足迹
+                            </a>
+                        </li>
                         <li class="nav-item">
                             <a class="nav-link" href="{% url 'comments:list' %}">
                                 <i class="bi bi-chat-quote me-2"></i>学生评语

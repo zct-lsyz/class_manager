@@ -7,6 +7,7 @@ urlpatterns = [
     # 学生
     path("", views.student_list, name="list"),
     path("create/", views.student_create, name="create"),
+    path("growth/", views.growth, name="growth"),
     path("history/<str:module>/", views.history_browser, name="history_browser"),
     path("history/<str:module>/<int:pk>/", views.history_detail, name="history_detail"),
     path("<int:pk>/", views.student_detail, name="detail"),

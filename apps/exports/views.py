@@ -454,9 +454,9 @@ def import_data(request):
                 messages.error(request, "文件中没有数据行。")
             else:
                 if import_type == "student_info":
-                    valid_rows, errors = validate_student_info(data_rows)
+                    valid_rows, errors = validate_student_info(data_rows, current_class)
                 elif import_type == "students":
-                    valid_rows, errors = validate_students(data_rows)
+                    valid_rows, errors = validate_students(data_rows, current_class)
                 else:
                     valid_rows, errors = validate_guardians(data_rows, current_class)
 

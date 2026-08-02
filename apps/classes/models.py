@@ -221,6 +221,7 @@ class CoursePeriod(BaseModel):
         null=True, blank=True, verbose_name="学期",
     )
     period = models.IntegerField("节次")
+    name = models.CharField("节次名称", max_length=50, blank=True, default="")
     start_time = models.TimeField("开始时间", null=True, blank=True)
     end_time = models.TimeField("结束时间", null=True, blank=True)
 

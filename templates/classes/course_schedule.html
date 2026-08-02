@@ -1,15 +1,21 @@
 {% extends "base.html" %}
+{% load static %}
 {% load custom_filters %}
 {% block title %}课程表{% endblock %}
 {% block content %}
 <h4 class="mt-3 mb-4 d-flex justify-content-between align-items-center flex-wrap">
     <span><i class="bi bi-calendar-week me-2 text-primary"></i>课程表</span>
-    <span class="d-flex gap-2 flex-wrap">
+    <span class="d-flex gap-2 flex-wrap align-items-center">
+        <form method="post" enctype="multipart/form-data" action="{% url 'classes:course_schedule_import' %}" class="d-flex gap-1 align-items-center">
+            {% csrf_token %}
+            <input type="file" name="file" accept=".xlsx" class="form-control form-control-sm" style="width:170px" required>
+            <button class="btn btn-outline-primary btn-sm"><i class="bi bi-upload me-1"></i>导入课表</button>
+        </form>
         <a href="{% url 'classes:course_schedule_export' %}" class="btn btn-success btn-sm" title="导出 Excel（保留科目背景色）">
             <i class="bi bi-file-earmark-excel me-1"></i>导出 Excel
         </a>
-        <button type="button" class="btn btn-outline-primary btn-sm" onclick="window.print()">
-            <i class="bi bi-printer me-1"></i>打印
+        <button type="button" class="btn btn-danger btn-sm" id="printPdfBtn" onclick="exportPageToPdf({containerId:'schedule-print-area', buttonId:'printPdfBtn', filename:'课程表.pdf', title:'课程表', orientation:'landscape'})">
+            <i class="bi bi-filetype-pdf me-1"></i>打印PDF
         </button>
         <a href="{% url 'classes:course_schedule_history' %}" class="btn btn-outline-secondary btn-sm">
             <i class="bi bi-clock-history me-1"></i>课表历史
@@ -83,36 +89,43 @@
     <div class="card">
         <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
             <span>课表编辑
-                <small class="text-muted ms-2">提示：点击一个格子选中后，再点击另一格可交换（临时调课）</small>
+                <small class="text-muted ms-2">在每个格子下拉选择课程；节次名称与时间可编辑。</small>
             </span>
             <label class="small mb-0">课程节数 <input type="number" name="period_count" value="{{ max_period }}" min="1" max="20" class="form-control form-control-sm d-inline-block ms-1" style="width:76px"></label>
         </div>
         <div class="card-body p-0 table-responsive">
+            <div id="schedule-print-area">
             <table class="table table-bordered mb-0 text-center">
-                <thead><tr><th style="width:60px;">节次</th>
-                    {% for d in "1234567"|make_list %}<th>周{{ d|add:0 }}<br><small class="text-muted">{% if d == '1' %}周一{% elif d == '2' %}周二{% elif d == '3' %}周三{% elif d == '4' %}周四{% elif d == '5' %}周五{% elif d == '6' %}周六{% else %}周日{% endif %}</small></th>{% endfor %}
+                <thead><tr><th style="width:130px;">节次</th>
+                    {% for d in "1234567"|make_list %}<th>{% if d == '1' %}周一{% elif d == '2' %}周二{% elif d == '3' %}周三{% elif d == '4' %}周四{% elif d == '5' %}周五{% elif d == '6' %}周六{% else %}周日{% endif %}</th>{% endfor %}
                 </tr></thead>
                 <tbody>
                 {% for period in periods %}
                 <tr>
                     {% with period_setting=period_settings|get_item:period %}
-                    <td class="align-middle text-muted small" style="min-width:120px">第{{ period }}节
-                        <input type="time" name="start_time_{{ period }}" value="{{ period_setting.start_time|time:'H:i' }}" class="form-control form-control-sm mt-1 print-hide" title="开始时间">
-                        <input type="time" name="end_time_{{ period }}" value="{{ period_setting.end_time|time:'H:i' }}" class="form-control form-control-sm mt-1 print-hide" title="结束时间">
-                        <div class="d-none print-show small">{{ period_setting.start_time|time:'H:i'|default:"" }}-{{ period_setting.end_time|time:'H:i'|default:"" }}</div>
+                    <td class="align-middle text-center" style="min-width:130px">
+                        <div class="period-display small fw-semibold">
+                            {% if period_setting and period_setting.name %}{{ period_setting.name }}{% else %}第{{ period }}节{% endif %}
+                            {% if period_setting and period_setting.start_time %}<br><span class="text-muted">{{ period_setting.start_time|time:'H:i' }}{% if period_setting.end_time %}-{{ period_setting.end_time|time:'H:i' }}{% endif %}</span>{% endif %}
+                        </div>
+                        <input type="text" name="period_name_{{ period }}" value="{{ period_setting.name|default:'' }}" class="form-control form-control-sm mt-1 no-export" placeholder="节次名称（如 早读/第1节）">
+                        <div class="d-flex gap-1 mt-1 no-export">
+                            <input type="time" name="start_time_{{ period }}" value="{{ period_setting.start_time|time:'H:i' }}" class="form-control form-control-sm" title="开始时间">
+                            <input type="time" name="end_time_{{ period }}" value="{{ period_setting.end_time|time:'H:i' }}" class="form-control form-control-sm" title="结束时间">
+                        </div>
                     </td>
                     {% endwith %}
                     {% for weekday in weekdays %}
-                    <td class="p-1 schedule-cell" style="min-width:140px;">
+                    <td class="p-1 schedule-cell" style="min-width:110px;">
                         {% with entry=grid|get_item:weekday|get_item:period %}
-                        <select name="cell_{{ weekday }}_{{ period }}" class="form-select form-select-sm course-input mb-1" data-weekday="{{ weekday }}" data-period="{{ period }}">
-                            <option value="">（自习 / 无课）</option>
+                        <select name="cell_{{ weekday }}_{{ period }}" class="form-select form-select-sm course-input mb-1 no-export" data-weekday="{{ weekday }}" data-period="{{ period }}">
+                            <option value="">（无课）</option>
                             {% for c in courses %}
                             <option value="{{ c.pk }}" {% if entry and entry.course_id == c.pk %}selected{% endif %}>{{ c.name }}{% if c.teacher %}（{{ c.teacher }}）{% endif %}</option>
                             {% endfor %}
                         </select>
                         <div class="course-display small fw-semibold">
-                            {% if entry %}{{ entry.subject }}{% if entry.teacher %}<br><span class="text-muted">{{ entry.teacher }}</span>{% endif %}{% else %}自习{% endif %}
+                            {% if entry %}{{ entry.subject }}{% if entry.teacher %}<br><span class="text-muted">{{ entry.teacher }}</span>{% endif %}{% endif %}
                         </div>
                         {% endwith %}
                     </td>
@@ -121,6 +134,7 @@
                 {% endfor %}
                 </tbody>
             </table>
+            </div>
         </div>
         <div class="card-footer text-end">
             <button type="submit" class="btn btn-primary"><i class="bi bi-save me-1"></i>保存课程表</button>
@@ -144,42 +158,19 @@
         colorCell(select);
         select.addEventListener('change', () => colorCell(select));
     });
-
-    // 临时调课：点击格子选中 → 再点另一格交换
-    let selected = null;
-    document.querySelectorAll('.schedule-cell').forEach(cell => {
-        cell.addEventListener('click', (e) => {
-            const select = cell.querySelector('select.course-input');
-            if (!select) return;
-            if (selected && selected !== select) {
-                const a = selected.value, b = select.value;
-                selected.value = b;
-                select.value = a;
-                colorCell(selected);
-                colorCell(select);
-                selected.classList.remove('border','border-primary');
-                selected = null;
-            } else {
-                selected = select;
-                select.classList.add('border','border-primary');
-            }
-        });
-    });
 })();
 </script>
 {% endblock %}
 
 {% block extra_css %}
 <style>
-@media print {
-    * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
-    body * { visibility: hidden; }
-    .card, .card * { visibility: visible; }
-    .card { position: absolute; left: 0; top: 0; width: 100%; border: none; }
-    .print-hide { display: none !important; }
-    .print-show { display: block !important; }
-    .schedule-cell { background: #fff !important; }
-    .course-input, .btn, .card-header button, .card-header a, .form-check { display: none !important; }
-}
+/* PDF 打印：让导出区域的背景色完整保留 */
+#schedule-print-area table { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 </style>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+<script src="{% static 'js/pdf-export.js' %}"></script>
 {% endblock %}

@@ -52,7 +52,10 @@ def conversation_create(request):
 
 @login_required
 def conversation_delete(request, pk):
-    record = get_object_or_404(StudentConversation, pk=pk, is_deleted=False)
+    current_class = get_current_class(request.user)
+    record = get_object_or_404(
+        StudentConversation, pk=pk, school_class=current_class, is_deleted=False,
+    )
     if request.method == "POST":
         soft_delete(
             record,
@@ -151,8 +154,10 @@ def concern_create(request):
 @login_required
 def concern_detail(request, pk):
     """重点关注详情"""
+    current_class = get_current_class(request.user)
     record = get_object_or_404(
-        ConcernRecord.objects.select_related("student"), pk=pk,
+        ConcernRecord.objects.select_related("student"),
+        pk=pk, school_class=current_class,
     )
     return render(request, "communications/concern_detail.html", {"record": record})
 
@@ -160,7 +165,8 @@ def concern_detail(request, pk):
 @login_required
 def concern_update(request, pk):
     """更新重点关注（状态/跟进）"""
-    record = get_object_or_404(ConcernRecord, pk=pk)
+    current_class = get_current_class(request.user)
+    record = get_object_or_404(ConcernRecord, pk=pk, school_class=current_class)
     if request.method == "POST":
         form = ConcernRecordForm(request.POST, instance=record)
         if form.is_valid():

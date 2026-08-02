@@ -57,8 +57,10 @@ def create(request):
 @login_required
 def detail(request, pk):
     """评语详情"""
+    current_class = get_current_class(request.user)
     comment = get_object_or_404(
-        StudentComment.objects.select_related("student", "semester"), pk=pk,
+        StudentComment.objects.select_related("student", "semester"),
+        pk=pk, school_class=current_class,
     )
     return render(request, "comments/detail.html", {"comment": comment})
 
@@ -66,7 +68,8 @@ def detail(request, pk):
 @login_required
 def edit(request, pk):
     """编辑评语"""
-    comment = get_object_or_404(StudentComment, pk=pk)
+    current_class = get_current_class(request.user)
+    comment = get_object_or_404(StudentComment, pk=pk, school_class=current_class)
     if request.method == "POST":
         form = StudentCommentForm(request.POST, instance=comment)
         if form.is_valid():
@@ -81,7 +84,8 @@ def edit(request, pk):
 @login_required
 def delete(request, pk):
     """删除评语（软删除）"""
-    comment = get_object_or_404(StudentComment, pk=pk)
+    current_class = get_current_class(request.user)
+    comment = get_object_or_404(StudentComment, pk=pk, school_class=current_class)
     if request.method == "POST":
         soft_delete(
             comment,

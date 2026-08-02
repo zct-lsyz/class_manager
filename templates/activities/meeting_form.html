@@ -1,4 +1,40 @@
-{% extends "base.html" %}{% block title %}新建班会{% endblock %}
+{% extends "base.html" %}{% load static %}{% block title %}新建班会{% endblock %}
 {% block content %}<div class="row justify-content-center mt-3"><div class="col-md-8">
-  <div class="card"><div class="card-header">新建班会</div><div class="card-body"><form method="post" enctype="multipart/form-data">{% csrf_token %}{% for f in form %}<div class="mb-3"><label class="form-label small">{{ f.label }}</label>{{ f }}</div>{% endfor %}<button class="btn btn-primary">保存</button></form></div></div>
+  <div class="card"><div class="card-header">新建班会</div><div class="card-body"><form method="post" enctype="multipart/form-data">{% csrf_token %}
+  {% for f in form %}
+  {% if f.name == "participants" %}
+  <div class="mb-3">
+    <label class="form-label small">{{ f.label }}（可多选）</label>
+    <div class="student-chip-select">
+      <select id="studentPicker" class="form-select form-select-sm mb-1"></select>
+      <div id="selectedStudents" class="d-flex flex-wrap gap-1 border rounded p-2">
+        <span class="text-muted small">从下拉选择参与学生，可多选；点 ✕ 取消选中。</span>
+      </div>
+    </div>
+    {{ f }}
+    <input type="hidden" name="student_mode" id="studentMode" value="one">
+    {% if f.errors %}<div class="text-danger small">{{ f.errors.0 }}</div>{% endif %}
+  </div>
+  {% else %}
+  <div class="mb-3"><label class="form-label small">{{ f.label }}</label>{{ f }}{% if f.errors %}<div class="text-danger small">{{ f.errors.0 }}</div>{% endif %}</div>
+  {% endif %}
+  {% endfor %}
+  <button class="btn btn-primary">保存</button></form></div></div>
 </div></div>{% endblock %}
+
+{% block extra_js %}
+{{ students_json|json_script:"meeting-students-data" }}
+<script src="{% static 'js/student-chip-select.js' %}"></script>
+<script>
+(function() {
+    const students = JSON.parse(document.getElementById('meeting-students-data').textContent);
+    initStudentChipSelect({
+        pickerId: 'studentPicker',
+        chipsId: 'selectedStudents',
+        modeId: 'studentMode',
+        studentsName: 'participants',
+        staticStudents: students,
+    });
+})();
+</script>
+{% endblock %}

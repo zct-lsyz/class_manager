@@ -71,6 +71,11 @@ class StorageAlertRule(BaseModel):
         ("rewards", "奖惩照片"),
         ("activities", "文体活动照片"),
     ]
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE,
+        null=True, blank=True,
+        related_name="storage_alert_rules", verbose_name="创建者",
+    )
     name = models.CharField("提醒名称", max_length=100)
     category = models.CharField("提醒项", max_length=30, choices=CATEGORY_CHOICES)
     threshold_mb = models.PositiveIntegerField("阈值(MB)", default=1024)

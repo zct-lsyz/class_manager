@@ -125,6 +125,9 @@ def semester_create(request):
     """新增学期"""
     if request.method == "POST":
         form = SemesterForm(request.POST)
+        form.fields["school_class"].queryset = SchoolClass.objects.filter(
+            created_by=request.user,
+        )
         if form.is_valid():
             sem = form.save(commit=False)
             # 如果该班级没有当前学期，自动将新创建的学期设为当前学期
@@ -155,7 +158,7 @@ def semester_create(request):
 @login_required
 def semester_edit(request, pk):
     """编辑学期"""
-    sem = get_object_or_404(Semester, pk=pk)
+    sem = get_object_or_404(Semester, pk=pk, school_class__created_by=request.user)
     if request.method == "POST":
         form = SemesterForm(request.POST, instance=sem)
         if form.is_valid():
@@ -174,7 +177,7 @@ def semester_edit(request, pk):
 @login_required
 def semester_archive(request, pk):
     """归档学期"""
-    sem = get_object_or_404(Semester, pk=pk)
+    sem = get_object_or_404(Semester, pk=pk, school_class__created_by=request.user)
     if request.method == "POST":
         sem.is_archived = True
         if sem.is_current:
@@ -348,7 +351,8 @@ def study_group_create(request):
 @login_required
 def study_group_delete(request, pk):
     """删除学习小组"""
-    group = get_object_or_404(StudyGroup, pk=pk)
+    current_class = get_current_class(request.user)
+    group = get_object_or_404(StudyGroup, pk=pk, school_class=current_class)
     if request.method == "POST":
         group.is_active = False
         group.save()
@@ -404,9 +408,11 @@ def course_schedule(request):
                 period__gt=max_period,
             ).delete()
             for period in range(1, max_period + 1):
+                period_name = request.POST.get(f"period_name_{period}", "").strip()
                 CoursePeriod.objects.update_or_create(
                     school_class=current_class, semester=current_semester, period=period,
                     defaults={
+                        "name": period_name,
                         "start_time": request.POST.get(f"start_time_{period}") or None,
                         "end_time": request.POST.get(f"end_time_{period}") or None,
                     },
@@ -585,6 +591,145 @@ def course_schedule_export(request):
     response["Content-Disposition"] = 'attachment; filename="course_schedule.xlsx"'
     wb.save(response)
     return response
+
+
+# ====== 课程表 Excel 导入 ======
+
+@login_required
+@require_current_class
+def course_schedule_import(request):
+    """从 Excel 导入课程表（格式与导出模板一致：节次 + 周一~周日 各列）"""
+    current_class = get_current_class(request.user)
+    if request.method != "POST":
+        return redirect("classes:course_schedule")
+    current_semester = Semester.objects.filter(
+        school_class=current_class, is_current=True,
+    ).first() if current_class else None
+
+    uploaded = request.FILES.get("file")
+    if not uploaded or not uploaded.name.lower().endswith(".xlsx"):
+        messages.error(request, "请上传 XLSX 课表文件。")
+        return redirect("classes:course_schedule")
+
+    from django.db import transaction
+    from openpyxl import load_workbook
+    from django.utils import timezone
+    from datetime import datetime, time as dtime
+    try:
+        wb = load_workbook(uploaded, data_only=True)
+        ws = wb.active
+        rows = list(ws.iter_rows(values_only=True))
+    except Exception as exc:
+        messages.error(request, f"文件解析失败：{exc}")
+        return redirect("classes:course_schedule")
+    if not rows:
+        messages.error(request, "文件为空。")
+        return redirect("classes:course_schedule")
+
+    # 定位表头行（含「节次」）
+    header_idx = None
+    for i, row in enumerate(rows):
+        texts = [str(c).strip() if c is not None else "" for c in row]
+        if any("节次" in t for t in texts):
+            header_idx = i
+            break
+    if header_idx is None:
+        messages.error(request, "未找到表头（需含「节次」列）。")
+        return redirect("classes:course_schedule")
+
+    headers = [str(c).strip() if c is not None else "" for c in rows[header_idx]]
+    # 周列索引：周一~周日
+    weekday_cols = {}
+    for idx, h in enumerate(headers):
+        for d in range(1, 8):
+            if h == f"周{d}" or h in ("周一", "周二", "周三", "周四", "周五", "周六", "周日"):
+                wd = d if h == f"周{d}" else ("周一", "周二", "周三", "周四", "周五", "周六", "周日").index(h) + 1
+                weekday_cols[wd] = idx
+    if not weekday_cols:
+        messages.error(request, "未找到周一~周日列。")
+        return redirect("classes:course_schedule")
+
+    imported = 0
+    created_courses = 0
+    max_period = 0
+    with transaction.atomic():
+        for row in rows[header_idx + 1:]:
+            if row is None or all(c is None or str(c).strip() == "" for c in row):
+                continue
+            period_label = str(row[0]).strip() if row[0] is not None else ""
+            if not period_label:
+                continue
+            # 第1行数据 = 第1节，行顺序即节次
+            period = max_period + 1
+            max_period = period
+
+            # 解析节次名称与起止时间：名称[换行]HH:MM-HH:MM
+            name = period_label.splitlines()[0].strip() if period_label else ""
+            times = None
+            for line in period_label.splitlines()[1:]:
+                if "-" in line and ":" in line:
+                    times = line.strip()
+                    break
+            start_t, end_t = None, None
+            if times:
+                try:
+                    s_part, e_part = times.split("-", 1)
+                    start_t = datetime.strptime(s_part.strip(), "%H:%M").time()
+                    end_t = datetime.strptime(e_part.strip(), "%H:%M").time()
+                except (ValueError, TypeError):
+                    pass
+
+            CoursePeriod.objects.update_or_create(
+                school_class=current_class, semester=current_semester, period=period,
+                defaults={
+                    "name": name,
+                    "start_time": start_t,
+                    "end_time": end_t,
+                },
+            )
+
+            for d, col in weekday_cols.items():
+                if col >= len(row):
+                    continue
+                cell = row[col]
+                if cell is None or str(cell).strip() == "":
+                    continue
+                cell_text = str(cell).strip()
+                lines = cell_text.splitlines()
+                course_name = lines[0].strip() if lines else ""
+                teacher = lines[1].strip() if len(lines) > 1 else ""
+                if not course_name:
+                    continue
+                course, created = Course.objects.get_or_create(
+                    school_class=current_class, name=course_name,
+                    defaults={"teacher": teacher},
+                )
+                if created:
+                    created_courses += 1
+                CourseScheduleEntry.objects.update_or_create(
+                    school_class=current_class, semester=current_semester,
+                    weekday=d, period=period,
+                    defaults={
+                        "course": course,
+                        "subject": course_name,
+                        "teacher": teacher,
+                    },
+                )
+                imported += 1
+
+    # 节数调整到导入的最大节次
+    CoursePeriod.objects.filter(
+        school_class=current_class, semester=current_semester,
+        period__gt=max_period,
+    ).delete()
+
+    messages.success(
+        request,
+        f"课表导入完成：共 {imported} 节课"
+        + (f"，自动新增 {created_courses} 门课程" if created_courses else "")
+        + "。",
+    )
+    return redirect("classes:course_schedule")
 
 
 # ====== 课程管理 ======

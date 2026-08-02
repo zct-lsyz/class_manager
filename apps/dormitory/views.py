@@ -214,7 +214,8 @@ def hygiene_items(request):
 @login_required
 def hygiene_item_delete(request, pk):
     """删除卫生项目"""
-    item = get_object_or_404(DormHygieneItem, pk=pk)
+    current_class = get_current_class(request.user)
+    item = get_object_or_404(DormHygieneItem, pk=pk, school_class=current_class)
     if request.method == "POST":
         if item.dormhygieneitemscore_set.exists():
             item.is_active = False
@@ -250,15 +251,49 @@ def hygiene_item_edit(request, pk):
     )
 
 
+def _create_hygiene_deductions(current_class, current_semester, check, students, deduction):
+    """卫生检查不达标时，为选中学生各创建一条宿舍纪律扣分记录并同步积分。"""
+    from apps.discipline.models import DormDisciplineRecord
+    from apps.rewards.services import sync_source_point
+    created = 0
+    with transaction.atomic():
+        for st in students:
+            record = DormDisciplineRecord.objects.create(
+                school_class=current_class,
+                semester=current_semester,
+                student=st,
+                dorm_room=check.room,
+                date=check.date,
+                time=check.check_time,
+                item=None,
+                custom_content="卫生检查不达标",
+                severity="moderate",
+                description=f"卫生检查扣分：{check.room}，扣 {deduction} 分",
+                action_taken=check.rectification,
+                points_deducted=deduction,
+                needs_follow_up=False,
+                remarks="",
+            )
+            sync_source_point(
+                student=st, school_class=current_class,
+                semester=current_semester, date=record.date,
+                points=-deduction, reason=f"卫生检查：{check.room} 卫生不达标",
+                source_type="dorm_discipline", source_id=record.pk,
+            )
+            created += 1
+    return created
+
+
 @login_required
-@require_current_class
 def hygiene_create(request):
-    """录入卫生检查（含项目得分）"""
+    """录入卫生检查（含项目得分；不达标时给选中的学生同步扣分）"""
     current_class = get_current_class(request.user)
     current_semester = Semester.objects.filter(
         school_class=current_class, is_current=True,
     ).first()
     items = DormHygieneItem.objects.filter(school_class=current_class, is_active=True) if current_class else []
+    rooms = DormRoom.objects.filter(building__school_class=current_class).select_related("building") if current_class else []
+    dorm_room_students = _build_room_students(current_class)
 
     if request.method == "POST":
         form = DormHygieneCheckForm(request.POST, request.FILES)
@@ -282,6 +317,7 @@ def hygiene_create(request):
 
                 # 保存父记录后再写项目得分
                 total = 0
+                deduction = 0
                 for item in items:
                     score_val = request.POST.get(f"item_{item.pk}", "")
                     if score_val == "":
@@ -292,6 +328,7 @@ def hygiene_create(request):
                         score = 0
                     score = max(0, min(score, item.full_score))
                     total += score
+                    deduction += max(0, item.full_score - score)
                     DormHygieneItemScore.objects.create(
                         check_record=check, item=item, score=score,
                     )
@@ -309,12 +346,40 @@ def hygiene_create(request):
                         else:
                             check.grade = "poor"
                 check.save(update_fields=["total_score", "grade", "updated_at"])
-            messages.success(request, f"卫生检查已保存（总分 {total} 分）。")
+
+            # 卫生不达标（有扣分）→ 给选中的学生同步扣分
+            deducted_count = 0
+            if deduction > 0:
+                student_mode = request.POST.get("student_mode", "one")
+                if student_mode == "all":
+                    students = _room_students(check.room)
+                elif student_mode == "selected":
+                    student_ids = request.POST.getlist("students")
+                    students = Student.objects.filter(
+                        pk__in=student_ids, school_class=current_class, is_deleted=False,
+                        dorm_assignments__room=check.room, dorm_assignments__is_current=True,
+                    ).distinct()
+                else:
+                    students = Student.objects.none()
+                if students.exists():
+                    deducted_count = _create_hygiene_deductions(
+                        current_class, current_semester, check, students, deduction,
+                    )
+                    OperationLog.objects.create(
+                        user=request.user, action="create", module="dormitory",
+                        object_repr=f"{check.room} 卫生检查",
+                        detail=f"卫生不达标同步扣分：{deducted_count} 人，每人扣 {deduction} 分",
+                        ip_address=get_client_ip(request), success=True,
+                    )
+            msg = f"卫生检查已保存（总分 {total} 分"
+            if deducted_count:
+                msg += f"，{deducted_count} 名学生各扣 {deduction} 分"
+            msg += "）。"
+            messages.success(request, msg)
             return redirect("dormitory:hygiene")
     else:
         form = DormHygieneCheckForm()
 
-    rooms = DormRoom.objects.filter(building__school_class=current_class).select_related("building") if current_class else []
     form.fields["room"].queryset = rooms
 
     # 每个卫生项目的默认实际得分 = 满分 - 默认扣分（新建时自动预填）
@@ -322,7 +387,8 @@ def hygiene_create(request):
         item.default_score = max(0, item.full_score - item.default_deduction)
 
     return render(request, "dormitory/hygiene_form.html", {
-        "form": form, "items": items,
+        "form": form, "items": items, "rooms": rooms,
+        "dorm_room_students": dorm_room_students,
     })
 
 
@@ -371,11 +437,72 @@ def discipline(request):
     return render(request, "dormitory/discipline_list.html", {"page_obj": page_obj})
 
 
-@login_required
-@require_current_class
-def discipline_create(request):
-    """登记宿舍纪律（支持先选宿舍→选择该宿舍学生或全体同步加减分）"""
+def _room_students(room):
+    """获取宿舍当前分配的学生。"""
+    return Student.objects.filter(
+        dorm_assignments__room=room, dorm_assignments__is_current=True,
+        is_deleted=False,
+    ).distinct()
+
+
+def _create_dorm_discipline_records(current_class, current_semester, room, students, request, points, item):
+    """为多个学生创建宿舍纪律记录并同步积分。返回创建条数。"""
     from apps.discipline.models import DormDisciplineRecord
+    from apps.rewards.services import sync_source_point
+    from datetime import date as _date, time as _time
+
+    def _as_date(name, default=None):
+        v = request.POST.get(name, "")
+        try:
+            return _date.fromisoformat(v) if v else default
+        except ValueError:
+            return default
+
+    def _as_time(name):
+        v = request.POST.get(name, "")
+        try:
+            hh, mm = v.split(":")
+            return _time(int(hh), int(mm))
+        except (ValueError, TypeError):
+            return None
+
+    created = 0
+    with transaction.atomic():
+        for st in students:
+            record = DormDisciplineRecord.objects.create(
+                school_class=current_class,
+                semester=current_semester,
+                student=st,
+                dorm_room=room,
+                date=_as_date("date", timezone.localdate()),
+                time=_as_time("time"),
+                item=item,
+                custom_content=request.POST.get("custom_content", "").strip(),
+                severity=request.POST.get("severity", "moderate"),
+                description=request.POST.get("description", "").strip(),
+                action_taken=request.POST.get("action_taken", "").strip(),
+                points_deducted=points,
+                needs_follow_up=request.POST.get("needs_follow_up") == "on",
+                follow_up_date=_as_date("follow_up_date"),
+                follow_up_result=request.POST.get("follow_up_result", "").strip(),
+                remarks=request.POST.get("remarks", "").strip(),
+            )
+            # 同步到统一积分（正的 points_deducted 记扣分）
+            if points:
+                item_name = item.name if item else (record.custom_content or "宿舍纪律")
+                sync_source_point(
+                    student=st, school_class=current_class,
+                    semester=current_semester, date=record.date,
+                    points=-points, reason=f"{record.get_severity_display()}：{item_name}",
+                    source_type="dorm_discipline", source_id=record.pk,
+                )
+            created += 1
+    return created
+
+
+@login_required
+def discipline_create(request):
+    """登记宿舍纪律（先选宿舍→多选该宿舍学生或全体同步加减分）"""
     from apps.discipline.forms import DormDisciplineForm
     from apps.discipline.models import ConfigurableItem
     current_class = get_current_class(request.user)
@@ -390,10 +517,9 @@ def discipline_create(request):
     if request.method == "POST":
         student_mode = request.POST.get("student_mode", "one")
 
-        if student_mode == "all":
-            # 全体模式：给该宿舍每个当前分配学生各创建一条记录，加减分同步
-            room = None
+        if student_mode in ("all", "selected"):
             room_id = request.POST.get("dorm_room", "")
+            room = None
             if room_id:
                 room = get_object_or_404(
                     DormRoom, pk=room_id, building__school_class=current_class,
@@ -405,82 +531,43 @@ def discipline_create(request):
             item = None
             item_id = request.POST.get("item", "")
             if item_id:
-                item = ConfigurableItem.objects.filter(pk=item_id, module="dorm_discipline").first()
+                item = ConfigurableItem.objects.filter(
+                    pk=item_id, module="dorm_discipline", school_class=current_class,
+                ).first()
             try:
                 points = int(request.POST.get("points_deducted", "0") or "0")
             except (ValueError, TypeError):
                 points = 0
 
-            def _as_date(name, default=None):
-                v = request.POST.get(name, "")
-                from datetime import date as _date
-                try:
-                    return _date.fromisoformat(v) if v else default
-                except ValueError:
-                    return default
+            if student_mode == "all":
+                students = _room_students(room)
+            else:
+                student_ids = request.POST.getlist("students")
+                students = Student.objects.filter(
+                    pk__in=student_ids, school_class=current_class, is_deleted=False,
+                    dorm_assignments__room=room, dorm_assignments__is_current=True,
+                ).distinct()
 
-            def _as_time(name):
-                from datetime import time as _time
-                v = request.POST.get(name, "")
-                try:
-                    hh, mm = v.split(":")
-                    return _time(int(hh), int(mm))
-                except (ValueError, TypeError):
-                    return None
-
-            students = Student.objects.filter(
-                dorm_assignments__room=room, dorm_assignments__is_current=True,
-                is_deleted=False,
-            ).distinct()
             if not students.exists():
-                messages.error(request, "该宿舍暂无分配学生。")
+                messages.error(request, "请选择至少一名学生（或该宿舍暂无分配学生）。")
                 return redirect("dormitory:discipline_create")
 
-            created = 0
-            with transaction.atomic():
-                for st in students:
-                    record = DormDisciplineRecord.objects.create(
-                        school_class=current_class,
-                        semester=current_semester,
-                        student=st,
-                        dorm_room=room,
-                        date=_as_date("date", timezone.localdate()),
-                        time=_as_time("time"),
-                        item=item,
-                        custom_content=request.POST.get("custom_content", "").strip(),
-                        severity=request.POST.get("severity", "moderate"),
-                        description=request.POST.get("description", "").strip(),
-                        action_taken=request.POST.get("action_taken", "").strip(),
-                        points_deducted=points,
-                        needs_follow_up=request.POST.get("needs_follow_up") == "on",
-                        follow_up_date=_as_date("follow_up_date"),
-                        follow_up_result=request.POST.get("follow_up_result", "").strip(),
-                        remarks=request.POST.get("remarks", "").strip(),
-                    )
-                    # 同步到统一积分（正的 points_deducted 记扣分）
-                    if points:
-                        from apps.rewards.services import sync_source_point
-                        item_name = item.name if item else (record.custom_content or "宿舍纪律")
-                        sync_source_point(
-                            student=st, school_class=current_class,
-                            semester=current_semester, date=record.date,
-                            points=-points, reason=f"{record.get_severity_display()}：{item_name}",
-                            source_type="dorm_discipline", source_id=record.pk,
-                        )
-                    created += 1
+            created = _create_dorm_discipline_records(
+                current_class, current_semester, room, students, request, points, item,
+            )
             messages.success(
                 request,
-                f"已为该宿舍 {created} 名学生同步登记宿舍纪律（每人{'扣' if points else '加'} {abs(points)} 分）。",
+                f"已为 {created} 名学生登记宿舍纪律（每人{'扣' if points else '加'} {abs(points)} 分）。",
             )
             OperationLog.objects.create(
                 user=request.user, action="create", module="dormitory",
-                object_repr=f"{room} 全体纪律",
-                detail=f"宿舍纪律全体登记：{created} 人，{points} 分",
+                object_repr=f"{room} 宿舍纪律",
+                detail=f"宿舍纪律登记：{created} 人，{points} 分",
                 ip_address=get_client_ip(request), success=True,
             )
             return redirect("dormitory:discipline")
 
-        # 单学生模式
+        # 单学生模式（表单含完整学生字段）
         form = DormDisciplineForm(request.POST)
         if form.is_valid():
             record = form.save(commit=False)
@@ -495,7 +582,6 @@ def discipline_create(request):
 
     form = DormDisciplineForm()
     form.fields["dorm_room"].queryset = rooms
-    # 学生选项由前端根据所选宿舍动态填充，初始为空（仅"全体"占位由 JS 重建）
     form.fields["student"].queryset = Student.objects.filter(
         school_class=current_class, is_deleted=False,
     ) if current_class else Student.objects.none()

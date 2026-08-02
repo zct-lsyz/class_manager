@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+{% block title %}评选管理{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mt-3 mb-4 flex-wrap gap-2">
+    <h4 class="mb-0"><i class="bi bi-award-fill me-2 text-warning"></i>评选管理</h4>
+    <div class="d-flex gap-2">
+        <a href="{% url 'evaluation:project_create' %}" class="btn btn-primary btn-sm">
+            <i class="bi bi-plus-lg me-1"></i>新增评选
+        </a>
+    </div>
+</div>
+
+<!-- 顶部评选项目标签 -->
+<div class="d-flex flex-wrap gap-2 mb-3">
+    {% for p in projects %}
+    <a href="{% url 'evaluation:index' %}?project={{ p.pk }}"
+       class="badge {% if project and project.pk == p.pk %}bg-primary{% else %}bg-light border text-dark{% endif %} px-3 py-2 text-decoration-none">
+        {{ p.name }}
+    </a>
+    {% empty %}
+    <span class="text-muted">暂无评选项目，点击右上角「新增评选」创建。</span>
+    {% endfor %}
+</div>
+
+{% if project %}
+<div class="card mb-3">
+    <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+        <div>
+            <strong>{{ project.name }}</strong>
+            <span class="text-muted small ms-2">{{ project.cycle_display }}</span>
+            {% if project.description %}<span class="text-muted small ms-2">{{ project.description }}</span>{% endif %}
+        </div>
+        <div class="d-flex gap-2 flex-wrap">
+            <form method="post" action="{% url 'evaluation:calculate' project.pk %}">
+                {% csrf_token %}
+                <button class="btn btn-warning btn-sm"><i class="bi bi-arrow-repeat me-1"></i>重新计算</button>
+            </form>
+            <a href="{% url 'evaluation:history' project.pk %}" class="btn btn-outline-secondary btn-sm">
+                <i class="bi bi-clock-history me-1"></i>历史记录
+            </a>
+            <a href="{% url 'evaluation:project_edit' project.pk %}" class="btn btn-outline-primary btn-sm">
+                <i class="bi bi-pencil me-1"></i>编辑
+            </a>
+            <form method="post" action="{% url 'evaluation:project_delete' project.pk %}" class="d-inline" onsubmit="return confirm('确认删除评选项目「{{ project.name }}」及其历史结果？')">
+                {% csrf_token %}
+                <button class="btn btn-outline-danger btn-sm"><i class="bi bi-trash me-1"></i>删除</button>
+            </form>
+        </div>
+    </div>
+    <div class="card-body">
+        <!-- 评分规则 -->
+        <h6 class="text-muted mb-2"><i class="bi bi-sliders me-1"></i>评分规则</h6>
+        <div class="d-flex flex-wrap gap-2 mb-3">
+            {% for rule in project.rules %}
+            <span class="badge bg-light border text-dark">{{ rule.label }} × {{ rule.weight }}</span>
+            {% empty %}
+            <span class="text-muted small">未配置评分规则，请先「编辑」设置指标与权重。</span>
+            {% endfor %}
+        </div>
+
+        <!-- 学生排名表 -->
+        {% if results %}
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-light"><tr>
+                    <th class="text-center" style="width:60px">排名</th>
+                    <th>姓名</th>
+                    <th class="text-center" style="width:100px">综合得分</th>
+                    <th style="min-width:180px">评分进度</th>
+                    <th>评分依据</th>
+                </tr></thead>
+                <tbody>
+                {% for r in results %}
+                <tr>
+                    <td class="text-center">
+                        {% if r.rank == 1 %}🥇{% elif r.rank == 2 %}🥈{% elif r.rank == 3 %}🥉{% endif %}
+                        <strong>{{ r.rank }}</strong>
+                    </td>
+                    <td><strong>{{ r.student.name }}</strong></td>
+                    <td class="text-center fw-bold text-primary">{{ r.total_score }}分</td>
+                    <td>
+                        <div class="progress" style="height:14px">
+                            <div class="progress-bar bg-success" style="width:{{ r.total_score }}%"></div>
+                        </div>
+                    </td>
+                    <td class="small text-muted">
+                        {% for key, d in r.score_details.items %}
+                        <span class="me-2">{{ d.label }}={{ d.raw|default:"0" }}</span>
+                        {% endfor %}
+                    </td>
+                </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <div class="text-muted small mt-2">本次周期：{{ results.0.period_label }}</div>
+        {% else %}
+        <div class="text-muted py-4 text-center">
+            <i class="bi bi-award fs-1 d-block mb-2"></i>
+            尚未计算该项目的评选结果，点击「重新计算」生成。
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endif %}
+{% endblock %}

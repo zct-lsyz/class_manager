@@ -55,6 +55,56 @@ def index(request):
 
 
 @login_required
+def export(request):
+    """导出当前值日小组表为 Excel。"""
+    current_class = get_current_class(request.user)
+    groups = DutyGroup.objects.filter(
+        school_class=current_class, is_active=True,
+    ).prefetch_related("members", "leader") if current_class else []
+
+    from openpyxl import Workbook
+    from openpyxl.styles import Alignment, Font, PatternFill, Border, Side
+    from django.http import HttpResponse
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "值日生表"
+    thin = Side(style="thin", color="CCCCCC")
+    border = Border(left=thin, right=thin, top=thin, bottom=thin)
+    header_fill = PatternFill("solid", start_color="1A73E8")
+    header_font = Font(bold=True, color="FFFFFF")
+
+    headers = ["小组", "周次", "组长", "成员"]
+    ws.append(headers)
+    for cell in ws[1]:
+        cell.fill = header_fill
+        cell.font = header_font
+        cell.alignment = Alignment(horizontal="center", vertical="center")
+        cell.border = border
+
+    for g in groups:
+        members = "、".join(m.name for m in g.members.all())
+        ws.append([
+            g.name, g.week or "",
+            g.leader.name if g.leader else "",
+            members,
+        ])
+        for cell in ws[ws.max_row]:
+            cell.border = border
+            cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+
+    for idx, width in enumerate([22, 8, 12, 50], start=1):
+        ws.column_dimensions[chr(64 + idx)].width = width
+
+    response = HttpResponse(
+        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
+    response["Content-Disposition"] = 'attachment; filename="duty_groups.xlsx"'
+    wb.save(response)
+    return response
+
+
+@login_required
 @require_current_class
 def task_list(request):
     """值日任务配置"""
@@ -147,8 +197,10 @@ def group_edit(request, pk):
 @login_required
 def group_detail(request, pk):
     """值日小组详情：成员值日记录录入"""
+    current_class = get_current_class(request.user)
     group = get_object_or_404(
-        DutyGroup.objects.prefetch_related("members", "tasks"), pk=pk,
+        DutyGroup.objects.prefetch_related("members", "tasks"),
+        pk=pk, school_class=current_class,
     )
     members = group.members.all().order_by("student_id")
     today = timezone.localdate()

@@ -116,14 +116,18 @@ def parse_uploaded_file(uploaded_file):
     return headers, data_rows
 
 
-def validate_students(data_rows):
+def validate_students(data_rows, school_class=None):
     """
     校验学生数据，返回 (有效行列表, 错误列表)
     错误格式: {row: 行号, field: 字段, value: 原始值, error: 原因}
+    学号重复检查仅在当前班级内进行，避免跨班误判（账户隔离）。
     """
     valid_rows = []
     errors = []
-    existing_ids = set(Student.objects.values_list("student_id", flat=True))
+    existing_qs = Student.objects.all()
+    if school_class:
+        existing_qs = existing_qs.filter(school_class=school_class)
+    existing_ids = set(existing_qs.values_list("student_id", flat=True))
 
     for idx, row in enumerate(data_rows, start=2):  # 从第2行开始（跳过表头）
         student_id = str(row.get("学号", "") or "").strip()
@@ -286,15 +290,19 @@ def import_guardians(valid_rows):
     return created
 
 
-def validate_student_info(data_rows):
+def validate_student_info(data_rows, school_class=None):
     """
     统一校验学生信息（含简化联系人）。
     合并原 validate_students 和 validate_guardians 的字段：
     花名册字段 + 联系人关系/电话 + 备用联系人（选填）。
+    学号重复检查仅在当前班级内进行（账户隔离）。
     """
     valid_rows = []
     errors = []
-    existing_ids = set(Student.objects.values_list("student_id", flat=True))
+    existing_qs = Student.objects.all()
+    if school_class:
+        existing_qs = existing_qs.filter(school_class=school_class)
+    existing_ids = set(existing_qs.values_list("student_id", flat=True))
 
     for idx, row in enumerate(data_rows, start=2):
         student_id = str(row.get("学号", "") or "").strip()

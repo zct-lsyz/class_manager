@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.db import models
 from django.utils import timezone
 
@@ -15,6 +16,11 @@ class BaseModel(models.Model):
 
 class Subject(BaseModel):
     """科目"""
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE,
+        null=True, blank=True,
+        related_name="subjects", verbose_name="创建者",
+    )
     name = models.CharField("科目名称", max_length=50)
     short_name = models.CharField("简称", max_length=20, blank=True, default="")
     is_active = models.BooleanField("启用", default=True)

@@ -23,6 +23,7 @@ urlpatterns = [
     # 课程表
     path("course-schedule/", views.course_schedule, name="course_schedule"),
     path("course-schedule/export/", views.course_schedule_export, name="course_schedule_export"),
+    path("course-schedule/import/", views.course_schedule_import, name="course_schedule_import"),
     path("course-schedule/history/", views.course_schedule_history, name="course_schedule_history"),
     path("course-schedule/history/<int:pk>/", views.course_schedule_view, name="course_schedule_view"),
     path("course/create/", views.course_create, name="course_create"),

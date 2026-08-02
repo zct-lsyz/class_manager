@@ -3,6 +3,7 @@ from pathlib import Path
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.db.models import Q
 from django.http import FileResponse, HttpResponse
 from django.shortcuts import render, redirect, get_object_or_404
 from django.core.paginator import Paginator
@@ -27,8 +28,10 @@ def get_client_ip(request):
 
 @login_required
 def index(request):
-    """备份管理首页"""
-    backups = BackupRecord.objects.all().order_by("-created_at")
+    """备份管理首页（仅本用户 + 系统自动备份）"""
+    backups = BackupRecord.objects.filter(
+        Q(user=request.user) | Q(user__isnull=True),
+    ).order_by("-created_at")
     paginator = Paginator(backups, 20)
     page = request.GET.get("page", 1)
     page_obj = paginator.get_page(page)
@@ -62,7 +65,10 @@ def create_backup_view(request):
 @login_required
 def download_backup(request, pk):
     """下载备份文件"""
-    record = get_object_or_404(BackupRecord, pk=pk)
+    record = get_object_or_404(
+        BackupRecord.objects.filter(Q(user=request.user) | Q(user__isnull=True)),
+        pk=pk,
+    )
     if record.status != "completed" or not record.file_path:
         messages.error(request, "该备份不可下载。")
         return redirect("backups:index")
@@ -87,7 +93,10 @@ def download_backup(request, pk):
 @login_required
 def delete_backup(request, pk):
     """删除备份记录（含文件）"""
-    record = get_object_or_404(BackupRecord, pk=pk)
+    record = get_object_or_404(
+        BackupRecord.objects.filter(Q(user=request.user) | Q(user__isnull=True)),
+        pk=pk,
+    )
     if request.method == "POST":
         if record.file_path and Path(record.file_path).exists():
             try:
@@ -108,7 +117,10 @@ def delete_backup(request, pk):
 @login_required
 def restore_view(request, pk):
     """恢复备份"""
-    record = get_object_or_404(BackupRecord, pk=pk)
+    record = get_object_or_404(
+        BackupRecord.objects.filter(Q(user=request.user) | Q(user__isnull=True)),
+        pk=pk,
+    )
     if request.method == "POST":
         # 需要输入管理员密码确认（二次确认）
         password = request.POST.get("password", "")
@@ -132,13 +144,15 @@ def restore_view(request, pk):
 
 @login_required
 def storage_center(request):
-    rules = StorageAlertRule.objects.all()
-    archives = MediaArchiveExport.objects.all()[:30]
-    import_history = MediaArchiveImport.objects.all()[:30]
+    rules = StorageAlertRule.objects.filter(created_by=request.user)
+    archives = MediaArchiveExport.objects.filter(user=request.user)[:30]
+    import_history = MediaArchiveImport.objects.filter(user=request.user)[:30]
     if request.method == "POST":
         form = StorageAlertRuleForm(request.POST)
         if form.is_valid():
-            form.save()
+            rule = form.save(commit=False)
+            rule.created_by = request.user
+            rule.save()
             messages.success(request, "存储空间提醒规则已保存。")
             return redirect("backups:storage_center")
     else:
@@ -150,7 +164,7 @@ def storage_center(request):
 
 @login_required
 def storage_rule_delete(request, pk):
-    rule = get_object_or_404(StorageAlertRule, pk=pk)
+    rule = get_object_or_404(StorageAlertRule, pk=pk, created_by=request.user)
     if request.method == "POST":
         rule.delete()
         messages.info(request, "提醒规则已删除。")
@@ -181,7 +195,7 @@ def media_archive_create(request):
 
 @login_required
 def media_archive_download(request, pk):
-    archive = get_object_or_404(MediaArchiveExport, pk=pk)
+    archive = get_object_or_404(MediaArchiveExport, pk=pk, user=request.user)
     path = Path(archive.file_path)
     if not path.is_file():
         messages.error(request, "归档文件不存在。")
@@ -191,7 +205,7 @@ def media_archive_download(request, pk):
 
 @login_required
 def media_archive_clear(request, pk):
-    archive = get_object_or_404(MediaArchiveExport, pk=pk)
+    archive = get_object_or_404(MediaArchiveExport, pk=pk, user=request.user)
     if request.method == "POST":
         confirmation = request.POST.get("confirmation", "").strip()
         if confirmation != "确认清除":

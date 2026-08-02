@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+{% block title %}{{ title }}{% endblock %}
+{% block content %}
+<div class="row justify-content-center mt-3"><div class="col-md-9">
+<div class="card"><div class="card-header">{{ title }}</div>
+<div class="card-body">
+<form method="post">{% csrf_token %}
+{% for f in form %}
+<div class="mb-3">
+    <label class="form-label small">{{ f.label }}</label>
+    {{ f }}
+    {% if f.errors %}<div class="text-danger small">{{ f.errors.0 }}</div>{% endif %}
+</div>
+{% endfor %}
+
+<!-- 评分规则编辑器 -->
+<div class="mb-3">
+    <label class="form-label small"><strong>评分规则（多指标权重）</strong></label>
+    <div class="form-text mb-2">为每个指标选择来源、填写权重（会自动归一化为总和 1）。</div>
+    <div id="ruleRows">
+        {% for rule in project.rules %}
+        <div class="row g-2 mb-2 rule-row">
+            <div class="col-md-4">
+                <select name="rule_keys" class="form-select form-select-sm">
+                    {% for ind in indicators %}
+                    <option value="{{ ind.key }}" {% if ind.key == rule.key %}selected{% endif %}>{{ ind.label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-4">
+                <input type="text" name="rule_labels" class="form-control form-control-sm" value="{{ rule.label }}" placeholder="显示名称">
+            </div>
+            <div class="col-md-3">
+                <input type="number" name="rule_weights" class="form-control form-control-sm rule-weight" step="0.05" min="0" max="1" value="{{ rule.weight }}">
+            </div>
+            <div class="col-md-1">
+                <button type="button" class="btn btn-sm btn-outline-danger rule-remove"><i class="bi bi-x-lg"></i></button>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% if not project.rules %}
+    <div class="row g-2 mb-2 rule-row">
+        <div class="col-md-4">
+            <select name="rule_keys" class="form-select form-select-sm">
+                {% for ind in indicators %}<option value="{{ ind.key }}">{{ ind.label }}</option>{% endfor %}
+            </select>
+        </div>
+        <div class="col-md-4">
+            <input type="text" name="rule_labels" class="form-control form-control-sm" placeholder="显示名称">
+        </div>
+        <div class="col-md-3">
+            <input type="number" name="rule_weights" class="form-control form-control-sm rule-weight" step="0.05" min="0" max="1" value="1.0">
+        </div>
+        <div class="col-md-1">
+            <button type="button" class="btn btn-sm btn-outline-danger rule-remove"><i class="bi bi-x-lg"></i></button>
+        </div>
+    </div>
+    {% endif %}
+    <button type="button" class="btn btn-outline-primary btn-sm mt-1" id="addRule"><i class="bi bi-plus-lg me-1"></i>添加指标</button>
+</div>
+
+<div class="d-flex justify-content-between">
+    <a href="{% url 'evaluation:index' %}" class="btn btn-outline-secondary">返回</a>
+    <button class="btn btn-primary">保存</button>
+</div>
+</form>
+</div></div>
+</div></div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function() {
+    const rowTemplate = `{% for ind in indicators %}<option value="{{ ind.key }}">{{ ind.label }}</option>{% endfor %}`;
+    document.getElementById('addRule').addEventListener('click', function() {
+        const row = document.createElement('div');
+        row.className = 'row g-2 mb-2 rule-row';
+        row.innerHTML = `
+            <div class="col-md-4"><select name="rule_keys" class="form-select form-select-sm">${rowTemplate}</select></div>
+            <div class="col-md-4"><input type="text" name="rule_labels" class="form-control form-control-sm" placeholder="显示名称"></div>
+            <div class="col-md-3"><input type="number" name="rule_weights" class="form-control form-control-sm rule-weight" step="0.05" min="0" max="1" value="0.5"></div>
+            <div class="col-md-1"><button type="button" class="btn btn-sm btn-outline-danger rule-remove"><i class="bi bi-x-lg"></i></button></div>`;
+        document.getElementById('ruleRows').appendChild(row);
+        row.querySelector('.rule-remove').addEventListener('click', () => row.remove());
+    });
+    document.querySelectorAll('.rule-remove').forEach(function(btn) {
+        btn.addEventListener('click', function() { this.closest('.rule-row').remove(); });
+    });
+})();
+</script>
+{% endblock %}

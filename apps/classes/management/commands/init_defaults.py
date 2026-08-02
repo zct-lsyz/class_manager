@@ -58,7 +58,8 @@ class Command(BaseCommand):
         ]
         for i, (name, short) in enumerate(subjects):
             _, created = Subject.objects.get_or_create(
-                name=name, defaults={"short_name": short, "sort_order": i}
+                name=name, created_by=user,
+                defaults={"short_name": short, "sort_order": i},
             )
             if created:
                 self.stdout.write(f"  科目: {name}")

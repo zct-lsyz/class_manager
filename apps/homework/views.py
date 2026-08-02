@@ -117,7 +117,11 @@ def task_delete(request, pk):
 @login_required
 def task_detail(request, pk):
     """作业任务详情及完成情况"""
-    task = get_object_or_404(HomeworkTask.objects.select_related("subject"), pk=pk)
+    current_class = get_current_class(request.user)
+    task = get_object_or_404(
+        HomeworkTask.objects.select_related("subject"),
+        pk=pk, school_class=current_class,
+    )
     records = HomeworkRecord.objects.filter(task=task).select_related("student").order_by("student__student_id")
 
     # 未登记学生

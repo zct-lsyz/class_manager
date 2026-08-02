@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(& \"D:\\\\class_manager\\\\class_manager\\\\.venv\\\\Scripts\\\\python.exe\" \"D:\\\\class_manager\\\\class_manager\\\\manage.py\" makemigrations backups --name add_storage_rule_created_by 2>&1)"
+    ]
+  }
+}

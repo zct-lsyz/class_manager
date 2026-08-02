@@ -5,6 +5,7 @@ app_name = "duty"
 
 urlpatterns = [
     path("", views.index, name="index"),
+    path("export/", views.export, name="export"),
     path("tasks/", views.task_list, name="task_list"),
     path("tasks/<int:pk>/delete/", views.task_delete, name="task_delete"),
     path("group/create/", views.group_create, name="group_create"),

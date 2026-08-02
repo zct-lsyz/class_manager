@@ -97,7 +97,8 @@ def student_create(request):
 @login_required
 def student_edit(request, pk):
     """编辑学生"""
-    student = get_object_or_404(Student, pk=pk)
+    current_class = get_current_class(request.user)
+    student = get_object_or_404(Student, pk=pk, school_class=current_class)
     if request.method == "POST":
         form = StudentForm(request.POST, instance=student)
         if form.is_valid():
@@ -121,7 +122,8 @@ def student_edit(request, pk):
 @login_required
 def student_delete(request, pk):
     """删除学生（软删除 + 写入回收站）"""
-    student = get_object_or_404(Student, pk=pk)
+    current_class = get_current_class(request.user)
+    student = get_object_or_404(Student, pk=pk, school_class=current_class)
     if request.method == "POST":
         student.soft_delete()
         # 写入回收站记录
@@ -154,7 +156,8 @@ def student_delete(request, pk):
 @login_required
 def student_detail(request, pk):
     """学生详情/综合档案"""
-    student = get_object_or_404(Student, pk=pk, is_deleted=False)
+    current_class = get_current_class(request.user)
+    student = get_object_or_404(Student, pk=pk, school_class=current_class, is_deleted=False)
     guardian = Guardian.objects.filter(student=student, is_deleted=False).first()
 
     # === 处理谈话记录 POST ===
@@ -171,7 +174,9 @@ def student_detail(request, pk):
             school_class=student.school_class,
             semester=current_semester,
             student=student,
-            exam=Exam.objects.filter(pk=exam_id).first() if exam_id else None,
+            exam=Exam.objects.filter(
+                pk=exam_id, school_class=student.school_class,
+            ).first() if exam_id else None,
             date=request.POST.get("date", "") or timezone.localdate(),
             reason=request.POST.get("reason", "").strip(),
             main_content=request.POST.get("main_content", "").strip(),
@@ -228,6 +233,16 @@ def student_detail(request, pk):
         timeline.append({"date": item.created_at.date(), "type": "评语", "title": item.get_comment_type_display(), "detail": item.content})
     for item in conversations:
         timeline.append({"date": item.date, "type": "谈话", "title": item.reason or "学生谈话", "detail": item.main_content})
+    # 评选荣誉
+    from apps.evaluation.models import EvaluationResult
+    honors = list(EvaluationResult.objects.filter(student=student).select_related("project").order_by("-created_at")[:50])
+    for h in honors:
+        timeline.append({
+            "date": h.created_at.date(),
+            "type": "荣誉",
+            "title": f"{h.project.name} · 第{h.rank}名",
+            "detail": f"{h.period_label} · {h.total_score}分",
+        })
     timeline.sort(key=lambda item: item["date"], reverse=True)
 
     # ===== 历次考试折线图数据（总分/总排名 + 单科分/单科排名） =====
@@ -368,6 +383,7 @@ def student_detail(request, pk):
         "comments": comments,
         "conversations": conversations,
         "timeline": timeline[:100],
+        "honors": honors,
         "exam_chart": exam_chart,
         "exam_score_detail": exam_score_detail,
         "student_exams": student_exams,
@@ -378,7 +394,54 @@ def student_detail(request, pk):
 HISTORY_MODULES = {
     "rewards": "奖惩记录", "points": "积分变动", "dormitory": "宿舍管理",
     "discipline": "课堂纪律", "attendance": "考勤管理",
+    "evaluation": "评选荣誉",
 }
+
+
+@login_required
+def growth(request):
+    """成长足迹：查看每个学生的完整成长记录（多模块聚合时间线）。"""
+    from apps.students.history_services import get_student_all_events
+    current_class = get_current_class(request.user)
+    students = Student.objects.filter(
+        school_class=current_class, is_deleted=False,
+    ).order_by("sort_order", "student_id") if current_class else []
+
+    student_id = request.GET.get("student_id", "")
+    selected = None
+    if student_id:
+        selected = Student.objects.filter(
+            pk=student_id, school_class=current_class, is_deleted=False,
+        ).first() if current_class else None
+
+    events = []
+    date_from = request.GET.get("date_from", "")
+    date_to = request.GET.get("date_to", "")
+    module_filter = request.GET.get("module", "")
+    if selected:
+        events = get_student_all_events(selected, date_from, date_to)
+        if module_filter:
+            events = [e for e in events if e["module_key"] == module_filter]
+
+    return render(request, "students/growth.html", {
+        "students": students,
+        "selected": selected,
+        "events": events,
+        "date_from": date_from,
+        "date_to": date_to,
+        "module_filter": module_filter,
+        "modules": [
+            ("", "全部"),
+            ("evaluation", "荣誉评选"),
+            ("rewards", "奖惩记录"),
+            ("points", "积分变动"),
+            ("discipline", "课堂纪律"),
+            ("dormitory", "宿舍管理"),
+            ("attendance", "考勤管理"),
+            ("homework", "作业情况"),
+            ("duty", "值日情况"),
+        ],
+    })
 
 
 @login_required
@@ -421,7 +484,8 @@ def history_detail(request, module, pk):
     from apps.students.history_services import get_student_events
     if module not in HISTORY_MODULES:
         return redirect("students:list")
-    student = get_object_or_404(Student, pk=pk, is_deleted=False)
+    current_class = get_current_class(request.user)
+    student = get_object_or_404(Student, pk=pk, school_class=current_class, is_deleted=False)
     events = get_student_events(student, module, request.GET.get("date_from", ""), request.GET.get("date_to", ""))
     return render(request, "students/history_detail.html", {
         "student": student, "module": module, "module_name": HISTORY_MODULES[module], "events": events,
@@ -433,8 +497,11 @@ def history_detail(request, module, pk):
 
 @login_required
 def guardian_list(request):
-    """家长联系方式列表"""
-    guardians = Guardian.objects.select_related("student").all()
+    """家长联系方式列表（仅本班）"""
+    current_class = get_current_class(request.user)
+    guardians = Guardian.objects.select_related("student").filter(
+        student__school_class=current_class,
+    ).order_by("student__student_id")
 
     search = request.GET.get("search", "")
     if search:
@@ -456,7 +523,10 @@ def guardian_list(request):
 @login_required
 def guardian_edit(request, pk):
     """编辑家长联系方式"""
-    guardian = get_object_or_404(Guardian, pk=pk)
+    current_class = get_current_class(request.user)
+    guardian = get_object_or_404(
+        Guardian, pk=pk, student__school_class=current_class,
+    )
     if request.method == "POST":
         form = GuardianForm(request.POST, instance=guardian)
         if form.is_valid():
@@ -474,7 +544,8 @@ def guardian_edit(request, pk):
 @login_required
 def guardian_create(request, student_pk):
     """为指定学生创建家长联系方式"""
-    student = get_object_or_404(Student, pk=student_pk)
+    current_class = get_current_class(request.user)
+    student = get_object_or_404(Student, pk=student_pk, school_class=current_class)
     if request.method == "POST":
         form = GuardianForm(request.POST)
         if form.is_valid():

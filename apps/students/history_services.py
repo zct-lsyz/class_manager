@@ -6,6 +6,34 @@ def _apply_dates(queryset, date_field, date_from=None, date_to=None):
     return queryset
 
 
+ALL_MODULES = [
+    ("evaluation", "荣誉评选"),
+    ("rewards", "奖惩记录"),
+    ("points", "积分变动"),
+    ("discipline", "课堂纪律"),
+    ("dormitory", "宿舍管理"),
+    ("attendance", "考勤管理"),
+    ("homework", "作业情况"),
+    ("duty", "值日情况"),
+]
+
+
+def get_student_all_events(student, date_from=None, date_to=None):
+    """汇总学生全部成长事件（按时间倒序），并附模块标签。"""
+    events = []
+    for module, label in ALL_MODULES:
+        try:
+            module_events = get_student_events(student, module, date_from, date_to)
+        except Exception:
+            module_events = []
+        for event in module_events:
+            event["module"] = label
+            event["module_key"] = module
+            events.append(event)
+    events.sort(key=lambda e: e["date"], reverse=True)
+    return events
+
+
 def get_student_events(student, module, date_from=None, date_to=None):
     events = []
     if module == "rewards":
@@ -57,4 +85,20 @@ def get_student_events(student, module, date_from=None, date_to=None):
             if adverse:
                 label = "缺岗" if record.is_absent else ("未完成" if not record.is_completed else "评价差")
                 events.append({"date": record.date, "item": f"{record.group.name}：{label}", "code": label, "points": 0, "note": record.remark, "adverse": True})
+    elif module == "evaluation":
+        from apps.evaluation.models import EvaluationResult
+        records = EvaluationResult.objects.filter(student=student).select_related("project").order_by("-created_at")
+        if date_from:
+            records = records.filter(created_at__date__gte=date_from)
+        if date_to:
+            records = records.filter(created_at__date__lte=date_to)
+        for record in records:
+            events.append({
+                "date": record.created_at.date(),
+                "item": f"{record.project.name} · 第{record.rank}名",
+                "code": "evaluation",
+                "points": 0,
+                "note": f"{record.period_label} · 评分 {record.total_score} 分",
+                "adverse": False,
+            })
     return sorted(events, key=lambda event: event["date"], reverse=True)

@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load static %}
 {% load custom_filters %}
 {% block title %}登记宿舍纪律{% endblock %}
 {% block content %}
@@ -16,11 +17,15 @@
 </div>
 {% elif f.name == "student" %}
 <div class="mb-3">
-    <label class="form-label small">{{ f.label }}</label>
-    <select name="student" id="id_student" class="form-select" required>
-        <option value="" data-all="1">（请先选择宿舍）</option>
-    </select>
-    <div class="form-text">选择「全体」将对宿舍内每名学生同步登记并同步加减分。</div>
+    <label class="form-label small">{{ f.label }}（可多选）</label>
+    <div class="student-chip-select">
+        <select id="studentPicker" class="form-select form-select-sm mb-1"></select>
+        <div id="selectedStudents" class="d-flex flex-wrap gap-1 border rounded p-2">
+            <span class="text-muted small">先选宿舍，再从下拉选择学生，可多选；点 ✕ 取消选中。</span>
+        </div>
+    </div>
+    <div class="form-text">选择「全体学生」将对宿舍内每名学生同步登记并同步加减分；选择个别学生则只对选中的学生生效。</div>
+    <input type="hidden" name="student_mode" id="studentMode" value="one">
     {% if f.errors %}<div class="text-danger small">{{ f.errors.0 }}</div>{% endif %}
 </div>
 {% else %}
@@ -31,67 +36,29 @@
 </div>
 {% endif %}
 {% endfor %}
-<input type="hidden" name="student_mode" id="studentMode" value="one">
 <div class="d-flex justify-content-between"><a href="{% url 'dormitory:discipline' %}" class="btn btn-outline-secondary">返回</a><button class="btn btn-primary">保存</button></div>
 </form></div></div>
 </div></div>
 {% endblock %}
 
-{% block extra_css %}
-<style>
-/* 选择条目后自动匹配严重程度/扣分（复用课堂纪律样式） */
-</style>
-{% endblock %}
-
 {% block extra_js %}
 {{ dorm_room_students|json_script:"room-students-data" }}
+<script src="{% static 'js/student-chip-select.js' %}"></script>
 <script>
 const ROOM_STUDENTS = JSON.parse(document.getElementById('room-students-data').textContent);
 (function() {
-    const roomSel = document.getElementById('id_dorm_room');
-    const studentSel = document.getElementById('id_student');
-    const modeInput = document.getElementById('studentMode');
-    if (!roomSel || !studentSel) return;
+    // 宿舍→学生 芯片多选
+    initStudentChipSelect({
+        pickerId: 'studentPicker',
+        chipsId: 'selectedStudents',
+        modeId: 'studentMode',
+        studentsName: 'students',
+        roomSelectId: 'id_dorm_room',
+        studentsByRoom: ROOM_STUDENTS,
+        allLabel: '全体学生（同步给宿舍每名学生）',
+    });
 
-    function rebuildStudents() {
-        const roomId = roomSel.value;
-        const students = ROOM_STUDENTS[roomId] || [];
-        // 保留"全体"选项
-        studentSel.innerHTML = '';
-        const allOpt = document.createElement('option');
-        allOpt.value = '';
-        allOpt.dataset.all = '1';
-        allOpt.textContent = '全体（同步给宿舍每名学生）';
-        studentSel.appendChild(allOpt);
-        students.forEach(function(s) {
-            const opt = document.createElement('option');
-            opt.value = s.id;
-            opt.textContent = s.name;
-            studentSel.appendChild(opt);
-        });
-        if (!students.length) {
-            const emptyOpt = document.createElement('option');
-            emptyOpt.value = '';
-            emptyOpt.textContent = '该宿舍暂无分配学生';
-            emptyOpt.disabled = true;
-            studentSel.appendChild(emptyOpt);
-        }
-        updateMode();
-    }
-
-    function updateMode() {
-        const opt = studentSel.options[studentSel.selectedIndex];
-        if (opt && opt.dataset.all) {
-            modeInput.value = 'all';
-        } else {
-            modeInput.value = 'one';
-        }
-    }
-
-    roomSel.addEventListener('change', rebuildStudents);
-    studentSel.addEventListener('change', updateMode);
-
-    // 条目→严重程度/扣分自动匹配（表单通用循环渲染，字段 id 为标准格式）
+    // 条目→严重程度/扣分自动匹配
     const itemSel = document.getElementById('id_item');
     const severitySel = document.getElementById('id_severity');
     const pointsInput = document.getElementById('id_points_deducted');
@@ -103,9 +70,6 @@ const ROOM_STUDENTS = JSON.parse(document.getElementById('room-students-data').t
             if (pointsInput && opt.dataset.points !== undefined) pointsInput.value = opt.dataset.points;
         });
     }
-
-    // 初始：若已有 dorm_room（编辑场景无此页），仅重建一次
-    if (roomSel.value) rebuildStudents();
 })();
 </script>
 {% endblock %}

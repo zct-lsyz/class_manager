@@ -11,7 +11,7 @@ from django.http import JsonResponse
 from django.shortcuts import render, redirect, get_object_or_404
 from django.utils import timezone
 
-from apps.classes.utils import get_current_class
+from apps.classes.utils import get_current_class, require_current_class_or_redirect
 from apps.classes.models import SchoolClass, Semester
 from apps.classes.decorators import require_current_class
 from apps.dashboard.models import Countdown, DailyQuote, TeachingWebsite
@@ -129,26 +129,27 @@ def _seed_default_websites(user):
 @login_required
 def index(request):
     """工作台首页"""
+    # 无班级则跳转班级设置，避免 stats 退化为全库统计（账户隔离）
+    current_class, redir = require_current_class_or_redirect(request)
+    if redir:
+        return redir
     today = timezone.localdate()
 
     # 当前班级和学期
-    current_class = get_current_class(request.user)
     current_semester = Semester.objects.filter(
         school_class=current_class, is_current=True,
-    ).first() if current_class else None
+    ).first()
 
     # 教学周
     teaching_week = _calc_teaching_week(current_semester)
 
-    # ----- 统计数据 -----
+    # ----- 统计数据（始终按当前班级过滤） -----
     total_students = 0
     male_count = 0
     female_count = 0
     try:
         from apps.students.models import Student
-        qs = Student.objects.filter(is_deleted=False)
-        if current_class:
-            qs = qs.filter(school_class=current_class)
+        qs = Student.objects.filter(school_class=current_class, is_deleted=False)
         total_students = qs.count()
         male_count = qs.filter(gender="male").count()
         female_count = qs.filter(gender="female").count()
@@ -159,9 +160,7 @@ def index(request):
     today_absent = 0
     try:
         from apps.attendance.models import AttendanceRecord
-        qs_att = AttendanceRecord.objects.filter(date=today)
-        if current_class:
-            qs_att = qs_att.filter(school_class=current_class)
+        qs_att = AttendanceRecord.objects.filter(school_class=current_class, date=today)
         # 非正常状态（normal 之外）都算未到，按学生去重统计人数
         today_absent = qs_att.exclude(status="normal").values("student_id").distinct().count()
     except Exception:
@@ -173,28 +172,29 @@ def index(request):
     try:
         from django.db.models import Q
         from apps.homework.models import HomeworkRecord, HomeworkStatus
-        if current_class:
-            qs_hw = HomeworkRecord.objects.filter(
-                task__school_class=current_class,
-                task__assigned_date__gte=week_start,
-                task__assigned_date__lte=today,
-            )
-            # 内置未交/迟交 + 非积极的自定义状态
-            status_q = Q(status__in=["unsubmitted", "late"])
-            negative_custom_ids = HomeworkStatus.objects.filter(
-                school_class=current_class, is_active=True, is_positive=False,
-            ).values_list("pk", flat=True)
-            for sid in negative_custom_ids:
-                status_q |= Q(status=f"custom:{sid}")
-            week_unsubmitted = qs_hw.filter(status_q).count()
+        qs_hw = HomeworkRecord.objects.filter(
+            task__school_class=current_class,
+            task__assigned_date__gte=week_start,
+            task__assigned_date__lte=today,
+        )
+        # 内置未交/迟交 + 非积极的自定义状态
+        status_q = Q(status__in=["unsubmitted", "late"])
+        negative_custom_ids = HomeworkStatus.objects.filter(
+            school_class=current_class, is_active=True, is_positive=False,
+        ).values_list("pk", flat=True)
+        for sid in negative_custom_ids:
+            status_q |= Q(status=f"custom:{sid}")
+        week_unsubmitted = qs_hw.filter(status_q).count()
     except Exception:
         pass
 
-    # ----- 提醒事项 -----
+    # ----- 提醒事项（仅本用户） -----
     reminders = []
     try:
         from apps.backups.models import BackupRecord
-        last_backup = BackupRecord.objects.filter(backup_type="auto").order_by("-created_at").first()
+        last_backup = BackupRecord.objects.filter(
+            user=request.user, backup_type="auto",
+        ).order_by("-created_at").first()
         if last_backup and not last_backup.success:
             reminders.append({
                 "type": "danger",
@@ -206,7 +206,9 @@ def index(request):
 
     try:
         from apps.backups.models import BackupRecord
-        recent_download = BackupRecord.objects.filter(downloaded=True).order_by("-created_at").first()
+        recent_download = BackupRecord.objects.filter(
+            user=request.user, downloaded=True,
+        ).order_by("-created_at").first()
         if recent_download:
             days_since = (today - recent_download.created_at.date()).days
             if days_since > 14:
@@ -218,14 +220,14 @@ def index(request):
     except Exception:
         pass
 
-    # ----- 待办事项概览 -----
+    # ----- 待办事项概览（仅本班） -----
     active_todos = []
     todo_count = 0
     try:
         from apps.todos.models import TodoItem
-        qs_todos = TodoItem.objects.filter(is_deleted=False, is_completed=False)
-        if current_class:
-            qs_todos = qs_todos.filter(school_class=current_class)
+        qs_todos = TodoItem.objects.filter(
+            school_class=current_class, is_deleted=False, is_completed=False,
+        )
         todo_count = qs_todos.count()
         active_todos = qs_todos.order_by("deadline", "-created_at")[:5]
     except Exception:
@@ -423,7 +425,8 @@ def warnings(request):
 @login_required
 def warning_delete(request, pk):
     from apps.attendance.models import WarningRule
-    rule = get_object_or_404(WarningRule, pk=pk)
+    current_class = get_current_class(request.user)
+    rule = get_object_or_404(WarningRule, pk=pk, school_class=current_class)
     if request.method == "POST":
         rule.delete()
         messages.info(request, "预警条目已删除。")
@@ -434,7 +437,10 @@ def warning_delete(request, pk):
 def warning_detail(request, pk):
     from apps.attendance.models import WarningRule
     from apps.students.models import Student
-    student = get_object_or_404(Student, pk=pk, is_deleted=False)
+    current_class = get_current_class(request.user)
+    student = get_object_or_404(
+        Student, pk=pk, school_class=current_class, is_deleted=False,
+    )
     rules = WarningRule.objects.filter(school_class=student.school_class, is_active=True)
     details = []
     for rule in rules:
@@ -523,7 +529,7 @@ def api_notifications(request):
     try:
         from apps.backups.models import BackupRecord
         failed = BackupRecord.objects.filter(
-            status="failed", created_at__date=today,
+            user=request.user, status="failed", created_at__date=today,
         ).count()
         result["today_backup_alert"] = failed > 0
     except Exception:

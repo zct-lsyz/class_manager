@@ -26,12 +26,19 @@ def class_meetings(request):
 @require_current_class
 def class_meeting_create(request):
     """新建主题班会"""
+    from apps.students.models import Student
     current_class = get_current_class(request.user)
     current_semester = Semester.objects.filter(
         school_class=current_class, is_current=True,
     ).first()
+    students_json = [
+        {"id": s.pk, "name": s.name} for s in Student.objects.filter(
+            school_class=current_class, is_deleted=False,
+        ).order_by("student_id")
+    ] if current_class else []
     if request.method == "POST":
         form = ClassMeetingForm(request.POST, request.FILES)
+        form.fields["participants"].set_current_class(current_class)
         if form.is_valid():
             m = form.save(commit=False)
             m.school_class = current_class
@@ -42,7 +49,9 @@ def class_meeting_create(request):
             return redirect("activities:class_meetings")
     else:
         form = ClassMeetingForm()
-    return render(request, "activities/meeting_form.html", {"form": form})
+    return render(request, "activities/meeting_form.html", {
+        "form": form, "students_json": students_json,
+    })
 
 
 @login_required
@@ -60,12 +69,19 @@ def activities(request):
 @require_current_class
 def activity_create(request):
     """新建文体活动"""
+    from apps.students.models import Student
     current_class = get_current_class(request.user)
     current_semester = Semester.objects.filter(
         school_class=current_class, is_current=True,
     ).first()
+    students_json = [
+        {"id": s.pk, "name": s.name} for s in Student.objects.filter(
+            school_class=current_class, is_deleted=False,
+        ).order_by("student_id")
+    ] if current_class else []
     if request.method == "POST":
         form = ActivityForm(request.POST, request.FILES)
+        form.fields["participants"].set_current_class(current_class)
         if form.is_valid():
             a = form.save(commit=False)
             a.school_class = current_class
@@ -76,12 +92,17 @@ def activity_create(request):
             return redirect("activities:activities")
     else:
         form = ActivityForm()
-    return render(request, "activities/activity_form.html", {"form": form})
+    return render(request, "activities/activity_form.html", {
+        "form": form, "students_json": students_json,
+    })
 
 
 @login_required
 def activity_delete(request, pk):
-    activity = get_object_or_404(Activity, pk=pk, is_deleted=False)
+    current_class = get_current_class(request.user)
+    activity = get_object_or_404(
+        Activity, pk=pk, school_class=current_class, is_deleted=False,
+    )
     if request.method == "POST":
         soft_delete(
             activity,

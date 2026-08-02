@@ -57,6 +57,7 @@
             <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#scores" type="button">成绩</button></li>
             <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#attendance" type="button">考勤</button></li>
             <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#discipline" type="button">奖惩</button></li>
+            <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#honors" type="button">荣誉</button></li>
             <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#comments" type="button">评语/谈话</button></li>
             <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#timeline" type="button">成长时间线</button></li>
         </ul>
@@ -205,6 +206,24 @@
                 <ul class="list-group list-group-flush mb-3">{% for item in classroom_records %}<li class="list-group-item px-0"><span class="text-muted me-2">{{ item.date }}</span>{{ item.item.name|default:item.custom_content }}{% if item.points_deducted %} <span class="badge bg-danger">-{{ item.points_deducted }}</span>{% endif %}</li>{% empty %}<li class="list-group-item text-muted px-0">暂无课堂纪律记录</li>{% endfor %}</ul>
                 <h6>宿舍纪律</h6>
                 <ul class="list-group list-group-flush">{% for item in dorm_records %}<li class="list-group-item px-0"><span class="text-muted me-2">{{ item.date }}</span>{{ item.item.name|default:item.custom_content }}{% if item.points_deducted %} <span class="badge bg-danger">-{{ item.points_deducted }}</span>{% endif %}</li>{% empty %}<li class="list-group-item text-muted px-0">暂无宿舍纪律记录</li>{% endfor %}</ul>
+            </div>
+
+            <div class="tab-pane fade" id="honors">
+                <div class="list-group list-group-flush">
+                    {% for h in honors %}
+                    <div class="list-group-item px-0 d-flex justify-content-between align-items-center">
+                        <div>
+                            <span class="badge bg-warning text-dark fs-6"><i class="bi bi-award me-1"></i>{{ h.project.name }}</span>
+                            <span class="text-muted small ms-2">{{ h.period_label }}</span>
+                        </div>
+                        <div class="text-muted small">
+                            排名 第{{ h.rank }}名 · 评分 {{ h.total_score }}分
+                        </div>
+                    </div>
+                    {% empty %}
+                    <div class="text-muted text-center py-3">暂无评选荣誉</div>
+                    {% endfor %}
+                </div>
             </div>
 
             <div class="tab-pane fade" id="comments">
