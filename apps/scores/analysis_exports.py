@@ -131,8 +131,9 @@ def export_analysis_excel(current_class, exam):
     ws2.column_dimensions["A"].width = 6
     ws2.column_dimensions["B"].width = 12
     ws2.column_dimensions["C"].width = 8
+    from openpyxl.utils import get_column_letter
     for col_idx in range(1, len(headers) + 1):
-        ws2.column_dimensions[chr(64 + col_idx)].width = 10
+        ws2.column_dimensions[get_column_letter(col_idx)].width = 10
 
     # Sheet 3: AI 分析
     from apps.scores.ai_models import AIAnalysisRecord
@@ -193,8 +194,9 @@ def export_comparison_excel(current_class, exam):
             cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
     ws.column_dimensions["A"].width = 12
     ws.column_dimensions["B"].width = 8
+    from openpyxl.utils import get_column_letter
     for col in range(3, len(headers) + 1):
-        ws.column_dimensions[chr(64 + col)].width = 12
+        ws.column_dimensions[get_column_letter(col)].width = 12
 
     output = io.BytesIO()
     wb.save(output)
@@ -270,8 +272,9 @@ def export_student_excel(student):
             cell.alignment = Alignment(horizontal="center", vertical="center")
     ws.column_dimensions["A"].width = 16
     ws.column_dimensions["B"].width = 12
+    from openpyxl.utils import get_column_letter
     for col in range(3, len(headers) + 1):
-        ws.column_dimensions[chr(64 + col)].width = 10
+        ws.column_dimensions[get_column_letter(col)].width = 10
 
     output = io.BytesIO()
     wb.save(output)
@@ -326,8 +329,9 @@ def export_student_pdf(student):
 
     doc = fitz.open()
     page = doc.new_page(width=842, height=595)  # A4 横向
-    page.insert_text((30, 36), f"{student.name} 历次成绩分析", fontsize=16, fontname=CJK_FONT, color=(0.1, 0.2, 0.4))
-    page.insert_text((30, 52), f"共 {len(exam_items)} 次考试 | 各科与总成绩的分数与排名趋势", fontsize=11, fontname=CJK_FONT)
+    fnt = _ensure_page_font(page)
+    page.insert_text((30, 36), f"{student.name} 历次成绩分析", fontsize=18, fontname=fnt, color=(0.1, 0.2, 0.4))
+    page.insert_text((30, 54), f"共 {len(exam_items)} 次考试 | 各科与总成绩的分数与排名趋势", fontsize=12, fontname=fnt)
 
     # 每张图 2 张/行排列
     chart_w, chart_h = 395, 200
@@ -351,8 +355,9 @@ def export_student_pdf(student):
 
     # 历史成绩表（新页）
     page = doc.new_page(width=842, height=595)
-    page.insert_text((30, 36), "历次成绩明细", fontsize=14, fontname=CJK_FONT)
-    y = 44
+    fnt = _ensure_page_font(page)
+    page.insert_text((30, 36), "历次成绩明细", fontsize=16, fontname=fnt)
+    y = 46
     headers = ["考试", "日期"] + subjects + ["总分", "得分率%"]
     col_widths = [110, 70] + [52] * len(subjects) + [60, 60]
     rows = []
@@ -365,7 +370,7 @@ def export_student_pdf(student):
         rate = item["total"] / item["full_score"] * 100 if item["full_score"] else 0
         line += [round(item["total"], 1), round(rate, 1)]
         rows.append(line)
-    _write_pdf_table(page, y, headers, rows, col_widths, font_size=8)
+    _write_pdf_table(page, y, headers, rows, col_widths, font_size=10)
 
     output = io.BytesIO()
     doc.save(output)
@@ -380,8 +385,9 @@ def _chart_score_rank(exam_labels, scores, ranks, title):
     from PIL import Image, ImageDraw, ImageFont
     if not exam_labels:
         return None
-    W, H = 820, 360
-    margin_l, margin_b, margin_t, margin_r = 60, 46, 40, 60
+    SCALE = 2  # 提高清晰度
+    W, H = 820 * SCALE, 360 * SCALE
+    margin_l, margin_b, margin_t, margin_r = 60 * SCALE, 46 * SCALE, 40 * SCALE, 60 * SCALE
     plot_w = W - margin_l - margin_r
     plot_h = H - margin_t - margin_b
     img = Image.new("RGB", (W, H), "white")
@@ -389,8 +395,8 @@ def _chart_score_rank(exam_labels, scores, ranks, title):
 
     cjk_font_path = _find_cjk_font()
     try:
-        font_title = ImageFont.truetype(cjk_font_path, 18) if cjk_font_path else ImageFont.load_default()
-        font_small = ImageFont.truetype(cjk_font_path, 11) if cjk_font_path else font_title
+        font_title = ImageFont.truetype(cjk_font_path, 20 * SCALE) if cjk_font_path else ImageFont.load_default()
+        font_small = ImageFont.truetype(cjk_font_path, 13 * SCALE) if cjk_font_path else font_title
     except Exception:
         font_title = font_small = ImageFont.load_default()
 
@@ -466,24 +472,46 @@ def _chart_score_rank(exam_labels, scores, ranks, title):
     draw.text((W/2 + 36, H - 28), "排名", fill="#333", font=font_small)
 
     buf = io.BytesIO()
-    img.convert("RGB").save(buf, format="PNG")
+    img.convert("RGB").save(buf, format="JPEG", quality=85)
     return buf.getvalue()
 
 
 def _find_cjk_font():
-    """查找系统可用的中文字体文件路径。"""
+    """查找系统可用的中文字体文件路径（可用环境变量 CJK_FONT_PATH 指定）。"""
     candidates = [
+        os.environ.get("CJK_FONT_PATH", ""),
+        "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+        "/usr/share/fonts/opentype/noto/NotoSansCJKsc-Regular.otf",
+        "/usr/share/fonts/opentype/noto/NotoSansCJK.ttc",
+        "/usr/share/fonts/truetype/wqy/wqy-microhei.ttc",
+        "/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc",
+        "/usr/share/fonts/truetype/arphic/uming.ttc",
+        "/usr/share/fonts/truetype/droid/DroidSansFallbackFull.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
         r"C:\Windows\Fonts\msyh.ttc",     # 微软雅黑
         r"C:\Windows\Fonts\simhei.ttf",   # 黑体
         r"C:\Windows\Fonts\simsun.ttc",   # 宋体
-        "/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc",
-        "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
         "/System/Library/Fonts/PingFang.ttc",
     ]
     for path in candidates:
-        if os.path.exists(path):
+        if path and os.path.exists(path):
             return path
     return None
+
+
+def _ensure_page_font(page):
+    """在 PyMuPDF 页面注册真实中文字体（subset 只嵌入用到的字形，避免 PDF 过大）。
+
+    返回该页使用的字体名。
+    """
+    font_path = _find_cjk_font()
+    if font_path:
+        try:
+            page.insert_font(fontname="cjk", fontfile=font_path, subset=True)
+            return "cjk"
+        except Exception:
+            pass
+    return "china-s"
 
 
 def _chart_avg_bar(analysis_data):
@@ -493,10 +521,11 @@ def _chart_avg_bar(analysis_data):
     avgs = [analysis_data[s]["avg"] for s in subjects]
     if not subjects:
         return None
-    W, H = 760, 340
+    SCALE = 2
+    W, H = 760 * SCALE, 340 * SCALE
     img = Image.new("RGB", (W, H), "white")
     draw = ImageDraw.Draw(img)
-    margin = 60
+    margin = 60 * SCALE
     max_val = max(avgs) * 1.2 or 100
     plot_w = W - margin * 2
     plot_h = H - margin * 2
@@ -504,8 +533,8 @@ def _chart_avg_bar(analysis_data):
     cjk_font_path = _find_cjk_font()
     try:
         if cjk_font_path:
-            font = ImageFont.truetype(cjk_font_path, 16)
-            font_small = ImageFont.truetype(cjk_font_path, 13)
+            font = ImageFont.truetype(cjk_font_path, 18 * SCALE)
+            font_small = ImageFont.truetype(cjk_font_path, 14 * SCALE)
         else:
             raise OSError("no cjk font")
     except Exception:
@@ -516,67 +545,78 @@ def _chart_avg_bar(analysis_data):
         y = margin + plot_h - plot_h * i / 5
         val = max_val * i / 5
         draw.line([(margin, y), (W - margin, y)], fill="#eeeeee")
-        draw.text((5, y - 6), f"{val:.0f}", fill="gray", font=font_small)
+        draw.text((5, y - 6 * SCALE), f"{val:.0f}", fill="gray", font=font_small)
 
     for idx, (subj, avg) in enumerate(zip(subjects, avgs)):
         x0 = margin + idx * (plot_w / len(subjects)) + (plot_w / len(subjects) - bar_w) / 2
         h = plot_h * (avg / max_val) if avg else 0
         draw.rectangle([x0, margin + plot_h - h, x0 + bar_w, margin + plot_h], fill="#1a73e8")
-        draw.text((x0, margin + plot_h - h - 20), f"{avg:.1f}", fill="#1a73e8", font=font_small)
+        draw.text((x0, margin + plot_h - h - 20 * SCALE), f"{avg:.1f}", fill="#1a73e8", font=font_small)
         # 科目名
         label = subj if len(subj) <= 3 else subj[:3]
-        draw.text((x0 + bar_w / 2, margin + plot_h + 8), label, fill="#333", font=font_small, anchor="ma")
+        draw.text((x0 + bar_w / 2, margin + plot_h + 8 * SCALE), label, fill="#333", font=font_small, anchor="ma")
     img = img.convert("RGB")
     buf = io.BytesIO()
-    img.save(buf, format="PNG")
+    img.save(buf, format="JPEG", quality=85)
     return buf.getvalue()
 
 
 CJK_FONT = "china-s"  # PyMuPDF 内置简体中文字体
 
 
-def _write_pdf_table(page, y, headers, rows, col_widths, font_size=9):
-    """在 PyMuPDF 页面绘制表格（中文字体），返回结束 y 坐标。"""
-    from pymupdf import Rect
+def _text_width(text, fs):
+    """计算指定字体下文本宽度（真实 TTF 用 fitz.Font，回退到内置中文字体）。"""
+    from pymupdf import Font, get_text_length
+    font_path = _find_cjk_font()
+    if font_path:
+        try:
+            return Font(fontfile=font_path).text_length(text, fontsize=fs)
+        except Exception:
+            pass
+    return get_text_length(text, fontname="china-s", fontsize=fs)
+
+
+def _write_pdf_table(page, y, headers, rows, col_widths, font_size=10):
+    """在 PyMuPDF 页面绘制表格（真实中文字体，比例数字），返回结束 y 坐标。"""
+    from pymupdf import Rect, Point
     doc = page.parent
     page_height = page.rect.height
     left = 36
-    row_h = 20 if font_size > 9 else 16
-    header_h = 24
-    table_w = sum(col_widths)
+    row_h = 22 if font_size > 9 else 18
+    header_h = 26
 
-    from pymupdf import Point, get_text_length
-
-    def _center_text(p, r, text, fs, color):
+    def _center_text(p, r, text, fs, color, fn):
         # 用 insert_text 居中绘制（不裁剪，避免单元格过小导致文字不显示）
         if not text:
             return
-        tw = get_text_length(text, fontname=CJK_FONT, fontsize=fs)
+        tw = _text_width(text, fs)
         cx = (r.x0 + r.x1) / 2
         cy = (r.y0 + r.y1) / 2 + fs * 0.35
-        p.insert_text(Point(cx - tw / 2, cy), text, fontsize=fs, fontname=CJK_FONT, color=color)
+        p.insert_text(Point(cx - tw / 2, cy), text, fontsize=fs, fontname=fn, color=color)
 
-    def draw_header(p, start_y):
+    def draw_header(p, start_y, fn):
         for i, h in enumerate(headers):
             r = Rect(left + sum(col_widths[:i]), start_y, left + sum(col_widths[:i + 1]), start_y + header_h)
             p.draw_rect(r, color=(0.1, 0.45, 0.91), fill=(0.1, 0.45, 0.91))
-            _center_text(p, r, str(h), font_size, (1, 1, 1))
+            _center_text(p, r, str(h), font_size, (1, 1, 1), fn)
 
+    fnt = _ensure_page_font(page)
     # 表头
-    draw_header(page, y)
+    draw_header(page, y, fnt)
     y += header_h
 
     # 数据行（跨页时切新页）
     for row in rows:
         if y + row_h > page_height - 40:
             page = doc.new_page(width=page.rect.width, height=page.rect.height)
-            draw_header(page, 36)
+            fnt = _ensure_page_font(page)
+            draw_header(page, 36, fnt)
             y = 36 + header_h
         for i, val in enumerate(row):
             r = Rect(left + sum(col_widths[:i]), y, left + sum(col_widths[:i + 1]), y + row_h)
             page.draw_rect(r, color=(0.8, 0.8, 0.8))
             text = str(val) if val is not None else ""
-            _center_text(page, r, text, font_size, (0.2, 0.2, 0.2))
+            _center_text(page, r, text, font_size, (0.2, 0.2, 0.2), fnt)
         y += row_h
     return y
 
@@ -587,12 +627,13 @@ def export_analysis_pdf(current_class, exam):
     data = compute_analysis_data(current_class, exam)
     doc = fitz.open()
     page = doc.new_page(width=595, height=842)  # A4 纵向
+    fnt = _ensure_page_font(page)
 
     y = 50
-    page.insert_text((36, y), f"{exam.name} 班级成绩分析", fontsize=16, fontname="china-s", color=(0.1, 0.2, 0.4))
-    y += 12
-    page.insert_text((36, y), f"共 {data['total_count']} 人参与 | 总分平均 {data['total_avg']} | 最高总分 {data['total_max']}", fontsize=11)
-    y += 26
+    page.insert_text((36, y), f"{exam.name} 班级成绩分析", fontsize=17, fontname=fnt, color=(0.1, 0.2, 0.4))
+    y += 13
+    page.insert_text((36, y), f"共 {data['total_count']} 人参与 | 总分平均 {data['total_avg']} | 最高总分 {data['total_max']}", fontsize=12, fontname=fnt)
+    y += 28
 
     # 各科均分柱状图
     chart_png = _chart_avg_bar(data["analysis_data"])
@@ -602,27 +643,28 @@ def export_analysis_pdf(current_class, exam):
         tmp.close()
         img_w = 523
         img_h = int(img_w * 340 / 760)
-        page.insert_text((36, y), "各科平均分", fontsize=13, fontname="china-s")
-        y += 8
+        page.insert_text((36, y), "各科平均分", fontsize=14, fontname=fnt)
+        y += 9
         page.insert_image(fitz.Rect(36, y, 36 + img_w, y + img_h), filename=tmp.name)
         os.unlink(tmp.name)
-        y += img_h + 12
+        y += img_h + 14
 
     # 整体统计表
-    page.insert_text((36, y), "整体统计", fontsize=13, fontname="china-s")
-    y += 8
+    page.insert_text((36, y), "整体统计", fontsize=14, fontname=fnt)
+    y += 9
     headers = ["科目", "人数", "平均分", "最高", "最低", "及格率%", "优秀率%"]
     col_widths = [70, 55, 75, 75, 75, 90, 90]
     rows = [[name, d["count"], d["avg"], d["max"] or "", d["min"] or "", d["pass_rate"], d["excellent_rate"]]
             for name, d in data["analysis_data"].items()]
-    y = _write_pdf_table(page, y, headers, rows, col_widths) + 14
+    y = _write_pdf_table(page, y, headers, rows, col_widths) + 16
 
     # 班级总成绩表
     if y > 740:
         page = doc.new_page(width=595, height=842)
+        fnt = _ensure_page_font(page)
         y = 40
-    page.insert_text((36, y), "班级总成绩（前 30 名）", fontsize=13, fontname="china-s")
-    y += 8
+    page.insert_text((36, y), "班级总成绩（前 30 名）", fontsize=14, fontname=fnt)
+    y += 9
     subjects = [es.subject.name for es in data["exam_subjects"]]
     headers = ["排名", "姓名", "总分"] + subjects
     col_widths = [40, 60, 55] + [50] * len(subjects)
@@ -631,7 +673,7 @@ def export_analysis_pdf(current_class, exam):
         values = [row["rank"], row["student"].name, row["total_score"]]
         values += [row["subjects"].get(s, "") for s in subjects]
         rows.append(values)
-    _write_pdf_table(page, y, headers, rows, col_widths, font_size=7)
+    _write_pdf_table(page, y, headers, rows, col_widths, font_size=9)
 
     output = io.BytesIO()
     doc.save(output)

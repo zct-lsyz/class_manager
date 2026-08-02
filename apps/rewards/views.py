@@ -113,52 +113,87 @@ def reward_delete(request, pk):
 
 @login_required
 def points(request):
-    """奖惩积分"""
+    """总体积分排名：按排名设置选中的模块汇总积分"""
+    from collections import defaultdict
+    from apps.rewards.models import RankingSetting
+
     current_class = get_current_class(request.user)
-    current_semester = Semester.objects.filter(
-        school_class=current_class, is_current=True,
-    ).first() if current_class else None
+    setting, _ = RankingSetting.objects.get_or_create(
+        school_class=current_class,
+    ) if current_class else (None, False)
+    enabled_types = setting.enabled_source_types() if setting else []
 
     date_from = request.GET.get("date_from", "")
     date_to = request.GET.get("date_to", "")
-    period = request.GET.get("period", "month")
 
     records = PointRecord.objects.filter(
-        school_class=current_class, semester=current_semester, is_deleted=False
-    ).select_related("student").order_by("-date") if current_class else PointRecord.objects.none()
+        school_class=current_class, source_type__in=enabled_types, is_deleted=False,
+    ).select_related("student").order_by("-date") if current_class and enabled_types else PointRecord.objects.none()
     if date_from:
         records = records.filter(date__gte=date_from)
     if date_to:
         records = records.filter(date__lte=date_to)
 
-    # 获取所有学生的积分汇总
-    students = Student.objects.filter(
-        school_class=current_class, is_deleted=False
-    ) if current_class else []
+    # 一次查询，Python 汇总
+    all_recs = list(records)
+    student_data = defaultdict(lambda: {"total": 0, "reasons": defaultdict(lambda: {"total": 0, "count": 0})})
+    for r in all_recs:
+        d = student_data[r.student_id]
+        d["total"] += r.points
+        d["reasons"][r.reason]["total"] += r.points
+        d["reasons"][r.reason]["count"] += 1
 
+    students = Student.objects.filter(
+        school_class=current_class, is_deleted=False,
+    ) if current_class else []
     student_points = []
     for s in students:
-        total = records.filter(student=s).aggregate(Sum("points"))["points__sum"] or 0
-        student_points.append({"student": s, "total": total})
-
+        data = student_data.get(s.pk, {"total": 0, "reasons": {}})
+        reasons = sorted(
+            data["reasons"].items(),
+            key=lambda kv: abs(kv[1]["total"]), reverse=True,
+        )[:6]
+        student_points.append({
+            "student": s,
+            "total": data["total"],
+            "reasons": [{"reason": k, "total": v["total"], "count": v["count"]} for k, v in reasons],
+        })
     student_points.sort(key=lambda x: x["total"], reverse=True)
 
-    trunc = {"day": TruncDay, "week": TruncWeek, "month": TruncMonth}.get(period, TruncMonth)
-    trends = list(records.annotate(bucket=trunc("date")).values("bucket", "student__name").annotate(total=Sum("points")).order_by("bucket", "student__name"))
-    distribution = list(records.values("reason").annotate(total=Sum("points"), count=Count("id")).order_by("-count")[:20])
-
-    paginator = Paginator(records, 30)
-    page = request.GET.get("page", 1)
-    page_obj = paginator.get_page(page)
+    paginator = Paginator(all_recs, 30)
+    page_obj = paginator.get_page(request.GET.get("page", 1))
 
     context = {
         "student_points": student_points,
         "page_obj": page_obj,
-        "trends": trends,
-        "distribution": distribution,
-        "filters": {"date_from": date_from, "date_to": date_to, "period": period},
+        "setting": setting,
+        "enabled_labels": setting.enabled_labels() if setting else [],
+        "filters": {"date_from": date_from, "date_to": date_to},
     }
     return render(request, "rewards/points.html", context)
+
+
+@login_required
+def ranking_settings(request):
+    """积分排名设置：选择参与总体排名的来源模块"""
+    from apps.rewards.models import RankingSetting
+    current_class = get_current_class(request.user)
+    setting, _ = RankingSetting.objects.get_or_create(
+        school_class=current_class,
+    ) if current_class else (None, False)
+
+    if request.method == "POST":
+        setting.enable_reward = request.POST.get("enable_reward") == "on"
+        setting.enable_classroom_discipline = request.POST.get("enable_classroom_discipline") == "on"
+        setting.enable_dorm_discipline = request.POST.get("enable_dorm_discipline") == "on"
+        setting.enable_hygiene = request.POST.get("enable_hygiene") == "on"
+        setting.enable_attendance = request.POST.get("enable_attendance") == "on"
+        setting.enable_homework = request.POST.get("enable_homework") == "on"
+        setting.save()
+        messages.success(request, "积分排名设置已保存。")
+        return redirect("rewards:points")
+
+    return render(request, "rewards/ranking_settings.html", {"setting": setting})
 
 
 @login_required

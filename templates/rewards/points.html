@@ -1,13 +1,85 @@
-{% extends "base.html" %}{% block title %}奖惩积分{% endblock %}
-{% block content %}<div class="d-flex justify-content-between align-items-center mt-3 mb-4"><h4 class="mb-0"><i class="bi bi-trophy me-2 text-primary"></i>奖惩积分排名</h4><div><a href="{% url 'rewards:index' %}" class="btn btn-outline-primary btn-sm">返回奖惩管理</a> <a href="{% url 'exports:export_module' 'points' %}" class="btn btn-success btn-sm"><i class="bi bi-file-earmark-excel"></i> 一键导出 Excel</a></div></div>
-<form method="get" class="card card-body mb-3"><div class="row g-2 align-items-end"><div class="col-md-3"><label class="form-label small">开始日期</label><input type="date" name="date_from" value="{{ filters.date_from }}" class="form-control"></div><div class="col-md-3"><label class="form-label small">结束日期</label><input type="date" name="date_to" value="{{ filters.date_to }}" class="form-control"></div><div class="col-md-3"><label class="form-label small">趋势周期</label><select name="period" class="form-select"><option value="day" {% if filters.period == 'day' %}selected{% endif %}>按日</option><option value="week" {% if filters.period == 'week' %}selected{% endif %}>按周</option><option value="month" {% if filters.period == 'month' %}selected{% endif %}>按月</option></select></div><div class="col-md-3"><button class="btn btn-primary">筛选积分数据</button> <a href="{% url 'students:history_browser' 'points' %}" class="btn btn-outline-primary">浏览全部学生</a></div></div></form>
-<div class="row"><div class="col-md-4"><div class="card"><div class="card-header">积分排行</div><div class="card-body p-0 table-responsive">
-  <table class="table mb-0"><thead><tr><th>学生</th><th>总分</th></tr></thead>
-  <tbody>{% for sp in student_points %}<tr><td>{{ sp.student.name }}</td><td><strong>{{ sp.total }}</strong></td></tr>{% empty %}<tr><td colspan="2" class="text-muted">暂无</td></tr>{% endfor %}</tbody></table>
-</div></div></div>
-<div class="col-md-8"><div class="card"><div class="card-header">积分明细</div><div class="card-body p-0 table-responsive">
-  <table class="table mb-0"><thead><tr><th>日期</th><th>学生</th><th>分值</th><th>原因</th><th>来源</th></tr></thead>
-  <tbody>{% for r in page_obj %}<tr><td>{{ r.date }}</td><td>{{ r.student.name }}</td><td class="{% if r.points >= 0 %}text-success{% else %}text-danger{% endif %}">{{ r.points }}</td><td>{{ r.reason|truncatechars:30 }}</td><td>{{ r.get_source_type_display }}</td></tr>{% empty %}<tr><td colspan="5" class="text-muted text-center py-4">暂无可显示的积分明细</td></tr>{% endfor %}</tbody></table>
-</div></div></div></div>
-<div class="row g-3 mt-1"><div class="col-lg-7"><div class="card"><div class="card-header">积分趋势（{{ filters.period }}）</div><div class="card-body p-0 table-responsive"><table class="table mb-0"><thead><tr><th>周期</th><th>学生</th><th>积分变化</th></tr></thead><tbody>{% for row in trends %}<tr><td>{{ row.bucket|date:'Y-m-d' }}</td><td>{{ row.student__name }}</td><td class="{% if row.total < 0 %}text-danger{% else %}text-success{% endif %}">{{ row.total|stringformat:'+d' }}</td></tr>{% empty %}<tr><td colspan="3" class="text-center text-muted">暂无趋势数据</td></tr>{% endfor %}</tbody></table></div></div></div><div class="col-lg-5"><div class="card"><div class="card-header">加减分项分布</div><div class="card-body p-0 table-responsive"><table class="table mb-0"><thead><tr><th>项目</th><th>次数</th><th>积分</th></tr></thead><tbody>{% for row in distribution %}<tr><td>{{ row.reason|truncatechars:24 }}</td><td>{{ row.count }}</td><td>{{ row.total|stringformat:'+d' }}</td></tr>{% empty %}<tr><td colspan="3" class="text-center text-muted">暂无分布数据</td></tr>{% endfor %}</tbody></table></div></div></div></div>
+{% extends "base.html" %}{% block title %}总体积分排名{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mt-3 mb-4">
+    <h4 class="mb-0"><i class="bi bi-trophy me-2 text-primary"></i>总体积分排名</h4>
+    <div class="d-flex gap-2">
+        <a href="{% url 'rewards:ranking_settings' %}" class="btn btn-outline-primary btn-sm"><i class="bi bi-gear me-1"></i>排名设置</a>
+        <a href="{% url 'rewards:index' %}" class="btn btn-outline-secondary btn-sm">返回奖惩管理</a>
+        <a href="{% url 'exports:export_module' 'points' %}" class="btn btn-success btn-sm"><i class="bi bi-file-earmark-excel"></i> 导出 Excel</a>
+    </div>
+</div>
+
+<div class="alert alert-light border small mb-3">
+    <i class="bi bi-info-circle me-1"></i>
+    参与排名的模块：<strong>{% for l in enabled_labels %}{{ l }}{% if not forloop.last %}、{% endif %}{% empty %}（未选择任何模块）{% endfor %}</strong>
+    <a href="{% url 'rewards:ranking_settings' %}" class="ms-2">调整</a>
+</div>
+
+<form method="get" class="card card-body mb-3">
+    <div class="row g-2 align-items-end">
+        <div class="col-md-3"><label class="form-label small">开始日期</label><input type="date" name="date_from" value="{{ filters.date_from }}" class="form-control"></div>
+        <div class="col-md-3"><label class="form-label small">结束日期</label><input type="date" name="date_to" value="{{ filters.date_to }}" class="form-control"></div>
+        <div class="col-md-3"><button class="btn btn-primary">筛选</button></div>
+    </div>
+</form>
+
+<div class="card">
+    <div class="card-header"><i class="bi bi-trophy-fill me-2 text-warning"></i>积分排行</div>
+    <div class="card-body p-0 table-responsive">
+        <table class="table table-hover mb-0 align-middle">
+            <thead class="table-light"><tr><th class="text-center" style="width:60px">名次</th><th>学生</th><th class="text-center" style="width:90px">总分</th><th>加减分原因</th></tr></thead>
+            <tbody>
+            {% for sp in student_points %}
+            <tr>
+                <td class="text-center">
+                    {% if forloop.counter == 1 %}🥇{% elif forloop.counter == 2 %}🥈{% elif forloop.counter == 3 %}🥉{% endif %}
+                    <strong>{{ forloop.counter }}</strong>
+                </td>
+                <td><strong>{{ sp.student.name }}</strong></td>
+                <td class="text-center fw-bold {% if sp.total < 0 %}text-danger{% else %}text-primary{% endif %}">{{ sp.total }}</td>
+                <td class="small text-muted">
+                    {% if sp.reasons %}
+                    {% for r in sp.reasons %}
+                    <span class="me-3 d-inline-block">
+                        {% if r.total < 0 %}<span class="text-danger">{{ r.total|stringformat:'+d' }}</span>{% else %}<span class="text-success">{{ r.total|stringformat:'+d' }}</span>{% endif %}
+                        {{ r.reason|truncatechars:20 }}{% if r.count > 1 %}×{{ r.count }}{% endif %}
+                    </span>
+                    {% endfor %}
+                    {% else %}<span class="text-muted">—</span>{% endif %}
+                </td>
+            </tr>
+            {% empty %}<tr><td colspan="4" class="text-muted text-center py-4">暂无积分数据（请确认排名设置中已勾选模块，且已产生加减分记录）</td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="card mt-3">
+    <div class="card-header"><i class="bi bi-list-ul me-2"></i>积分明细</div>
+    <div class="card-body p-0 table-responsive">
+        <table class="table mb-0">
+            <thead class="table-light"><tr><th>日期</th><th>学生</th><th class="text-center">分值</th><th>原因</th><th>来源</th></tr></thead>
+            <tbody>
+            {% for r in page_obj %}
+            <tr>
+                <td>{{ r.date }}</td>
+                <td>{{ r.student.name }}</td>
+                <td class="text-center {% if r.points >= 0 %}text-success{% else %}text-danger{% endif %}">{{ r.points|stringformat:'+d' }}</td>
+                <td>{{ r.reason|truncatechars:40 }}</td>
+                <td>{{ r.get_source_type_display }}</td>
+            </tr>
+            {% empty %}<tr><td colspan="5" class="text-muted text-center py-4">暂无可显示的积分明细</td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+        {% if page_obj.has_other_pages %}
+        <nav class="card-body"><ul class="pagination pagination-sm mb-0">
+            {% if page_obj.has_previous %}<li class="page-item"><a class="page-link" href="?page={{ page_obj.previous_page_number }}{% if filters.date_from %}&date_from={{ filters.date_from }}{% endif %}{% if filters.date_to %}&date_to={{ filters.date_to }}{% endif %}">上一页</a></li>{% endif %}
+            <li class="page-item disabled"><span class="page-link">第 {{ page_obj.number }} / {{ page_obj.paginator.num_pages }} 页</span></li>
+            {% if page_obj.has_next %}<li class="page-item"><a class="page-link" href="?page={{ page_obj.next_page_number }}{% if filters.date_from %}&date_from={{ filters.date_from }}{% endif %}{% if filters.date_to %}&date_to={{ filters.date_to }}{% endif %}">下一页</a></li>{% endif %}
+        </ul></nav>
+        {% endif %}
+    </div>
+</div>
 {% endblock %}

@@ -114,6 +114,33 @@ def task_delete(request, pk):
     return redirect("homework:task_detail", pk=task.pk)
 
 
+HOMEWORK_POINTS = {
+    "submitted": 1,
+    "excellent": 2,
+    "corrected": 1,
+    "unsubmitted": -1,
+    "late": -1,
+    "needs_correction": -1,
+    "poor": -2,
+    "exempted": 0,
+    "other": 0,
+}
+
+
+def _sync_homework_points(record):
+    """作业完成状态同步到统一积分（source_type=homework）。"""
+    from apps.rewards.services import sync_source_point
+    points = HOMEWORK_POINTS.get(record.status, 0)
+    sync_source_point(
+        student=record.student, school_class=record.task.school_class,
+        semester=record.task.semester,
+        date=record.submission_date or record.task.assigned_date,
+        points=points,
+        reason=f"作业：{record.task.title}（{record.status_display}）",
+        source_type="homework", source_id=record.pk,
+    )
+
+
 @login_required
 def task_detail(request, pk):
     """作业任务详情及完成情况"""
@@ -148,7 +175,7 @@ def task_detail(request, pk):
                     pk__in=batch_student_ids, school_class=task.school_class, is_deleted=False,
                 )
                 for student in batch_students:
-                    HomeworkRecord.objects.update_or_create(
+                    record, _ = HomeworkRecord.objects.update_or_create(
                         task=task, student=student,
                         defaults={
                             "status": batch_status,
@@ -156,6 +183,7 @@ def task_detail(request, pk):
                             if batch_status in ("submitted", "excellent") else None,
                         },
                     )
+                    _sync_homework_points(record)
                     saved += 1
             for key, value in request.POST.items():
                 if not key.startswith("record_"):
@@ -166,13 +194,14 @@ def task_detail(request, pk):
                 status = request.POST.get(f"status_{student_id}", value or "submitted")
                 if status not in valid_statuses:
                     continue
-                HomeworkRecord.objects.update_or_create(
+                record, _ = HomeworkRecord.objects.update_or_create(
                     task=task, student_id=int(student_id),
                     defaults={
                         "status": status,
                         "submission_date": timezone.localdate() if status == "submitted" else None,
                     },
                 )
+                _sync_homework_points(record)
                 saved += 1
         from apps.audit.models import OperationLog
         OperationLog.objects.create(

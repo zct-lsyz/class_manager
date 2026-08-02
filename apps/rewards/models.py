@@ -112,6 +112,7 @@ class PointRecord(BaseModel):
             ("dorm_discipline", "宿舍纪律扣分"),
             ("hygiene", "卫生扣分/加分"),
             ("attendance", "考勤扣分/加分"),
+            ("homework", "作业检查"),
             ("manual", "手工调整"),
         ],
         default="manual",
@@ -130,3 +131,53 @@ class PointRecord(BaseModel):
 
     def __str__(self):
         return f"{self.student.name} {self.points:+d}分 - {self.reason[:30]}"
+
+
+class RankingSetting(BaseModel):
+    """积分排名设置：选择参与总体积分排名的来源模块。"""
+    school_class = models.OneToOneField(
+        SchoolClass, on_delete=models.CASCADE,
+        related_name="ranking_setting", verbose_name="班级",
+    )
+    enable_reward = models.BooleanField("奖惩统计", default=True)
+    enable_classroom_discipline = models.BooleanField("课堂纪律", default=True)
+    enable_dorm_discipline = models.BooleanField("宿舍纪律", default=True)
+    enable_hygiene = models.BooleanField("宿舍卫生", default=True)
+    enable_attendance = models.BooleanField("考勤管理", default=True)
+    enable_homework = models.BooleanField("作业检查", default=True)
+
+    class Meta:
+        verbose_name = "积分排名设置"
+        verbose_name_plural = "积分排名设置"
+
+    def enabled_source_types(self):
+        types = []
+        if self.enable_reward:
+            types.append("reward")
+        if self.enable_classroom_discipline:
+            types.append("classroom_discipline")
+        if self.enable_dorm_discipline:
+            types.append("dorm_discipline")
+        if self.enable_hygiene:
+            types.append("hygiene")
+        if self.enable_attendance:
+            types.append("attendance")
+        if self.enable_homework:
+            types.append("homework")
+        return types
+
+    def enabled_labels(self):
+        labels = []
+        if self.enable_reward:
+            labels.append("奖惩统计")
+        if self.enable_classroom_discipline:
+            labels.append("课堂纪律")
+        if self.enable_dorm_discipline:
+            labels.append("宿舍纪律")
+        if self.enable_hygiene:
+            labels.append("宿舍卫生")
+        if self.enable_attendance:
+            labels.append("考勤管理")
+        if self.enable_homework:
+            labels.append("作业检查")
+        return labels

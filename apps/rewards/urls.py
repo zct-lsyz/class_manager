@@ -9,6 +9,7 @@ urlpatterns = [
     path("<int:pk>/edit/", views.reward_edit, name="reward_edit"),
     path("<int:pk>/delete/", views.reward_delete, name="reward_delete"),
     path("points/", views.points, name="points"),
+    path("points/settings/", views.ranking_settings, name="ranking_settings"),
     path("rules/", views.rules, name="rules"),
     path("rules/<int:pk>/delete/", views.rule_delete, name="rule_delete"),
 ]

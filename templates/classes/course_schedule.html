@@ -82,16 +82,26 @@
     </div>
 </div>
 
-<!-- ===== 课表编辑 ===== -->
+<!-- ===== 课表 ===== -->
+{% if edit_mode %}
 <form method="post" onsubmit="return confirm('确认保存课程表？保存后将生成历史快照。')">
     {% csrf_token %}
     <input type="hidden" name="action" value="save_schedule">
+{% endif %}
     <div class="card">
         <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
-            <span>课表编辑
-                <small class="text-muted ms-2">在每个格子下拉选择课程；节次名称与时间可编辑。</small>
+            <span>{% if edit_mode %}课表编辑{% else %}课表{% endif %}
+                {% if edit_mode %}<small class="text-muted ms-2">在每个格子下拉选择课程；节次名称与时间可编辑。保存后进入显示模式。</small>{% endif %}
             </span>
-            <label class="small mb-0">课程节数 <input type="number" name="period_count" value="{{ max_period }}" min="1" max="20" class="form-control form-control-sm d-inline-block ms-1" style="width:76px"></label>
+            <span class="d-flex gap-2 align-items-center">
+                {% if edit_mode %}
+                <label class="small mb-0">课程节数 <input type="number" name="period_count" value="{{ max_period }}" min="1" max="20" class="form-control form-control-sm d-inline-block ms-1" style="width:76px"></label>
+                <a href="{% url 'classes:course_schedule' %}" class="btn btn-outline-secondary btn-sm">取消编辑</a>
+                <button type="submit" class="btn btn-primary btn-sm"><i class="bi bi-save me-1"></i>保存课表</button>
+                {% else %}
+                <a href="{% url 'classes:course_schedule' %}?edit=1" class="btn btn-outline-primary btn-sm"><i class="bi bi-pencil me-1"></i>编辑课表</a>
+                {% endif %}
+            </span>
         </div>
         <div class="card-body p-0 table-responsive">
             <div id="schedule-print-area">
@@ -104,26 +114,29 @@
                 <tr>
                     {% with period_setting=period_settings|get_item:period %}
                     <td class="align-middle text-center" style="min-width:130px">
-                        <div class="period-display small fw-semibold">
-                            {% if period_setting and period_setting.name %}{{ period_setting.name }}{% else %}第{{ period }}节{% endif %}
-                            {% if period_setting and period_setting.start_time %}<br><span class="text-muted">{{ period_setting.start_time|time:'H:i' }}{% if period_setting.end_time %}-{{ period_setting.end_time|time:'H:i' }}{% endif %}</span>{% endif %}
-                        </div>
-                        <input type="text" name="period_name_{{ period }}" value="{{ period_setting.name|default:'' }}" class="form-control form-control-sm mt-1 no-export" placeholder="节次名称（如 早读/第1节）">
-                        <div class="d-flex gap-1 mt-1 no-export">
+                        {% if edit_mode %}
+                        <input type="text" name="period_name_{{ period }}" value="{{ period_setting.name|default:'' }}" class="form-control form-control-sm mb-1" placeholder="节次名称">
+                        <div class="d-flex gap-1">
                             <input type="time" name="start_time_{{ period }}" value="{{ period_setting.start_time|time:'H:i' }}" class="form-control form-control-sm" title="开始时间">
                             <input type="time" name="end_time_{{ period }}" value="{{ period_setting.end_time|time:'H:i' }}" class="form-control form-control-sm" title="结束时间">
                         </div>
+                        {% else %}
+                        <div class="fw-semibold">{{ period_setting.name|default:"" }}</div>
+                        {% if period_setting and period_setting.start_time %}<div class="text-muted small">{{ period_setting.start_time|time:'H:i' }}{% if period_setting.end_time %}-{{ period_setting.end_time|time:'H:i' }}{% endif %}</div>{% endif %}
+                        {% endif %}
                     </td>
                     {% endwith %}
                     {% for weekday in weekdays %}
                     <td class="p-1 schedule-cell" style="min-width:110px;">
                         {% with entry=grid|get_item:weekday|get_item:period %}
-                        <select name="cell_{{ weekday }}_{{ period }}" class="form-select form-select-sm course-input mb-1 no-export" data-weekday="{{ weekday }}" data-period="{{ period }}">
+                        {% if edit_mode %}
+                        <select name="cell_{{ weekday }}_{{ period }}" class="form-select form-select-sm course-input mb-1" data-weekday="{{ weekday }}" data-period="{{ period }}">
                             <option value="">（无课）</option>
                             {% for c in courses %}
                             <option value="{{ c.pk }}" {% if entry and entry.course_id == c.pk %}selected{% endif %}>{{ c.name }}{% if c.teacher %}（{{ c.teacher }}）{% endif %}</option>
                             {% endfor %}
                         </select>
+                        {% endif %}
                         <div class="course-display small fw-semibold">
                             {% if entry %}{{ entry.subject }}{% if entry.teacher %}<br><span class="text-muted">{{ entry.teacher }}</span>{% endif %}{% endif %}
                         </div>
@@ -136,27 +149,37 @@
             </table>
             </div>
         </div>
-        <div class="card-footer text-end">
-            <button type="submit" class="btn btn-primary"><i class="bi bi-save me-1"></i>保存课程表</button>
-        </div>
     </div>
+{% if edit_mode %}
 </form>
+{% endif %}
 
 <script>
 (function() {
-    // 课程颜色
-    function colorCell(select) {
-        const cell = select.closest('.schedule-cell');
-        const opt = select.options[select.selectedIndex];
-        const name = opt ? opt.text.split('（')[0].trim() : '';
-        if (!name) { cell.style.backgroundColor = ''; return; }
+    // 课程颜色（编辑模式用下拉，显示模式用课程文本）
+    function hashColor(name) {
         let hash = 0;
         for (const char of name) hash = (hash * 31 + char.charCodeAt(0)) >>> 0;
-        cell.style.backgroundColor = `hsl(${hash % 360} 70% 92%)`;
+        return `hsl(${hash % 360} 70% 92%)`;
     }
+    // 编辑模式
     document.querySelectorAll('.course-input').forEach(select => {
-        colorCell(select);
-        select.addEventListener('change', () => colorCell(select));
+        const colorCell = () => {
+            const cell = select.closest('.schedule-cell');
+            const opt = select.options[select.selectedIndex];
+            const name = opt ? opt.text.split('（')[0].trim() : '';
+            cell.style.backgroundColor = name ? hashColor(name) : '';
+        };
+        colorCell();
+        select.addEventListener('change', colorCell);
+    });
+    // 显示模式：按课程文本上色
+    document.querySelectorAll('.schedule-cell').forEach(cell => {
+        const disp = cell.querySelector('.course-display');
+        if (disp && disp.textContent.trim()) {
+            const name = disp.textContent.trim().split('\\n')[0];
+            cell.style.backgroundColor = hashColor(name);
+        }
     });
 })();
 </script>

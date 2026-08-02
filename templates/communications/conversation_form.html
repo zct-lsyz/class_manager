@@ -1,6 +1,82 @@
 {% extends "base.html" %}{% block title %}新建谈话{% endblock %}
 {% block content %}<div class="row justify-content-center mt-3"><div class="col-md-8">
-  <div class="card"><div class="card-header">新建谈话记录</div><div class="card-body"><form method="post">{% csrf_token %}
-  {% for f in form %}{% if f.name == "student" %}{% include "_student_checkbox_field.html" with field=f %}{% else %}<div class="mb-3"><label class="form-label small">{{ f.label }}</label>{{ f }}</div>{% endif %}{% endfor %}
+  <div class="card"><div class="card-header">新建谈话记录</div><div class="card-body"><form method="post" id="conversationForm">{% csrf_token %}
+  {% for f in form %}
+  {% if f.name == "student" %}{% include "_student_checkbox_field.html" with field=f %}
+  {% elif f.name == "main_content" %}
+  <div class="mb-3">
+    <label class="form-label small">{{ f.label }}</label>{{ f }}
+    <div class="form-text">
+      <button type="button" class="btn btn-sm btn-outline-secondary mt-1" id="startVoiceBtn" title="语音输入（需Chrome/Edge浏览器）"><i class="bi bi-mic-fill me-1"></i>开始录音</button>
+      <button type="button" class="btn btn-sm btn-outline-danger mt-1" id="stopVoiceBtn" style="display:none" title="停止录音"><i class="bi bi-stop-fill me-1"></i>停止录音</button>
+      <span id="voiceStatus" class="text-muted small ms-1"></span>
+      <noscript><span class="text-warning small ms-2">⚠ 您的浏览器不支持语音输入，请手动输入文字。</span></noscript>
+    </div>
+  </div>
+  {% else %}<div class="mb-3"><label class="form-label small">{{ f.label }}</label>{{ f }}</div>{% endif %}
+  {% endfor %}
   <button class="btn btn-primary">保存</button></form></div></div>
 </div></div>{% endblock %}
+
+{% block extra_js %}
+<script>
+(function() {
+    var startBtn = document.getElementById('startVoiceBtn');
+    var stopBtn = document.getElementById('stopVoiceBtn');
+    var statusEl = document.getElementById('voiceStatus');
+    var ta = document.getElementById('id_main_content');
+    if (!startBtn || !ta) return;
+
+    var SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+        startBtn.disabled = true;
+        startBtn.title = '您的浏览器不支持语音输入，请使用Chrome或Edge';
+        statusEl.textContent = '⚠ 浏览器不支持语音，请手动输入';
+        return;
+    }
+    var recognition = null;
+    var finalText = '';
+
+    startBtn.addEventListener('click', function() {
+        recognition = new SpeechRecognition();
+        recognition.lang = 'zh-CN';
+        recognition.interimResults = true;
+        recognition.continuous = true;
+        finalText = ta.value;
+        if (finalText) finalText += '\n';
+
+        recognition.onresult = function(event) {
+            var interim = '';
+            for (var i = event.resultIndex; i < event.results.length; i++) {
+                if (event.results[i].isFinal) finalText += event.results[i][0].transcript;
+                else interim += event.results[i][0].transcript;
+            }
+            ta.value = finalText + interim;
+        };
+        recognition.onerror = function(event) {
+            statusEl.textContent = '识别出错：' + event.error;
+            stopRecording();
+        };
+        recognition.onend = function() { stopRecording(); };
+        recognition.start();
+        startBtn.style.display = 'none';
+        stopBtn.style.display = '';
+        statusEl.textContent = '🔴 正在录音...';
+        statusEl.className = 'text-danger small ms-1';
+    });
+
+    stopBtn.addEventListener('click', function() {
+        if (recognition) recognition.stop();
+        stopRecording();
+    });
+
+    function stopRecording() {
+        startBtn.style.display = '';
+        stopBtn.style.display = 'none';
+        statusEl.textContent = '✅ 录音已停止，可继续编辑文字';
+        statusEl.className = 'text-success small ms-1';
+        recognition = null;
+    }
+})();
+</script>
+{% endblock %}

@@ -26,7 +26,8 @@
             {% for period in periods %}
             <tr>
                 {% with period_setting=period_settings|get_item:period %}
-                <td class="align-middle text-muted small">第{{ period }}节
+                <td class="align-middle text-muted small">
+                    <div class="fw-semibold">{{ period_setting.name|default:"" }}</div>
                     <div class="small">{{ period_setting.start_time|time:'H:i'|default:"" }}{% if period_setting.start_time and period_setting.end_time %}-{% endif %}{{ period_setting.end_time|time:'H:i'|default:"" }}</div>
                 </td>
                 {% endwith %}

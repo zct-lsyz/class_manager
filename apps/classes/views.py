@@ -477,11 +477,13 @@ def course_schedule(request):
         messages.success(request, f"课程表已保存（{count} 节课），已生成历史快照。")
         return redirect("classes:course_schedule")
 
+    edit_mode = request.GET.get("edit") == "1"
     return render(request, "classes/course_schedule.html", {
         "grid": grid, "max_period": max_period, "courses": courses,
         "period_settings": period_settings,
         "periods": range(1, max_period + 1),
         "weekdays": range(1, 8),
+        "edit_mode": edit_mode,
     })
 
 
@@ -561,7 +563,8 @@ def course_schedule_export(request):
     for period in range(1, max_period + 1):
         row = period + 1
         ps = period_settings.get(period)
-        time_label = f"第{period}节"
+        # 行标题以手动命名的节次名称为准；无命名则只显示时间
+        time_label = ps.name if ps and ps.name else ""
         if ps and ps.start_time:
             time_label += f"\n{ps.start_time.strftime('%H:%M')}" + (
                 f"-{ps.end_time.strftime('%H:%M')}" if ps.end_time else ""
