@@ -5,7 +5,10 @@
 <div id="pdf-export-area">
 <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-4">
     <h4 class="mb-0 mt-3"><i class="bi bi-person-lines-fill me-2 text-primary"></i>{{ student.name }}成绩详情</h4>
-    <div class="no-export">
+    <div class="no-export d-flex gap-2">
+        <a href="{% url 'scores:student_analysis_export' student.pk %}" class="btn btn-success btn-sm">
+            <i class="bi bi-file-earmark-excel me-1"></i>导出Excel
+        </a>
         <button type="button" class="btn btn-danger btn-sm" id="exportPdfBtn" onclick="exportPageToPdf({containerId:'pdf-export-area', buttonId:'exportPdfBtn', filename:'{{ student.name }}_成绩详情.pdf', title:'{{ student.name }} 成绩详情'})">
             <i class="bi bi-filetype-pdf me-1"></i>导出PDF
         </button>
@@ -68,7 +71,7 @@
 
 <div class="card mb-3">
     <div class="card-header py-2"><i class="bi bi-graph-up me-2"></i>成绩趋势</div>
-    <div class="card-body"><canvas id="studentAnalysisChart" height="180"></canvas></div>
+    <div class="card-body"><canvas id="studentAnalysisChart" height="110"></canvas></div>
 </div>
 
 <div class="card mb-3 no-export">
@@ -123,7 +126,7 @@
         {% endif %}
     </div>
     <div class="card-body">
-        {% if latest_ai_result %}<div class="text-muted small mb-2">{{ latest_ai_result.created_at|date:"Y-m-d H:i" }} · {{ latest_ai_result.model_name }}</div><div style="white-space:pre-wrap">{{ latest_ai_result.result }}</div>
+        {% if latest_ai_result %}<div class="text-muted small mb-2">{{ latest_ai_result.created_at|date:"Y-m-d H:i" }} · {{ latest_ai_result.model_name }}</div><div class="ai-markdown">{{ latest_ai_result.result }}</div>
         {% elif not ai_config or not ai_config.is_enabled or not ai_config.has_key %}<div class="text-muted">请先在 AI 分析设置中启用功能并配置 API Key。</div>
         {% else %}<div class="text-muted">尚未生成分析，点击右上角按钮后才会调用 LLM。</div>{% endif %}
     </div>
@@ -137,6 +140,7 @@
 <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <script src="{% static 'js/pdf-export.js' %}"></script>
+{% include "scores/_ai_markdown_js.html" %}
 <script>
 const chartData = JSON.parse(document.getElementById('student-chart-data').textContent);
 
@@ -298,5 +302,6 @@ rebuildChart();
 .bg-success-subtle { background: #e8f5e9; }
 .border-danger-subtle { border-color: #f8bbd0 !important; }
 .border-success-subtle { border-color: #a5d6a7 !important; }
+{% include "scores/_ai_markdown_css.html" %}
 </style>
 {% endblock %}

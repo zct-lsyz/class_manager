@@ -860,6 +860,72 @@ def analysis(request):
 
 
 @login_required
+def analysis_export(request, fmt):
+    """导出班级成绩分析（Excel / PDF，服务端生成）。"""
+    from apps.scores.analysis_exports import export_analysis_excel, export_analysis_pdf
+    from django.http import HttpResponse
+    current_class = get_current_class(request.user)
+    exam_id = request.GET.get("exam_id", "")
+    exam = None
+    if exam_id:
+        exam = get_object_or_404(
+            Exam, pk=exam_id, school_class=current_class, is_deleted=False,
+        )
+    if not exam:
+        messages.error(request, "请先选择考试。")
+        return redirect("scores:analysis")
+
+    if fmt == "excel":
+        content, filename = export_analysis_excel(current_class, exam)
+        content_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    else:
+        content, filename = export_analysis_pdf(current_class, exam)
+        content_type = "application/pdf"
+    response = HttpResponse(content, content_type=content_type)
+    from urllib.parse import quote
+    response["Content-Disposition"] = f"attachment; filename*=UTF-8''{quote(filename)}"
+    return response
+
+
+@login_required
+def comparison_export(request):
+    """导出多班对比 Excel。"""
+    from apps.scores.analysis_exports import export_comparison_excel
+    from django.http import HttpResponse
+    from urllib.parse import quote
+    current_class = get_current_class(request.user)
+    exam_id = request.GET.get("exam_id", "")
+    exam = None
+    if exam_id:
+        exam = get_object_or_404(
+            Exam, pk=exam_id, school_class=current_class, is_deleted=False,
+        )
+    if not exam:
+        messages.error(request, "请先选择考试。")
+        return redirect("scores:comparison")
+    content, filename = export_comparison_excel(current_class, exam)
+    response = HttpResponse(content, content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    response["Content-Disposition"] = f"attachment; filename*=UTF-8''{quote(filename)}"
+    return response
+
+
+@login_required
+def student_analysis_export(request, pk):
+    """导出学生历次成绩 Excel。"""
+    from apps.scores.analysis_exports import export_student_excel
+    from django.http import HttpResponse
+    from urllib.parse import quote
+    current_class = get_current_class(request.user)
+    student = get_object_or_404(
+        Student, pk=pk, school_class=current_class, is_deleted=False,
+    )
+    content, filename = export_student_excel(student)
+    response = HttpResponse(content, content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    response["Content-Disposition"] = f"attachment; filename*=UTF-8''{quote(filename)}"
+    return response
+
+
+@login_required
 def grade_line_settings(request, exam_id):
     """本科线/合格线设置 —— GET 返回 JSON，POST 批量保存"""
     current_class = get_current_class(request.user)

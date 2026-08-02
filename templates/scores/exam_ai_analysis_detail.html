@@ -23,7 +23,7 @@
 <div class="alert alert-warning"><strong>解析提示：</strong><ul class="mb-0">{% for warning in source.warnings %}<li>{{ warning }}</li>{% endfor %}</ul></div>
 {% endif %}
 {% if source.overall_summary %}
-<div class="card mb-3"><div class="card-header">总体薄弱情况</div><div class="card-body" style="white-space: pre-wrap;">{{ source.overall_summary }}</div></div>
+<div class="card mb-3"><div class="card-header">总体薄弱情况</div><div class="card-body ai-markdown">{{ source.overall_summary }}</div></div>
 {% endif %}
 
 {% if source.weaknesses.all %}
@@ -52,3 +52,7 @@
 <div class="alert alert-info">小分表已经在本地解析，但 AI 未成功生成结构化知识点诊断。</div>
 {% endif %}
 {% endblock %}
+
+{% block extra_css %}{% include "scores/_ai_markdown_css.html" %}{% endblock %}
+
+{% block extra_js %}{% include "scores/_ai_markdown_js.html" %}{% endblock %}

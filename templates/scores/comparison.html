@@ -7,6 +7,9 @@
     <h4 class="mb-0"><i class="bi bi-collection me-2 text-primary"></i>多班成绩对比</h4>
     <div class="d-flex gap-2">
         {% if exam and comparison_table %}
+        <a href="{% url 'scores:comparison_export' %}?exam_id={{ exam.pk }}" class="btn btn-success btn-sm">
+            <i class="bi bi-file-earmark-excel me-1"></i>导出Excel
+        </a>
         <button type="button" class="btn btn-danger btn-sm" id="exportPdfBtn" onclick="exportPageToPdf({containerId:'pdf-export-area', buttonId:'exportPdfBtn', filename:'多班对比_{{ exam.name }}.pdf', title:'{{ exam.name }} 多班成绩对比'})">
             <i class="bi bi-filetype-pdf me-1"></i>导出PDF
         </button>
