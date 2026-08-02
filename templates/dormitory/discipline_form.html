@@ -40,7 +40,6 @@
 
 {% block extra_js %}
 {{ dorm_room_students|json_script:"room-students-data" }}
-<script src="{% static 'js/student-chip-select.js' %}"></script>
 <script src="{% static 'js/student-checkbox-select.js' %}"></script>
 <script>
 const ROOM_STUDENTS = JSON.parse(document.getElementById('room-students-data').textContent);

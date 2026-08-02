@@ -136,9 +136,12 @@ def home_school_create(request):
                             school_class=current_class, semester=current_semester,
                             student=st, contact_date=request.POST.get("contact_date", "") or timezone.localdate(),
                             contact_person=request.POST.get("contact_person", ""),
-                            contact_method=request.POST.get("contact_method", ""),
-                            content=request.POST.get("content", ""),
-                            follow_up=request.POST.get("follow_up", ""),
+                            contact_method=request.POST.get("contact_method", "phone"),
+                            reason=request.POST.get("reason", ""),
+                            summary=request.POST.get("summary", ""),
+                            parent_feedback=request.POST.get("parent_feedback", ""),
+                            follow_up_items=request.POST.get("follow_up_items", ""),
+                            follow_up_date=request.POST.get("follow_up_date") or None,
                         )
                         created += 1
                 messages.success(request, f"已为 {created} 名学生保存家校沟通记录。")
