@@ -57,6 +57,64 @@ def task_create(request):
 
 
 @login_required
+@require_current_class
+def task_edit(request, pk):
+    """修改作业任务内容"""
+    current_class = get_current_class(request.user)
+    task = get_object_or_404(
+        HomeworkTask.objects.select_related("subject"),
+        pk=pk, school_class=current_class,
+    )
+    current_semester = Semester.objects.filter(
+        school_class=current_class, is_current=True,
+    ).first()
+
+    if request.method == "POST":
+        form = HomeworkTaskForm(request.POST, instance=task)
+        if form.is_valid():
+            updated = form.save(commit=False)
+            updated.school_class = current_class
+            updated.semester = current_semester
+            updated.save()
+            from apps.audit.models import OperationLog
+            OperationLog.objects.create(
+                user=request.user, action="edit", module="homework",
+                object_repr=updated.title, detail="修改作业内容",
+                ip_address=request.META.get("REMOTE_ADDR", ""), success=True,
+            )
+            messages.success(request, f"作业「{updated.title}」已更新。")
+            return redirect("homework:task_detail", pk=task.pk)
+    else:
+        form = HomeworkTaskForm(instance=task)
+
+    return render(request, "homework/task_form.html", {"form": form, "task": task})
+
+
+@login_required
+@require_current_class
+def task_delete(request, pk):
+    """删除作业任务（连带其完成记录）"""
+    current_class = get_current_class(request.user)
+    task = get_object_or_404(
+        HomeworkTask, pk=pk, school_class=current_class,
+    )
+    if request.method == "POST":
+        title = task.title
+        record_count = task.records.count()
+        task.delete()
+        from apps.audit.models import OperationLog
+        OperationLog.objects.create(
+            user=request.user, action="delete", module="homework",
+            object_repr=title, detail=f"删除作业，连带 {record_count} 条完成记录",
+            ip_address=request.META.get("REMOTE_ADDR", ""), success=True,
+        )
+        messages.info(request, f"作业「{title}」已删除（含 {record_count} 条完成记录）。")
+        return redirect("homework:index")
+    messages.error(request, "请通过删除按钮确认删除。")
+    return redirect("homework:task_detail", pk=task.pk)
+
+
+@login_required
 def task_detail(request, pk):
     """作业任务详情及完成情况"""
     task = get_object_or_404(HomeworkTask.objects.select_related("subject"), pk=pk)

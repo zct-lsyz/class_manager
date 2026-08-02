@@ -1,7 +1,13 @@
 {% extends "base.html" %}
 {% block title %}{{ task.title }}{% endblock %}
 {% block content %}
-<div class="mt-3"><a href="{% url 'homework:index' %}">&larr; 返回作业列表</a></div>
+<div class="mt-3 d-flex justify-content-between align-items-center">
+    <a href="{% url 'homework:index' %}">&larr; 返回作业列表</a>
+    <div>
+        <a href="{% url 'homework:task_edit' task.pk %}" class="btn btn-sm btn-outline-secondary"><i class="bi bi-pencil"></i> 修改</a>
+        <form method="post" action="{% url 'homework:task_delete' task.pk %}" class="d-inline" onsubmit="return confirm('确认删除作业「{{ task.title }}」？其完成记录将一并删除。')">{% csrf_token %}<button type="submit" class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i> 删除</button></form>
+    </div>
+</div>
 <h4 class="mt-2 mb-3">{{ task.title }}</h4>
 <div class="card mb-3">
     <div class="card-body">
