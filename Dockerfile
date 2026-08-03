@@ -22,6 +22,7 @@ RUN sed -i \
     libc6-dev \
     tesseract-ocr \
     tesseract-ocr-chi-sim \
+    fonts-noto-cjk \
     && rm -rf /var/lib/apt/lists/*
 
 # 创建工作目录

@@ -393,10 +393,9 @@ def _chart_score_rank(exam_labels, scores, ranks, title):
     img = Image.new("RGB", (W, H), "white")
     draw = ImageDraw.Draw(img)
 
-    cjk_font_path = _find_cjk_font()
     try:
-        font_title = ImageFont.truetype(cjk_font_path, 20 * SCALE) if cjk_font_path else ImageFont.load_default()
-        font_small = ImageFont.truetype(cjk_font_path, 13 * SCALE) if cjk_font_path else font_title
+        font_title = _chart_font(20 * SCALE) or ImageFont.load_default()
+        font_small = _chart_font(13 * SCALE) or font_title
     except Exception:
         font_title = font_small = ImageFont.load_default()
 
@@ -443,9 +442,9 @@ def _chart_score_rank(exam_labels, scores, ranks, title):
         y = y_rank(val)
         draw.line([(W - margin_r, y), (W - margin_r + 5, y)], fill="#cccccc")
         draw.text((W - margin_r + 8, y - 7), f"{val:.0f}", fill="gray", font=font_small)
-    # X 刻度
+    # X 刻度（标签为 %Y-%m-%d，取前 7 位显示年月，如 2026-06）
     for i, label in enumerate(exam_labels):
-        draw.text((x_of(i), margin_t + plot_h + 8), str(label)[:6], fill="#333", font=font_small, anchor="ma")
+        draw.text((x_of(i), margin_t + plot_h + 8), str(label)[:7], fill="#333", font=font_small, anchor="ma")
 
     # 分数折线（蓝）
     s_points = [(x_of(i), y_score(v)) for i, v in enumerate(scores) if v is not None]
@@ -499,6 +498,32 @@ def _find_cjk_font():
     return None
 
 
+def _chart_font(size):
+    """加载可渲染中文的 Pillow 字体（供图表使用）。
+
+    优先使用系统 CJK 字体；找不到时提取 PyMuPDF 内置中文字体（china-s），
+    保证在未安装系统字体的环境（如 Docker 精简镜像）中也能正常显示中文。
+    全部失败返回 None（调用方回退 ImageFont.load_default）。
+    """
+    from PIL import ImageFont
+
+    path = _find_cjk_font()
+    if path:
+        try:
+            return ImageFont.truetype(path, size)
+        except Exception:
+            pass
+    try:
+        import fitz
+        font = fitz.Font("china-s")
+        buf = getattr(font, "buffer", None)
+        if buf:
+            return ImageFont.truetype(io.BytesIO(buf), size)
+    except Exception:
+        pass
+    return None
+
+
 def _ensure_page_font(page):
     """在 PyMuPDF 页面注册真实中文字体（subset 只嵌入用到的字形，避免 PDF 过大）。
 
@@ -530,13 +555,9 @@ def _chart_avg_bar(analysis_data):
     plot_w = W - margin * 2
     plot_h = H - margin * 2
     bar_w = plot_w / len(subjects) * 0.6
-    cjk_font_path = _find_cjk_font()
     try:
-        if cjk_font_path:
-            font = ImageFont.truetype(cjk_font_path, 18 * SCALE)
-            font_small = ImageFont.truetype(cjk_font_path, 14 * SCALE)
-        else:
-            raise OSError("no cjk font")
+        font = _chart_font(18 * SCALE) or ImageFont.load_default()
+        font_small = _chart_font(14 * SCALE) or font
     except Exception:
         font = font_small = ImageFont.load_default()
 
