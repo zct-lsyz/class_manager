@@ -17,7 +17,15 @@ import java.util.HashSet;
 import java.util.Set;
 
 public final class NotificationScheduler {
+    public interface SyncCallback {
+        void onComplete(boolean shouldRetry);
+    }
+
     public static void sync(Context context) {
+        sync(context, null);
+    }
+
+    public static void sync(Context context, SyncCallback callback) {
         Context app = context.getApplicationContext();
         ApiClient.get(app).get("notifications/", new ApiClient.Callback() {
             @Override public void onSuccess(JSONObject response) {
@@ -32,8 +40,11 @@ public final class NotificationScheduler {
                 }
                 cancelRemoved(app, active);
                 MiPushBridge.registerAndUpload(app);
+                if (callback != null) callback.onComplete(false);
             }
-            @Override public void onError(String message, int statusCode) {}
+            @Override public void onError(String message, int statusCode) {
+                if (callback != null) callback.onComplete(statusCode == 0 || statusCode >= 500);
+            }
         });
     }
 

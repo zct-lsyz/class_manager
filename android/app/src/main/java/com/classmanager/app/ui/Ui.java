@@ -2,6 +2,7 @@ package com.classmanager.app.ui;
 
 import android.content.Context;
 import android.graphics.Typeface;
+import android.graphics.drawable.GradientDrawable;
 import android.view.ViewGroup;
 import android.widget.Button;
 import android.widget.LinearLayout;
@@ -62,5 +63,13 @@ public final class Ui {
         params.topMargin = dp(context, 32);
         progress.setLayoutParams(params);
         return progress;
+    }
+
+    public static GradientDrawable rounded(Context context, int fillColor, int strokeColor, int radiusDp) {
+        GradientDrawable drawable = new GradientDrawable();
+        drawable.setColor(fillColor);
+        if (strokeColor != 0) drawable.setStroke(dp(context, 1), strokeColor);
+        drawable.setCornerRadius(dp(context, radiusDp));
+        return drawable;
     }
 }

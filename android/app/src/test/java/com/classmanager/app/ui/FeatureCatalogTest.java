@@ -24,4 +24,19 @@ public class FeatureCatalogTest {
         assertEquals(FeatureCatalog.REPORT, FeatureCatalog.sections().get("座位表").get(0).kind);
         assertEquals(FeatureCatalog.REPORT, FeatureCatalog.sections().get("值日生表").get(0).kind);
     }
+
+    @Test
+    public void followsWebsiteNavigationGroupOrder() {
+        assertEquals(
+                java.util.Arrays.asList("工作台", "班级基础", "日常管理", "教学管理", "成长记录", "数据中心", "系统设置"),
+                new java.util.ArrayList<>(FeatureCatalog.groups().keySet())
+        );
+    }
+
+    @Test
+    public void viewOnlyModulesHaveDedicatedTableRenderers() {
+        assertTrue(StructuredReportRenderer.supports("course-schedule/"));
+        assertTrue(StructuredReportRenderer.supports("seating/"));
+        assertTrue(StructuredReportRenderer.supports("duty-roster/"));
+    }
 }

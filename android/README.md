@@ -16,7 +16,17 @@ cd android
 
 调试 APK 输出到 `app/build/outputs/apk/debug/app-debug.apk`。
 
+## 个人使用的后台待办同步
+
+登录后，App 使用 WorkManager 在联网时约每 15 分钟读取一次网站待办。发现新的待办后，
+会交给 Android AlarmManager 在截止时间触发普通系统通知；这不是时钟 App 中会持续响铃的闹钟。
+退出登录时后台同步自动停止。Android 允许的周期任务
+最短间隔是 15 分钟，实际运行时间可能因小米省电策略或 Doze 模式延迟，因此请开启自启动并将
+省电策略设为“不限制”。“账户与安全”中也可以手动立即同步。
+
 ## 小米服务器推送
+
+这是可选能力，个人使用后台同步时无需配置。
 
 1. 在小米开放平台创建 Android 应用，包名必须为 `com.classmanager.app`。
 2. 下载小米推送客户端 AAR，保存为 `android/app/libs/MiPush_SDK_Client.aar`。

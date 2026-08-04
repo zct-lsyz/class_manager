@@ -53,5 +53,17 @@ public final class FeatureCatalog {
         return map;
     }
 
+    public static Map<String, List<String>> groups() {
+        Map<String, List<String>> map = new LinkedHashMap<>();
+        map.put("工作台", Arrays.asList("待办事项"));
+        map.put("班级基础", Arrays.asList("学生花名册", "班级与学期", "家长联系方式", "课程表"));
+        map.put("日常管理", Arrays.asList("座位表", "值日生表", "考勤管理", "作业检查", "课堂纪律", "宿舍管理", "奖惩管理", "积分排名", "预警管理"));
+        map.put("教学管理", Arrays.asList("成绩分析"));
+        map.put("成长记录", Arrays.asList("成长足迹", "学生谈话"));
+        map.put("数据中心", Arrays.asList("备份管理"));
+        map.put("系统设置", Arrays.asList("账户与安全"));
+        return map;
+    }
+
     private FeatureCatalog() {}
 }

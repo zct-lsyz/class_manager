@@ -19,6 +19,7 @@ from apps.rewards.models import PointRecord
 from apps.scores.ai_models import AIAnalysisConfig, AIExamAnalysisSource, AIQuestionWeakness
 from apps.scores.models import ExternalClass
 from apps.students.models import Student
+from apps.seating.models import ClassroomLayout, SeatAssignment, SeatPlan
 from apps.todos.models import TodoItem
 
 
@@ -54,6 +55,9 @@ class MobileApiTests(TestCase):
         response = self.client.get(reverse("mobile_api:profile"), **self.auth)
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["data"]["username"], "teacher")
+        response = self.client.get(reverse("mobile_api:dashboard"), **self.auth)
+        self.assertIn("head_teacher", response.json()["data"]["class"])
+        self.assertIn("school_name", response.json()["data"]["class"])
 
     def test_todo_crud_and_completion_timestamp(self):
         response = self.request_json("post", reverse("mobile_api:resource_list", args=["todos"]), {
@@ -101,6 +105,16 @@ class MobileApiTests(TestCase):
         self.assertEqual(response.json()["data"]["entries"][0]["course"], "数学")
         response = self.request_json("post", reverse("mobile_api:course_schedule"), {})
         self.assertEqual(response.status_code, 405)
+
+    def test_seating_view_includes_only_needed_student_display_metadata(self):
+        layout = ClassroomLayout.objects.create(school_class=self.school_class, name="标准教室", rows=1, cols=1)
+        plan = SeatPlan.objects.create(school_class=self.school_class, layout=layout, version=1, is_active=True)
+        SeatAssignment.objects.create(seat_plan=plan, student=self.student, row=0, col=0)
+        response = self.client.get(reverse("mobile_api:seating"), **self.auth)
+        self.assertEqual(response.status_code, 200, response.content)
+        seat = response.json()["data"]["assignments"][0]
+        self.assertEqual(seat["student_name"], self.student.name)
+        self.assertEqual(seat["student_gender"], "male")
 
     def test_unauthenticated_resource_request_is_rejected(self):
         response = self.client.get(reverse("mobile_api:resource_list", args=["students"]))

@@ -19,7 +19,9 @@ import android.widget.TextView;
 
 import androidx.appcompat.widget.AppCompatButton;
 
+import com.classmanager.app.R;
 import com.classmanager.app.data.ApiClient;
+import com.classmanager.app.notification.NotificationScheduler;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -51,6 +53,7 @@ public class ResourceActivity extends BaseActivity {
 
     private void render() {
         root = Ui.vertical(this);
+        root.addView(Ui.title(this, title == null ? "数据管理" : title));
         LinearLayout controls = new LinearLayout(this);
         controls.setOrientation(LinearLayout.HORIZONTAL);
         search = new EditText(this);
@@ -72,6 +75,10 @@ public class ResourceActivity extends BaseActivity {
         }
         root.addView(controls);
         list = new ListView(this);
+        list.setDivider(new android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT));
+        list.setDividerHeight(Ui.dp(this, 8));
+        list.setPadding(0, Ui.dp(this, 8), 0, Ui.dp(this, 16));
+        list.setClipToPadding(false);
         root.addView(list, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, 0, 1));
         list.setOnItemClickListener((parent, view, position, id) -> {
@@ -105,6 +112,9 @@ public class ResourceActivity extends BaseActivity {
                         TextView text = view.findViewById(android.R.id.text1);
                         text.setSingleLine(false);
                         text.setPadding(Ui.dp(ResourceActivity.this, 16), Ui.dp(ResourceActivity.this, 12), Ui.dp(ResourceActivity.this, 16), Ui.dp(ResourceActivity.this, 12));
+                        text.setTextColor(getColor(R.color.text_primary));
+                        text.setTextSize(15);
+                        text.setBackgroundResource(R.drawable.bg_card);
                         return view;
                     }
                 });
@@ -346,6 +356,7 @@ public class ResourceActivity extends BaseActivity {
             @Override public void onSuccess(JSONObject response) {
                 dialog.dismiss();
                 toast("保存成功。");
+                if ("todos".equals(resource)) NotificationScheduler.sync(ResourceActivity.this);
                 load(search.getText().toString().trim());
             }
             @Override public void onError(String message, int statusCode) {
@@ -375,7 +386,7 @@ public class ResourceActivity extends BaseActivity {
                     JSONObject body = new JSONObject();
                     try { body.put("confirmation", confirmation.getText().toString().trim()); } catch (Exception ignored) {}
                     ApiClient.get(this).delete("resources/" + resource + "/" + record.optInt("id") + "/", body, new ApiClient.Callback() {
-                        @Override public void onSuccess(JSONObject response) { toast("删除完成。"); load(search.getText().toString().trim()); }
+                        @Override public void onSuccess(JSONObject response) { toast("删除完成。"); if ("todos".equals(resource)) NotificationScheduler.sync(ResourceActivity.this); load(search.getText().toString().trim()); }
                         @Override public void onError(String message, int statusCode) { toast(message); handleAuthError(statusCode); }
                     });
                 }).show();

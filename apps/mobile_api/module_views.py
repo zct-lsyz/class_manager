@@ -43,7 +43,10 @@ def dashboard(request):
     return api_ok({
         "has_current_class": True,
         "today": today.isoformat(),
-        "class": {"id": current.pk, "name": current.name},
+        "class": {
+            "id": current.pk, "name": current.name,
+            "head_teacher": current.head_teacher, "school_name": current.school_name,
+        },
         "semester": {"id": semester.pk, "name": semester.get_display_name()} if semester else None,
         "teaching_week": _teaching_week(semester, today),
         "stats": {
@@ -121,6 +124,8 @@ def seating(request):
     plan = SeatPlan.objects.filter(school_class=current, is_active=True).select_related("layout").order_by("-created_at").first() if current else None
     if not plan:
         return api_ok({"plan": None, "assignments": []})
+    if not plan.layout:
+        return api_ok({"plan": {"id": plan.pk, "version": plan.version, "reason": plan.reason, "layout": None}, "assignments": []})
     assignments = SeatAssignment.objects.filter(seat_plan=plan).select_related("student").order_by("row", "col")
     return api_ok({
         "plan": {
@@ -135,6 +140,9 @@ def seating(request):
         "assignments": [{
             "id": row.pk, "row": row.row, "col": row.col,
             "student_id": row.student_id, "student_name": row.student.name,
+            "student_gender": row.student.gender, "student_height": row.student.height,
+            "student_dormitory": row.student.display_dormitory,
+            "seat_requirement": row.student.seat_requirement,
             "locked": row.is_locked,
         } for row in assignments],
     })

@@ -1,9 +1,15 @@
 package com.classmanager.app.ui;
 
+import android.content.Context;
 import android.content.Intent;
 import android.os.Bundle;
+import android.view.View;
+import android.view.ViewGroup;
 import android.widget.ArrayAdapter;
 import android.widget.ListView;
+import android.widget.TextView;
+
+import com.classmanager.app.R;
 
 import java.util.List;
 
@@ -21,32 +27,51 @@ public class SectionActivity extends BaseActivity {
         }
         String[] labels = new String[entries.size()];
         for (int i = 0; i < entries.size(); i++) labels[i] = entries.get(i).title;
-        list.setAdapter(new ArrayAdapter<>(this, android.R.layout.simple_list_item_1, labels));
+        list.setDivider(new android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT));
+        list.setDividerHeight(Ui.dp(this, 8));
+        list.setPadding(Ui.dp(this, 16), Ui.dp(this, 16), Ui.dp(this, 16), Ui.dp(this, 16));
+        list.setClipToPadding(false);
+        list.setAdapter(new ArrayAdapter<String>(this, android.R.layout.simple_list_item_1, labels) {
+            @Override public View getView(int position, View convertView, ViewGroup parent) {
+                View view = super.getView(position, convertView, parent);
+                TextView text = view.findViewById(android.R.id.text1);
+                text.setText(getString(R.string.module_navigation_item, labels[position]));
+                text.setTextColor(getColor(R.color.text_primary));
+                text.setTextSize(16);
+                text.setPadding(Ui.dp(SectionActivity.this, 16), Ui.dp(SectionActivity.this, 14), Ui.dp(SectionActivity.this, 16), Ui.dp(SectionActivity.this, 14));
+                text.setBackgroundResource(R.drawable.bg_card);
+                return view;
+            }
+        });
         list.setOnItemClickListener((parent, view, position, id) -> open(entries.get(position)));
         show(list);
     }
 
     private void open(FeatureCatalog.Entry entry) {
+        startActivity(intentFor(this, entry));
+    }
+
+    public static Intent intentFor(Context context, FeatureCatalog.Entry entry) {
         Intent intent;
         if (FeatureCatalog.RESOURCE.equals(entry.kind)) {
-            intent = new Intent(this, ResourceActivity.class);
+            intent = new Intent(context, ResourceActivity.class);
             intent.putExtra("resource", entry.value);
             intent.putExtra("title", entry.title);
         } else if (FeatureCatalog.REPORT.equals(entry.kind)) {
-            intent = new Intent(this, ReportActivity.class);
+            intent = new Intent(context, ReportActivity.class);
             intent.putExtra("endpoint", entry.value);
             intent.putExtra("title", entry.title);
         } else if (FeatureCatalog.BACKUP.equals(entry.kind)) {
-            intent = new Intent(this, BackupActivity.class);
+            intent = new Intent(context, BackupActivity.class);
         } else if (FeatureCatalog.AI.equals(entry.kind)) {
-            intent = new Intent(this, AiAnalysisActivity.class);
+            intent = new Intent(context, AiAnalysisActivity.class);
         } else if (FeatureCatalog.DORMITORY.equals(entry.kind)) {
-            intent = new Intent(this, DormitoryActivity.class);
+            intent = new Intent(context, DormitoryActivity.class);
         } else if (FeatureCatalog.PAPER_AI.equals(entry.kind)) {
-            intent = new Intent(this, ExamPaperAnalysisActivity.class);
+            intent = new Intent(context, ExamPaperAnalysisActivity.class);
         } else {
-            intent = new Intent(this, AccountActivity.class);
+            intent = new Intent(context, AccountActivity.class);
         }
-        startActivity(intent);
+        return intent;
     }
 }

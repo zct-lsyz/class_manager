@@ -16,6 +16,8 @@ import android.widget.ScrollView;
 
 import com.classmanager.app.data.ApiClient;
 import com.classmanager.app.data.SessionStore;
+import com.classmanager.app.notification.NotificationScheduler;
+import com.classmanager.app.notification.TodoSyncManager;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -44,9 +46,10 @@ public class AccountActivity extends BaseActivity {
         Button devices = Ui.button(this, "受信任设备管理");
         devices.setOnClickListener(view -> devices());
         root.addView(devices);
-        Button push = Ui.button(this, "小米服务器推送注册");
-        push.setOnClickListener(view -> pushRegistration());
-        root.addView(push);
+        root.addView(Ui.text(this, "后台每约 15 分钟自动同步网站待办；同步成功后由系统闹钟负责到期提醒。"));
+        Button sync = Ui.button(this, "立即同步待办提醒");
+        sync.setOnClickListener(view -> NotificationScheduler.sync(this, retry -> runOnUiThread(() -> toast(retry ? "同步失败，后台将自动重试。" : "待办提醒已同步。"))));
+        root.addView(sync);
         Button alarm = Ui.button(this, "允许精确待办提醒");
         alarm.setOnClickListener(view -> {
             if (Build.VERSION.SDK_INT >= 31) startActivity(new Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM, Uri.parse("package:" + getPackageName())));
@@ -198,6 +201,7 @@ public class AccountActivity extends BaseActivity {
 
     private void leave() {
         SessionStore.get(this).clear();
+        TodoSyncManager.cancel(this);
         startActivity(new Intent(this, LoginActivity.class)
                 .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TASK | Intent.FLAG_ACTIVITY_NEW_TASK));
         finish();

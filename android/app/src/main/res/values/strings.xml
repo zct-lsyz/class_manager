@@ -4,4 +4,5 @@
     <string name="confirm_anonymous_ai_data">我确认文件不包含姓名、学号等身份信息，并同意发送匿名分析内容给外部 AI</string>
     <string name="selected_paper">已选择原卷：%1$s</string>
     <string name="selected_score_sheet">已选择小分表：%1$s</string>
+    <string name="module_navigation_item">%1$s  ›</string>
 </resources>

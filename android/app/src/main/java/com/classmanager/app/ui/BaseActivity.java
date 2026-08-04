@@ -2,19 +2,29 @@ package com.classmanager.app.ui;
 
 import android.content.Intent;
 import android.graphics.Color;
+import android.graphics.Typeface;
+import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
+import android.widget.LinearLayout;
+import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.widget.Toolbar;
+import androidx.core.view.GravityCompat;
+import androidx.drawerlayout.widget.DrawerLayout;
 
 import com.classmanager.app.R;
 import com.classmanager.app.data.SessionStore;
 
+import java.util.List;
+import java.util.Map;
+
 public abstract class BaseActivity extends AppCompatActivity {
     protected FrameLayout content;
+    protected DrawerLayout drawer;
 
     protected void setup(String title, boolean showBack) {
         setContentView(R.layout.activity_container);
@@ -22,11 +32,80 @@ public abstract class BaseActivity extends AppCompatActivity {
         toolbar.setTitle(title);
         toolbar.setTitleTextColor(Color.WHITE);
         setSupportActionBar(toolbar);
-        if (showBack && getSupportActionBar() != null) {
+        drawer = findViewById(R.id.drawer_layout);
+        if (SessionStore.get(this).isLoggedIn()) {
+            toolbar.setNavigationIcon(R.drawable.ic_menu);
+            toolbar.setNavigationOnClickListener(view -> drawer.openDrawer(GravityCompat.START));
+            populateNavigation(title);
+        } else if (showBack && getSupportActionBar() != null) {
             getSupportActionBar().setDisplayHomeAsUpEnabled(true);
             toolbar.setNavigationOnClickListener(view -> finish());
+        } else {
+            drawer.setDrawerLockMode(DrawerLayout.LOCK_MODE_LOCKED_CLOSED);
         }
         content = findViewById(R.id.content);
+    }
+
+    private void populateNavigation(String currentTitle) {
+        LinearLayout navigation = findViewById(R.id.navigation_items);
+        navigation.removeAllViews();
+        TextView brand = Ui.title(this, "班级教学管理平台");
+        brand.setTextColor(getColor(R.color.primary));
+        brand.setPadding(Ui.dp(this, 4), Ui.dp(this, 12), Ui.dp(this, 4), Ui.dp(this, 18));
+        navigation.addView(brand);
+        addNavigationItem(navigation, "工作台首页", "工作台".equals(currentTitle), 0, view -> {
+            drawer.closeDrawer(GravityCompat.START);
+            if (!(this instanceof MainActivity)) startActivity(new Intent(this, MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP));
+        });
+        int colorIndex = 1;
+        for (Map.Entry<String, List<String>> group : FeatureCatalog.groups().entrySet()) {
+            TextView heading = Ui.text(this, group.getKey());
+            heading.setTextSize(12);
+            heading.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+            heading.setTextColor(getColor(R.color.primary));
+            heading.setPadding(Ui.dp(this, 4), Ui.dp(this, 14), Ui.dp(this, 4), Ui.dp(this, 5));
+            navigation.addView(heading);
+            for (String section : group.getValue()) {
+                boolean active = section.equals(currentTitle);
+                List<FeatureCatalog.Entry> entries = FeatureCatalog.sections().get(section);
+                if (entries != null) for (FeatureCatalog.Entry entry : entries) active |= entry.title.equals(currentTitle);
+                addNavigationItem(navigation, section, active, colorIndex++, view -> openNavigation(section));
+            }
+        }
+        TextView bottom = new TextView(this);
+        navigation.addView(bottom, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, Ui.dp(this, 24)));
+    }
+
+    private void addNavigationItem(LinearLayout parent, String label, boolean active, int colorIndex, View.OnClickListener listener) {
+        int[] colors = {0xffe8f0fe, 0xffe8f5e9, 0xfffff3e0, 0xfffce4ec, 0xffede7f6, 0xffe0f7fa};
+        TextView item = Ui.text(this, label);
+        item.setTextSize(15);
+        item.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        item.setTextColor(active ? Color.WHITE : getColor(R.color.primary));
+        item.setGravity(Gravity.CENTER_VERTICAL);
+        item.setPadding(Ui.dp(this, 14), Ui.dp(this, 11), Ui.dp(this, 14), Ui.dp(this, 11));
+        item.setBackground(Ui.rounded(this, active ? getColor(R.color.primary) : colors[colorIndex % colors.length], 0, 12));
+        item.setOnClickListener(listener);
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        params.setMargins(0, Ui.dp(this, 3), 0, Ui.dp(this, 3));
+        parent.addView(item, params);
+    }
+
+    private void openNavigation(String section) {
+        drawer.closeDrawer(GravityCompat.START);
+        List<FeatureCatalog.Entry> entries = FeatureCatalog.sections().get(section);
+        if (entries != null && entries.size() == 1) startActivity(SectionActivity.intentFor(this, entries.get(0)));
+        else {
+            Intent intent = new Intent(this, SectionActivity.class);
+            intent.putExtra("section", section);
+            startActivity(intent);
+        }
+    }
+
+    @Override
+    public void onBackPressed() {
+        if (drawer != null && drawer.isDrawerOpen(GravityCompat.START)) drawer.closeDrawer(GravityCompat.START);
+        else super.onBackPressed();
     }
 
     protected void show(View view) {

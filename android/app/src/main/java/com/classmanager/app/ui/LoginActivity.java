@@ -15,6 +15,7 @@ import android.widget.TextView;
 
 import com.classmanager.app.data.ApiClient;
 import com.classmanager.app.data.SessionStore;
+import com.classmanager.app.notification.TodoSyncManager;
 
 import org.json.JSONObject;
 
@@ -143,6 +144,7 @@ public class LoginActivity extends BaseActivity {
         }
         JSONObject user = data.optJSONObject("user");
         SessionStore.get(this).saveSession(data.optString("token"), user == null ? "" : user.optString("username"));
+        TodoSyncManager.enable(this);
         openMain();
     }
 

@@ -96,6 +96,7 @@ public class ReportActivity extends BaseActivity {
                 results.removeView(loading);
                 JSONObject data = response.optJSONObject("data");
                 if (data == null) results.addView(Ui.text(ReportActivity.this, "暂无数据。"));
+                else if (StructuredReportRenderer.supports(endpoint)) results.addView(StructuredReportRenderer.render(ReportActivity.this, endpoint, data));
                 else renderObject(results, data, 0);
             }
             @Override public void onError(String message, int statusCode) {
@@ -110,6 +111,7 @@ public class ReportActivity extends BaseActivity {
         Iterator<String> keys = object.keys();
         while (keys.hasNext()) {
             String key = keys.next();
+            if (hiddenField(key)) continue;
             Object value = object.opt(key);
             if (value instanceof JSONObject) {
                 LinearLayout card = card();
@@ -166,6 +168,11 @@ public class ReportActivity extends BaseActivity {
             case "rank": return "名次";
             default: return key.replace('_', ' ');
         }
+    }
+
+    private boolean hiddenField(String key) {
+        return "id".equals(key) || key.endsWith("_id") || "row".equals(key) || "col".equals(key) ||
+                "locked".equals(key) || "day_index".equals(key) || "weekday".equals(key);
     }
 
     private static final class Option {
