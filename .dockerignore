@@ -4,6 +4,7 @@
 .venv
 .codebuddy
 .workbuddy
+android/
 __pycache__
 *.py[cod]
 *.sqlite3

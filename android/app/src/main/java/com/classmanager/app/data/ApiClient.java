@@ -115,7 +115,7 @@ public final class ApiClient {
             try {
                 connection = (HttpURLConnection) new URL(resolve(path)).openConnection();
                 connection.setConnectTimeout(15000);
-                connection.setReadTimeout(120000);
+                connection.setReadTimeout(300000);
                 connection.setRequestProperty("Authorization", "Bearer " + session.token());
                 int status = connection.getResponseCode();
                 if (status < 200 || status >= 300) {

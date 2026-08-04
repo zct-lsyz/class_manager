@@ -4,6 +4,7 @@ import android.os.Bundle;
 import android.view.ViewGroup;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
+import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.Spinner;
@@ -23,6 +24,7 @@ public class ReportActivity extends BaseActivity {
     private String endpoint;
     private LinearLayout body;
     private Spinner selector;
+    private LinearLayout results;
 
     @Override
     protected void onCreate(Bundle state) {
@@ -33,9 +35,11 @@ public class ReportActivity extends BaseActivity {
         body = Ui.vertical(this);
         scroll.addView(body);
         show(scroll);
-        if ("growth/".equals(endpoint)) loadSelector("students", "student_id");
-        else if ("score-analysis/".equals(endpoint)) loadSelector("exams", "exam_id");
-        else load(endpoint);
+        if ("growth/".equals(endpoint) || "student-profile/".equals(endpoint)) loadSelector("students", "student_id");
+        else if ("score-analysis/".equals(endpoint) || "score-comparison/".equals(endpoint)) loadSelector("exams", "exam_id");
+        else if ("student-score-analysis/".equals(endpoint)) loadSelector("students", "student_id");
+        else if (endpoint.endsWith("-stats/")) loadDateFilters();
+        else { results = new LinearLayout(this); results.setOrientation(LinearLayout.VERTICAL); body.addView(results); load(endpoint); }
     }
 
     private void loadSelector(String resource, String parameter) {
@@ -58,6 +62,9 @@ public class ReportActivity extends BaseActivity {
                     if (selected != null) load(endpoint + "?" + parameter + "=" + selected.id);
                 });
                 body.addView(button);
+                results = new LinearLayout(ReportActivity.this);
+                results.setOrientation(LinearLayout.VERTICAL);
+                body.addView(results);
                 if (!options.isEmpty()) load(endpoint + "?" + parameter + "=" + options.get(0).id);
                 else body.addView(Ui.text(ReportActivity.this, "暂无可分析数据。"));
             }
@@ -69,19 +76,31 @@ public class ReportActivity extends BaseActivity {
         });
     }
 
+    private void loadDateFilters() {
+        EditText from = new EditText(this); from.setHint("开始日期 YYYY-MM-DD（可留空）");
+        EditText to = new EditText(this); to.setHint("结束日期 YYYY-MM-DD（可留空）");
+        body.addView(from); body.addView(to);
+        Button query = Ui.button(this, "按日期统计");
+        query.setOnClickListener(view -> load(endpoint + "?date_from=" + from.getText().toString().trim() + "&date_to=" + to.getText().toString().trim()));
+        body.addView(query);
+        results = new LinearLayout(this); results.setOrientation(LinearLayout.VERTICAL); body.addView(results);
+        load(endpoint);
+    }
+
     private void load(String path) {
+        results.removeAllViews();
         TextView loading = Ui.text(this, "正在加载…");
-        body.addView(loading);
+        results.addView(loading);
         ApiClient.get(this).get(path, new ApiClient.Callback() {
             @Override public void onSuccess(JSONObject response) {
-                body.removeView(loading);
+                results.removeView(loading);
                 JSONObject data = response.optJSONObject("data");
-                if (data == null) body.addView(Ui.text(ReportActivity.this, "暂无数据。"));
-                else renderObject(body, data, 0);
+                if (data == null) results.addView(Ui.text(ReportActivity.this, "暂无数据。"));
+                else renderObject(results, data, 0);
             }
             @Override public void onError(String message, int statusCode) {
-                body.removeView(loading);
-                body.addView(Ui.text(ReportActivity.this, "加载失败：" + message));
+                results.removeView(loading);
+                results.addView(Ui.text(ReportActivity.this, "加载失败：" + message));
                 handleAuthError(statusCode);
             }
         });

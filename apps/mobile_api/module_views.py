@@ -2,7 +2,7 @@ from collections import defaultdict
 
 from django.core.exceptions import ValidationError
 from django.db import transaction
-from django.db.models import Q
+from django.db.models import Avg, Count, Q, Sum
 from django.utils import timezone
 
 from apps.classes.utils import get_current_class
@@ -221,6 +221,60 @@ def growth(request):
 
 
 @mobile_api(["GET"])
+def student_profile(request):
+    from apps.comments.models import StudentComment
+    from apps.communications.models import StudentConversation
+    from apps.rewards.models import PointRecord
+    from apps.scores.models import Score
+    from apps.students.history_services import get_student_all_events
+    from apps.students.models import Guardian, Student
+    current = get_current_class(request.mobile_user)
+    student = Student.objects.filter(
+        pk=request.GET.get("student_id"), school_class=current, is_deleted=False,
+    ).first()
+    if not student:
+        return api_error("请选择当前班级的学生。", 400, "student_required")
+    guardian = Guardian.objects.filter(student=student, is_deleted=False).first()
+    events = get_student_all_events(student)
+    scores = Score.objects.filter(
+        student=student, is_deleted=False, exam__is_deleted=False,
+    ).select_related("exam", "exam_subject__subject").order_by("-exam__date", "exam_subject__sort_order")[:50]
+    conversations = StudentConversation.objects.filter(
+        student=student, is_deleted=False,
+    ).order_by("-date")[:30]
+    comments = StudentComment.objects.filter(
+        student=student, is_deleted=False,
+    ).order_by("-created_at")[:30]
+    return api_ok({
+        "student": serialize_instance(student, get_spec("students").fields),
+        "guardian": serialize_instance(guardian, get_spec("guardians").fields) if guardian else None,
+        "summary": {
+            "growth_event_count": len(events),
+            "score_count": Score.objects.filter(student=student, is_deleted=False).count(),
+            "conversation_count": StudentConversation.objects.filter(student=student, is_deleted=False).count(),
+            "point_total": PointRecord.objects.filter(student=student, is_deleted=False).aggregate(total=Sum("points"))["total"] or 0,
+        },
+        "latest_scores": [{
+            "exam": row.exam.name, "date": row.exam.date.isoformat(),
+            "subject": row.exam_subject.subject.name,
+            "score": float(row.score) if row.score is not None else None,
+            "status": row.get_status_display(), "rank": row.rank,
+            "grade_rank": row.grade_rank, "city_rank": row.city_rank,
+        } for row in scores],
+        "growth_events": [{**item, "date": item["date"].isoformat()} for item in events[:100]],
+        "conversations": [{
+            "date": row.date.isoformat(), "reason": row.reason,
+            "main_content": row.main_content, "student_feedback": row.student_feedback,
+            "follow_up_actions": row.follow_up_actions,
+        } for row in conversations],
+        "comments": [{
+            "type": row.get_comment_type_display(), "content": row.content,
+            "status": row.get_status_display(), "created_at": row.created_at.isoformat(),
+        } for row in comments],
+    })
+
+
+@mobile_api(["GET"])
 def ranking(request):
     from apps.rewards.models import PointRecord, RankingSetting
     from apps.students.models import Student
@@ -278,6 +332,106 @@ def score_analysis(request):
             "grade_rank": row["total_grade_rank"], "city_rank": row["total_city_rank"],
             "subjects": row["subjects"],
         } for row in data["class_total_table"]],
+    })
+
+
+@mobile_api(["GET"])
+def score_comparison(request):
+    from apps.scores.analysis_services import build_comparison_data
+    from apps.scores.models import Exam, ExamSubject
+    current = get_current_class(request.mobile_user)
+    exams = Exam.objects.filter(school_class=current, is_deleted=False).order_by("-date") if current else Exam.objects.none()
+    exam = exams.filter(pk=request.GET.get("exam_id")).first() if request.GET.get("exam_id") else exams.first()
+    if not exam:
+        return api_ok({"exam": None, "classes": [], "comparison": []})
+    subjects = list(ExamSubject.objects.filter(exam=exam).select_related("subject"))
+    external, table, chart = build_comparison_data(exam, subjects, current)
+    return api_ok({
+        "exam": {"id": exam.pk, "name": exam.name, "date": exam.date.isoformat()},
+        "classes": [{"key": "own", "name": current.name}] + [{"key": f"ext_{row.pk}", "name": str(row)} for row in external],
+        "comparison": table, "chart_data": chart,
+    })
+
+
+@mobile_api(["GET"])
+def selected_student_score_analysis(request):
+    try:
+        student_id = int(request.GET.get("student_id", 0))
+    except ValueError:
+        return api_error("学生参数无效。")
+    return student_score_analysis.__wrapped__(request, student_id)
+
+
+def _date_filter(request, field="date"):
+    values = {}
+    if request.GET.get("date_from"):
+        values[f"{field}__gte"] = request.GET["date_from"]
+    if request.GET.get("date_to"):
+        values[f"{field}__lte"] = request.GET["date_to"]
+    return values
+
+
+@mobile_api(["GET"])
+def attendance_stats(request):
+    from apps.attendance.models import AttendanceRecord
+    current = get_current_class(request.mobile_user)
+    rows = AttendanceRecord.objects.filter(school_class=current, **_date_filter(request)) if current else AttendanceRecord.objects.none()
+    return api_ok({
+        "total": rows.count(),
+        "by_status": list(rows.values("status").annotate(count=Count("id")).order_by("status")),
+        "by_student": list(rows.values("student_id", "student__name").annotate(count=Count("id"), points=Sum("points_deducted")).order_by("-count")[:100]),
+        "by_reason": list(rows.exclude(reason="").values("reason").annotate(count=Count("id")).order_by("-count")[:30]),
+    })
+
+
+@mobile_api(["GET"])
+def homework_stats(request):
+    from apps.homework.models import HomeworkRecord
+    current = get_current_class(request.mobile_user)
+    rows = HomeworkRecord.objects.filter(task__school_class=current, **_date_filter(request, "task__assigned_date")) if current else HomeworkRecord.objects.none()
+    return api_ok({
+        "total": rows.count(),
+        "by_status": list(rows.values("status").annotate(count=Count("id")).order_by("-count")),
+        "by_student": list(rows.values("student_id", "student__name").annotate(count=Count("id")).order_by("-count")[:100]),
+        "by_task": list(rows.values("task_id", "task__title").annotate(count=Count("id")).order_by("-task__assigned_date")[:100]),
+    })
+
+
+@mobile_api(["GET"])
+def discipline_stats(request):
+    from apps.discipline.models import ClassroomDisciplineRecord, DormDisciplineRecord
+    current = get_current_class(request.mobile_user)
+    classroom = ClassroomDisciplineRecord.objects.filter(school_class=current, is_deleted=False, **_date_filter(request)) if current else ClassroomDisciplineRecord.objects.none()
+    dorm = DormDisciplineRecord.objects.filter(school_class=current, is_deleted=False, **_date_filter(request)) if current else DormDisciplineRecord.objects.none()
+    return api_ok({
+        "classroom": {"count": classroom.count(), "points": classroom.aggregate(value=Sum("points_deducted"))["value"] or 0,
+                      "by_student": list(classroom.values("student_id", "student__name").annotate(count=Count("id"), points=Sum("points_deducted")).order_by("-count")[:100])},
+        "dormitory": {"count": dorm.count(), "points": dorm.aggregate(value=Sum("points_deducted"))["value"] or 0,
+                      "by_student": list(dorm.values("student_id", "student__name").annotate(count=Count("id"), points=Sum("points_deducted")).order_by("-count")[:100])},
+    })
+
+
+@mobile_api(["GET"])
+def dormitory_stats(request):
+    from apps.dormitory.models import DormHygieneCheck
+    current = get_current_class(request.mobile_user)
+    rows = DormHygieneCheck.objects.filter(school_class=current, is_deleted=False, **_date_filter(request)) if current else DormHygieneCheck.objects.none()
+    return api_ok({
+        "count": rows.count(), "average_score": rows.aggregate(value=Avg("total_score"))["value"],
+        "by_grade": list(rows.values("grade").annotate(count=Count("id")).order_by("grade")),
+        "by_room": list(rows.values("room_id", "room__room_number", "room__building__name").annotate(count=Count("id"), average_score=Avg("total_score")).order_by("-average_score")[:100]),
+    })
+
+
+@mobile_api(["GET"])
+def reward_stats(request):
+    from apps.rewards.models import RewardRecord
+    current = get_current_class(request.mobile_user)
+    rows = RewardRecord.objects.filter(school_class=current, is_deleted=False, **_date_filter(request)) if current else RewardRecord.objects.none()
+    return api_ok({
+        "count": rows.count(), "points": rows.aggregate(value=Sum("points"))["value"] or 0,
+        "by_type": list(rows.values("record_type").annotate(count=Count("id"), points=Sum("points")).order_by("record_type")),
+        "by_student": list(rows.values("student_id", "student__name").annotate(count=Count("id"), points=Sum("points")).order_by("-points")[:100]),
     })
 
 

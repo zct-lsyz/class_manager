@@ -74,10 +74,8 @@ public final class NotificationScheduler {
         AlarmManager alarm = (AlarmManager) context.getSystemService(Context.ALARM_SERVICE);
         if (Build.VERSION.SDK_INT >= 31 && alarm.canScheduleExactAlarms()) {
             alarm.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, trigger, pending);
-        } else if (Build.VERSION.SDK_INT >= 23) {
-            alarm.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, trigger, pending);
         } else {
-            alarm.set(AlarmManager.RTC_WAKEUP, trigger, pending);
+            alarm.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, trigger, pending);
         }
     }
 

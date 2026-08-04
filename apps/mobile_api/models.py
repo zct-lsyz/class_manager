@@ -21,7 +21,7 @@ class MobileApiToken(models.Model):
 
     class Meta:
         ordering = ["-last_used_at"]
-        indexes = [models.Index(fields=["user", "device_id"])]
+        indexes = [models.Index(fields=["user", "device_id"], name="mobile_api__user_id_9b4899_idx")]
 
     @classmethod
     def issue(cls, user, device_id, device_name=""):

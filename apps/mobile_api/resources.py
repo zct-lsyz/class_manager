@@ -36,8 +36,8 @@ def _specs():
     from apps.communications.models import ConcernRecord, HomeSchoolContact, StudentConversation
     from apps.dashboard.models import Countdown, TeachingWebsite
     from apps.discipline.models import ClassroomDisciplineRecord, ConfigurableItem, DormDisciplineRecord
-    from apps.dormitory.models import DormAssignment, DormBuilding, DormHygieneCheck, DormHygieneItem, DormRoom
-    from apps.homework.models import HomeworkRecord, HomeworkStatus, HomeworkTask, Subject
+    from apps.dormitory.models import DormAssignment, DormBuilding, DormHygieneCheck, DormHygieneItem, DormHygienePhoto, DormRoom
+    from apps.homework.models import HomeworkPointRule, HomeworkRecord, HomeworkStatus, HomeworkTask, Subject
     from apps.rewards.models import PointRecord, RankingSetting, RewardItem, RewardRecord
     from apps.scores.models import Exam, ExamSubject, ExamTotal, ExternalClass, ExternalScore, ExternalTotal, GradeLine, Score, SupportFollowUp, SupportPlan
     from apps.students.models import Guardian, Student
@@ -89,6 +89,9 @@ def _specs():
             ("name", "is_positive", "is_active", "sort_order"),
             ("name", "is_positive", "is_active", "sort_order"),
             ("name",), ("sort_order", "name"), "current", "homework"),
+        ResourceSpec("homework_point_rules", "作业积分规则", HomeworkPointRule,
+            ("status", "points", "is_add"), ("status", "points", "is_add"),
+            ("status",), ("status",), "current", "homework", allow_delete=False),
         ResourceSpec("homework_tasks", "作业任务", HomeworkTask,
             ("subject", "title", "content", "assigned_date", "due_date", "person_in_charge", "remarks", "needs_follow_up", "follow_up_date"),
             ("subject", "title", "content", "assigned_date", "due_date", "person_in_charge", "remarks", "needs_follow_up", "follow_up_date"),
@@ -128,6 +131,10 @@ def _specs():
             ("room", "date", "check_time", "inspector", "total_score", "grade", "rectification", "rectification_deadline", "rectification_result", "needs_follow_up", "follow_up_date", "photo", "remarks"),
             ("room", "date", "check_time", "inspector", "total_score", "grade", "rectification", "rectification_deadline", "rectification_result", "needs_follow_up", "follow_up_date", "photo", "remarks"),
             ("room__room_number", "inspector", "rectification"), ("-date", "-pk"), "current", "dormitory", "hygienecheck"),
+        ResourceSpec("hygiene_photos", "宿舍卫生现场照片", DormHygienePhoto,
+            ("check_record", "image", "original_name", "original_size", "stored_size"),
+            ("check_record", "image"), ("check_record__room__room_number", "original_name"),
+            ("-pk",), "current", "dormitory"),
         ResourceSpec("reward_items", "奖惩条目", RewardItem,
             ("item_type", "name", "default_points", "category", "is_active", "sort_order"),
             ("item_type", "name", "default_points", "category", "is_active", "sort_order"),
@@ -242,6 +249,8 @@ def _queryset(spec, user):
         filters["exam__school_class"] = current
     elif spec.key == "grade_lines":
         filters["exam_subject__exam__school_class"] = current
+    elif spec.key == "hygiene_photos":
+        filters["check_record__school_class"] = current
     elif spec.key == "external_scores":
         filters["external_class__school_class"] = current
     elif spec.key == "exam_totals":
@@ -259,7 +268,7 @@ def _relation_queryset(spec, field, user, data=None):
     from django.contrib.auth.models import User
     from apps.classes.models import SchoolClass, Semester
     from apps.discipline.models import ConfigurableItem
-    from apps.dormitory.models import DormBed, DormBuilding, DormRoom
+    from apps.dormitory.models import DormBed, DormBuilding, DormHygieneCheck, DormRoom
     from apps.homework.models import HomeworkTask, Subject
     from apps.rewards.models import RewardItem
     from apps.scores.models import Exam, ExamSubject, ExternalClass, SupportPlan
@@ -294,6 +303,8 @@ def _relation_queryset(spec, field, user, data=None):
         qs = model.objects.filter(room__building__school_class=current)
         room_id = (data or {}).get("room")
         return qs.filter(room_id=room_id) if room_id else qs
+    if model is DormHygieneCheck:
+        return model.objects.filter(school_class=current, is_deleted=False)
     if model is HomeworkTask:
         return model.objects.filter(school_class=current)
     if model is RewardItem:
@@ -352,7 +363,15 @@ def _apply_data(instance, spec, data, request):
         if isinstance(field, models.FileField):
             if name in request.FILES:
                 request.FILES[name].seek(0)
-                setattr(instance, name, request.FILES[name])
+                uploaded = request.FILES[name]
+                if spec.key == "hygiene_photos":
+                    from apps.dormitory.photo_services import prepare_hygiene_photo
+                    prepared, original_size = prepare_hygiene_photo(uploaded)
+                    instance.original_name = uploaded.name
+                    instance.original_size = original_size
+                    instance.stored_size = prepared.size
+                    uploaded = prepared
+                setattr(instance, name, uploaded)
             continue
         setattr(instance, name, _convert(field, data.get(name), spec, request.mobile_user, data))
 
@@ -486,6 +505,10 @@ def _delete(instance, spec, user, confirmation=""):
         unsync_source_point("homework", instance.pk)
         instance.delete()
         return
+    if spec.key == "hygiene_photos":
+        instance.image.delete(save=False)
+        instance.delete()
+        return
     if spec.soft_name:
         if spec.key in {"classroom_discipline", "dorm_discipline"}:
             from apps.rewards.services import unsync_source_point
@@ -510,6 +533,14 @@ def _schema(spec, user):
         field = spec.model._meta.get_field(name)
         item = field_schema(field, required=name in editable and not field.blank and not field.null)
         item["read_only"] = name not in editable
+        if spec.key == "homework_point_rules" and name == "status":
+            from apps.homework.models import HomeworkRecord, HomeworkStatus
+            item["choices"] = [
+                {"value": value, "label": label} for value, label in HomeworkRecord.STATUS_CHOICES
+            ] + [
+                {"value": f"custom:{row.pk}", "label": row.name}
+                for row in HomeworkStatus.objects.filter(school_class=get_current_class(user), is_active=True).order_by("sort_order", "name")
+            ]
         if isinstance(field, (models.ForeignKey, models.OneToOneField)) and name in editable:
             item["options"] = [
                 {"value": obj.pk, "label": str(obj)}

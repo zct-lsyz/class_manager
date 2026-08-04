@@ -2,8 +2,10 @@ package com.classmanager.app.ui;
 
 import android.app.AlertDialog;
 import android.content.Intent;
+import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.provider.Settings;
 import android.text.InputType;
 import android.view.ViewGroup;
 import android.widget.ArrayAdapter;
@@ -45,6 +47,12 @@ public class AccountActivity extends BaseActivity {
         Button push = Ui.button(this, "小米服务器推送注册");
         push.setOnClickListener(view -> pushRegistration());
         root.addView(push);
+        Button alarm = Ui.button(this, "允许精确待办提醒");
+        alarm.setOnClickListener(view -> {
+            if (Build.VERSION.SDK_INT >= 31) startActivity(new Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM, Uri.parse("package:" + getPackageName())));
+            else toast("当前系统已支持精确提醒。");
+        });
+        root.addView(alarm);
         Button logout = Ui.button(this, "退出登录");
         logout.setOnClickListener(view -> logout());
         root.addView(logout);

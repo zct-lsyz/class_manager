@@ -34,9 +34,6 @@ public class BackupActivity extends BaseActivity {
         Button create = Ui.button(this, "立即创建完整备份");
         create.setOnClickListener(view -> createBackup());
         root.addView(create);
-        Button media = Ui.button(this, "媒体归档与存储管理");
-        media.setOnClickListener(view -> startActivity(new Intent(this, MediaArchiveActivity.class)));
-        root.addView(media);
         list = new ListView(this);
         root.addView(list, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, 0, 1));
@@ -78,7 +75,6 @@ public class BackupActivity extends BaseActivity {
     private void actions(JSONObject row) {
         if (row == null) return;
         List<String> actions = new ArrayList<>();
-        if (row.optBoolean("downloadable")) actions.add("下载到手机");
         actions.add("校验备份");
         actions.add("恢复此备份");
         actions.add("删除备份");
@@ -86,8 +82,7 @@ public class BackupActivity extends BaseActivity {
                 .setTitle(row.optString("backup_type_display") + " · " + row.optString("created_at"))
                 .setItems(actions.toArray(new String[0]), (dialog, which) -> {
                     String action = actions.get(which);
-                    if (action.startsWith("下载")) chooseDownload(row.optInt("id"));
-                    else if (action.startsWith("校验")) verify(row.optInt("id"));
+                    if (action.startsWith("校验")) verify(row.optInt("id"));
                     else if (action.startsWith("恢复")) restore(row.optInt("id"));
                     else delete(row.optInt("id"));
                 }).show();

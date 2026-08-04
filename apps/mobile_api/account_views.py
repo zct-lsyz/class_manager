@@ -142,6 +142,9 @@ def verify(request):
 def logout(request):
     request.mobile_token.revoked_at = timezone.now()
     request.mobile_token.save(update_fields=["revoked_at"])
+    MobilePushDevice.objects.filter(
+        user=request.mobile_user, device_id=request.mobile_token.device_id,
+    ).update(is_active=False)
     _log(request.mobile_user, "logout", request, "Android 客户端退出登录")
     return api_ok()
 
@@ -181,6 +184,9 @@ def change_password(request):
     MobileApiToken.objects.filter(
         user=request.mobile_user, revoked_at__isnull=True,
     ).exclude(pk=request.mobile_token.pk).update(revoked_at=timezone.now())
+    MobilePushDevice.objects.filter(user=request.mobile_user).exclude(
+        device_id=request.mobile_token.device_id,
+    ).update(is_active=False)
     _log(request.mobile_user, "password_change", request, "通过 Android 客户端修改密码")
     return api_ok()
 
@@ -206,6 +212,9 @@ def device_detail(request, pk):
     MobileApiToken.objects.filter(
         user=request.mobile_user, device_id=device_id, revoked_at__isnull=True,
     ).update(revoked_at=timezone.now())
+    MobilePushDevice.objects.filter(
+        user=request.mobile_user, device_id=device_id,
+    ).update(is_active=False)
     _log(request.mobile_user, "edit", request, f"删除受信任设备: {device.device_name}")
     return api_ok()
 

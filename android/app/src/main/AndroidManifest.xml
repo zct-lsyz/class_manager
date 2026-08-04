@@ -3,16 +3,20 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
 
     <application
         android:name=".ClassManagerApp"
         android:allowBackup="false"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:fullBackupContent="@xml/backup_rules"
         android:icon="@drawable/ic_app"
         android:label="班级教学管理"
         android:networkSecurityConfig="@xml/network_security_config"
         android:supportsRtl="true"
         android:theme="@style/Theme.ClassManager"
         android:usesCleartextTraffic="false">
+        <activity android:name=".ui.ExamPaperAnalysisActivity" />
         <activity android:name=".ui.MediaArchiveActivity" />
         <activity android:name=".ui.DormitoryActivity" />
         <activity android:name=".ui.AiAnalysisActivity" />

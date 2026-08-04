@@ -2,7 +2,6 @@ package com.classmanager.app.data;
 
 import android.content.Context;
 import android.content.SharedPreferences;
-import android.provider.Settings;
 import android.util.Base64;
 
 import java.nio.charset.StandardCharsets;
@@ -58,12 +57,10 @@ public final class SessionStore {
     }
 
     public void clear() {
-        preferences.edit().clear().apply();
+        preferences.edit().remove(TOKEN).remove(USERNAME).apply();
     }
 
     public String deviceId() {
-        String id = Settings.Secure.getString(context.getContentResolver(), Settings.Secure.ANDROID_ID);
-        if (id != null && !id.isEmpty()) return id;
         String fallback = preferences.getString("fallback_device_id", "");
         if (fallback.isEmpty()) {
             byte[] bytes = new byte[16];

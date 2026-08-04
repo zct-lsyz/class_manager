@@ -47,6 +47,7 @@ public class MainActivity extends BaseActivity {
     protected void onResume() {
         super.onResume();
         if (root != null) loadDashboard();
+        if (SessionStore.get(this).isLoggedIn()) NotificationScheduler.sync(this);
     }
 
     private void render() {

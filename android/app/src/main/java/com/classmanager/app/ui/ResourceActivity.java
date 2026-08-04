@@ -17,6 +17,8 @@ import android.widget.ScrollView;
 import android.widget.Spinner;
 import android.widget.TextView;
 
+import androidx.appcompat.widget.AppCompatButton;
+
 import com.classmanager.app.data.ApiClient;
 
 import org.json.JSONArray;
@@ -443,7 +445,7 @@ public class ResourceActivity extends BaseActivity {
         @Override public String toString() { return label; }
     }
 
-    private final class FileButton extends Button {
+    private final class FileButton extends AppCompatButton {
         Uri uri;
         FileButton() { super(ResourceActivity.this); }
     }

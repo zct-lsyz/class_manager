@@ -20,13 +20,11 @@ public final class NotificationHelper {
     public static final String TODO_CHANNEL = "todo_reminders";
 
     public static void createChannels(Context context) {
-        if (Build.VERSION.SDK_INT >= 26) {
-            NotificationChannel channel = new NotificationChannel(
-                    TODO_CHANNEL, "待办提醒", NotificationManager.IMPORTANCE_HIGH);
-            channel.setDescription("待办事项到期提醒");
-            channel.enableVibration(true);
-            context.getSystemService(NotificationManager.class).createNotificationChannel(channel);
-        }
+        NotificationChannel channel = new NotificationChannel(
+                TODO_CHANNEL, "待办提醒", NotificationManager.IMPORTANCE_HIGH);
+        channel.setDescription("待办事项到期提醒");
+        channel.enableVibration(true);
+        context.getSystemService(NotificationManager.class).createNotificationChannel(channel);
     }
 
     public static void showTodo(Context context, int id, String title, String deadline) {

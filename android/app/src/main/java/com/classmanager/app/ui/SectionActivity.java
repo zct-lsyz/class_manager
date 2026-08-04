@@ -42,6 +42,8 @@ public class SectionActivity extends BaseActivity {
             intent = new Intent(this, AiAnalysisActivity.class);
         } else if (FeatureCatalog.DORMITORY.equals(entry.kind)) {
             intent = new Intent(this, DormitoryActivity.class);
+        } else if (FeatureCatalog.PAPER_AI.equals(entry.kind)) {
+            intent = new Intent(this, ExamPaperAnalysisActivity.class);
         } else {
             intent = new Intent(this, AccountActivity.class);
         }

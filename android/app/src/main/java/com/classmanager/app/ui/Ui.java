@@ -8,6 +8,8 @@ import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.TextView;
 
+import com.classmanager.app.R;
+
 public final class Ui {
     private Ui() {}
 
@@ -27,7 +29,7 @@ public final class Ui {
         view.setText(value);
         view.setTextSize(20);
         view.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
-        view.setTextColor(0xff17212b);
+        view.setTextColor(context.getColor(R.color.text_primary));
         view.setPadding(0, dp(context, 8), 0, dp(context, 8));
         return view;
     }

@@ -11,6 +11,7 @@ import android.widget.ScrollView;
 import android.widget.Spinner;
 
 import com.classmanager.app.data.ApiClient;
+import com.classmanager.app.R;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -59,7 +60,7 @@ public class AiAnalysisActivity extends BaseActivity {
         EditText temperature = input("温度", config == null ? "0.5" : String.valueOf(config.optDouble("temperature", 0.5)));
         temperature.setInputType(InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_FLAG_DECIMAL);
         CheckBox enabled = new CheckBox(this);
-        enabled.setText("启用 AI 分析");
+        enabled.setText(R.string.enable_ai_analysis);
         enabled.setChecked(config != null && config.optBoolean("is_enabled"));
         root.addView(model); root.addView(baseUrl); root.addView(temperature); root.addView(enabled);
         root.addView(Ui.text(this, config != null && config.optBoolean("has_api_key")
