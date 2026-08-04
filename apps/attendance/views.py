@@ -157,7 +157,7 @@ def create(request):
             form.fields["student"].initial = student_id
 
     students_json = [
-        {"id": s.pk, "name": s.name, "bed": s.display_bed_number} for s in Student.objects.filter(
+        {"id": s.pk, "name": s.name} for s in Student.objects.filter(
             school_class=current_class, is_deleted=False,
         ).order_by("student_id")
     ] if current_class else []
@@ -185,7 +185,7 @@ def edit(request, pk):
     else:
         form = AttendanceForm(instance=record, current_class=current_class)
     students_json = [
-        {"id": s.pk, "name": s.name, "bed": s.display_bed_number} for s in Student.objects.filter(
+        {"id": s.pk, "name": s.name} for s in Student.objects.filter(
             school_class=current_class, is_deleted=False,
         ).order_by("student_id")
     ] if current_class else []

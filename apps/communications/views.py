@@ -72,7 +72,7 @@ def conversation_create(request):
         form = ConversationForm()
 
     students_json = [
-        {"id": s.pk, "name": s.name, "bed": s.display_bed_number} for s in Student.objects.filter(
+        {"id": s.pk, "name": s.name} for s in Student.objects.filter(
             school_class=current_class, is_deleted=False,
         ).order_by("student_id")
     ] if current_class else []
@@ -159,7 +159,7 @@ def home_school_create(request):
         form = HomeSchoolContactForm()
 
     students_json = [
-        {"id": s.pk, "name": s.name, "bed": s.display_bed_number} for s in Student.objects.filter(
+        {"id": s.pk, "name": s.name} for s in Student.objects.filter(
             school_class=current_class, is_deleted=False,
         ).order_by("student_id")
     ] if current_class else []
@@ -234,7 +234,7 @@ def concern_create(request):
     else:
         form = ConcernRecordForm()
     students_json = [
-        {"id": s.pk, "name": s.name, "bed": s.display_bed_number} for s in Student.objects.filter(
+        {"id": s.pk, "name": s.name} for s in Student.objects.filter(
             school_class=current_class, is_deleted=False,
         ).order_by("student_id")
     ] if current_class else []
@@ -266,7 +266,7 @@ def concern_update(request, pk):
     else:
         form = ConcernRecordForm(instance=record)
     students_json = [
-        {"id": s.pk, "name": s.name, "bed": s.display_bed_number} for s in Student.objects.filter(
+        {"id": s.pk, "name": s.name} for s in Student.objects.filter(
             school_class=current_class, is_deleted=False,
         ).order_by("student_id")
     ] if current_class else []

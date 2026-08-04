@@ -32,7 +32,7 @@ def class_meeting_create(request):
         school_class=current_class, is_current=True,
     ).first()
     students_json = [
-        {"id": s.pk, "name": s.name, "bed": s.display_bed_number} for s in Student.objects.filter(
+        {"id": s.pk, "name": s.name} for s in Student.objects.filter(
             school_class=current_class, is_deleted=False,
         ).order_by("student_id")
     ] if current_class else []
@@ -75,7 +75,7 @@ def activity_create(request):
         school_class=current_class, is_current=True,
     ).first()
     students_json = [
-        {"id": s.pk, "name": s.name, "bed": s.display_bed_number} for s in Student.objects.filter(
+        {"id": s.pk, "name": s.name} for s in Student.objects.filter(
             school_class=current_class, is_deleted=False,
         ).order_by("student_id")
     ] if current_class else []
