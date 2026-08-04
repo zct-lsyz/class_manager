@@ -491,19 +491,49 @@ def _cascade_delete_user_data(user):
         AIExamAnalysisSource.objects.filter(created_by=user).delete()
     except Exception:
         pass
-    # 备份
+    # 备份：注销即彻底清除所有备份（含系统自动备份）及物理文件，避免遗留数据
     try:
+        from pathlib import Path as _Path
+        import shutil as _shutil
         from apps.backups.models import BackupRecord, MediaArchiveExport, MediaArchiveImport
-        BackupRecord.objects.filter(user=user).delete()
-        MediaArchiveExport.objects.filter(user=user).delete()
-        MediaArchiveImport.objects.filter(user=user).delete()
+        from apps.backups.services import _safe_remove, BACKUP_DIR
+        for record in BackupRecord.objects.all():
+            if record.file_path:
+                _safe_remove(_Path(record.file_path))
+        BackupRecord.objects.all().delete()
+        for model in (MediaArchiveExport, MediaArchiveImport):
+            for row in model.objects.all():
+                if row.file_path:
+                    _safe_remove(_Path(row.file_path))
+            model.objects.all().delete()
+        # 备份目录里的残留文件（含失败备份、临时文件）一并清除
+        if BACKUP_DIR.exists():
+            for child in BACKUP_DIR.iterdir():
+                if child.is_dir():
+                    _shutil.rmtree(child, ignore_errors=True)
+                else:
+                    child.unlink(missing_ok=True)
     except Exception:
         pass
-    # 操作日志
+    # 操作日志与回收站：单账号系统，注销即清空全部审计记录
     try:
         from apps.audit.models import OperationLog, SoftDeleteRecord
-        OperationLog.objects.filter(user=user).delete()
-        SoftDeleteRecord.objects.filter(deleted_by=user).delete()
+        OperationLog.objects.all().delete()
+        SoftDeleteRecord.objects.all().delete()
+    except Exception:
+        pass
+    # 媒体文件（考勤证明/宿舍照片/奖惩照片/评语附件等）：从服务器上物理删除
+    try:
+        from pathlib import Path as _Path
+        from django.conf import settings as _settings
+        media_root = _Path(_settings.MEDIA_ROOT)
+        if media_root.exists():
+            for child in media_root.iterdir():
+                if child.is_dir():
+                    import shutil as _shutil
+                    _shutil.rmtree(child, ignore_errors=True)
+                else:
+                    child.unlink(missing_ok=True)
     except Exception:
         pass
     # 导出
@@ -515,6 +545,11 @@ def _cascade_delete_user_data(user):
     # 验证令牌和信任设备
     EmailVerificationToken.objects.filter(user=user).delete()
     TrustedDevice.objects.filter(user=user).delete()
-    # 班级及所有关联数据（学生/考试/成绩/考勤/纪律… CASCADE 自动级联）
+    # 学生：school_class 外键是 SET_NULL，不会随班级删除级联，
+    # 若不显式删除，学生记录会成为孤儿且学号仍占用全库唯一约束，
+    # 导致注销后重新导入同一花名册时报「学号已存在」。
+    from apps.students.models import Student
+    Student.objects.filter(school_class__created_by=user).delete()
+    # 班级及所有关联数据（考试/成绩/考勤/纪律… CASCADE 自动级联）
     from apps.classes.models import SchoolClass
     SchoolClass.objects.filter(created_by=user).delete()
