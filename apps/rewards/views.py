@@ -14,6 +14,7 @@ from apps.classes.models import SchoolClass, Semester
 from apps.classes.decorators import require_current_class
 from apps.students.models import Student
 from apps.audit.services import soft_delete
+from apps.todos.services import sync_follow_up_todo, remove_follow_up_todo
 
 
 @login_required
@@ -55,6 +56,8 @@ def reward_create(request):
                     item=form.cleaned_data["item"], custom_name=form.cleaned_data["custom_name"],
                     level=form.cleaned_data["level"], points=form.cleaned_data["points"],
                     description=form.cleaned_data["description"],
+                    needs_follow_up=form.cleaned_data["needs_follow_up"],
+                    follow_up_date=form.cleaned_data["follow_up_date"],
                 )
                 record.points = -abs(record.points) if record.record_type == "penalty" else abs(record.points)
                 if index == 0:
@@ -64,6 +67,7 @@ def reward_create(request):
                 record.save()
                 saved_photo = record.certificate_photo.name if record.certificate_photo else ""
                 _sync_point_record(record)
+                sync_follow_up_todo(record, request.user)
             messages.success(request, f"已为 {len(form.cleaned_data['students'])} 名学生保存奖惩记录。")
             return redirect("rewards:index")
     else:
@@ -87,6 +91,7 @@ def reward_edit(request, pk):
             record.points = -abs(record.points) if record.record_type == "penalty" else abs(record.points)
             record.save()
             _sync_point_record(record)
+            sync_follow_up_todo(record, request.user)
             messages.success(request, "奖惩记录已更新。")
             return redirect("rewards:index")
     else:
@@ -101,6 +106,7 @@ def reward_delete(request, pk):
     record = get_object_or_404(RewardRecord, pk=pk, school_class=current_class)
     if request.method == "POST":
         PointRecord.objects.filter(source_type="reward", source_id=record.pk).update(is_deleted=True)
+        remove_follow_up_todo(record)
         soft_delete(
             record,
             user=request.user,

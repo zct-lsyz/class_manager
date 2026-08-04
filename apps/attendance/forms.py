@@ -6,7 +6,7 @@ from apps.students.models import Student
 class AttendanceForm(forms.ModelForm):
     class Meta:
         model = AttendanceRecord
-        fields = ["student", "date", "period", "status", "points_deducted", "reason", "leave_proof"]
+        fields = ["student", "date", "period", "status", "points_deducted", "reason", "leave_proof", "needs_follow_up", "follow_up_date"]
         widgets = {
             "student": forms.Select(attrs={"class": "form-select"}),
             "date": forms.DateInput(attrs={"class": "form-control", "type": "date"}),
@@ -15,6 +15,8 @@ class AttendanceForm(forms.ModelForm):
             "points_deducted": forms.NumberInput(attrs={"class": "form-control"}),
             "reason": forms.TextInput(attrs={"class": "form-control", "list": "attendance-reason-options"}),
             "leave_proof": forms.FileInput(attrs={"class": "form-control"}),
+            "needs_follow_up": forms.CheckboxInput(attrs={"class": "form-check-input"}),
+            "follow_up_date": forms.DateInput(attrs={"class": "form-control", "type": "date"}),
         }
         labels = {
             "student": "学生",
@@ -24,6 +26,8 @@ class AttendanceForm(forms.ModelForm):
             "points_deducted": "加减分（正加负扣）",
             "reason": "原因/备注",
             "leave_proof": "请假证明",
+            "needs_follow_up": "需要跟进",
+            "follow_up_date": "跟进日期",
         }
 
     def __init__(self, *args, current_class=None, **kwargs):

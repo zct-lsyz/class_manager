@@ -75,6 +75,8 @@ class HomeworkTask(BaseModel):
     due_date = models.DateField("截止日期", null=True, blank=True)
     person_in_charge = models.CharField("负责人", max_length=50, blank=True, default="")
     remarks = models.TextField("备注", blank=True, default="")
+    needs_follow_up = models.BooleanField("需要跟进", default=False)
+    follow_up_date = models.DateField("跟进日期", null=True, blank=True)
 
     class Meta:
         verbose_name = "作业任务"

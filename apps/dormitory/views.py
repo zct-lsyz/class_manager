@@ -21,7 +21,7 @@ from apps.students.models import Student
 from apps.audit.models import OperationLog
 from apps.audit.services import soft_delete
 from apps.dormitory.photo_services import prepare_hygiene_photo
-from apps.todos.services import sync_discipline_follow_up_todo
+from apps.todos.services import sync_follow_up_todo
 
 
 def get_client_ip(request):
@@ -174,10 +174,10 @@ def bed_assign(request, pk):
             student = get_object_or_404(
                 Student, pk=student_id, school_class=current_class, is_deleted=False,
             )
-            # 先取消该学生其他分配
-            DormAssignment.objects.filter(student=student, is_current=True).update(is_current=False)
-            # 如果床位已有学生，取消其分配
-            DormAssignment.objects.filter(bed=bed, is_current=True).update(is_current=False)
+            # 先取消该学生其他分配（释放床位，避免 OneToOne 唯一约束冲突）
+            DormAssignment.objects.filter(student=student, is_current=True).update(is_current=False, bed=None)
+            # 如果床位已有学生，取消其分配（释放床位）
+            DormAssignment.objects.filter(bed=bed, is_current=True).update(is_current=False, bed=None)
             DormAssignment.objects.create(
                 student=student, room=bed.room, bed=bed, is_current=True,
                 semester=Semester.objects.filter(
@@ -189,8 +189,8 @@ def bed_assign(request, pk):
             student.save(update_fields=["dormitory", "bed_number", "updated_at"])
             messages.success(request, f"{student.name} 已分配至 {bed.room.room_number} - {bed.bed_number} 号床。")
         else:
-            # 清空床位
-            DormAssignment.objects.filter(bed=bed, is_current=True).update(is_current=False)
+            # 清空床位（释放床位引用）
+            DormAssignment.objects.filter(bed=bed, is_current=True).update(is_current=False, bed=None)
             messages.info(request, "床位已清空。")
         for previous_student in previous_students:
             if not previous_student.dorm_assignments.filter(is_current=True).exists():
@@ -337,6 +337,7 @@ def hygiene_create(request):
                 check.school_class = current_class
                 check.semester = current_semester
                 check.save()
+                sync_follow_up_todo(check, request.user)
 
                 for uploaded in form.cleaned_data["photos"]:
                     image_file, original_size = prepare_hygiene_photo(uploaded)
@@ -530,7 +531,7 @@ def _create_dorm_discipline_records(current_class, current_semester, room, stude
                     points=-points, reason=f"{record.get_severity_display()}：{item_name}",
                     source_type="dorm_discipline", source_id=record.pk,
                 )
-            sync_discipline_follow_up_todo(record, request.user)
+            sync_follow_up_todo(record, request.user)
             created += 1
     return created
 
@@ -609,7 +610,7 @@ def discipline_create(request):
             record.school_class = current_class
             record.semester = current_semester
             record.save()
-            sync_discipline_follow_up_todo(record, request.user)
+            sync_follow_up_todo(record, request.user)
             messages.success(request, "宿舍纪律记录已保存。")
             return redirect("dormitory:discipline")
         return render(request, "dormitory/discipline_form.html", {

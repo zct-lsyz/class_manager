@@ -20,7 +20,7 @@ class RewardItemForm(forms.ModelForm):
 class RewardRecordForm(forms.ModelForm):
     class Meta:
         model = RewardRecord
-        fields = ["student", "date", "record_type", "item", "custom_name", "level", "points", "description", "certificate_photo"]
+        fields = ["student", "date", "record_type", "item", "custom_name", "level", "points", "description", "certificate_photo", "needs_follow_up", "follow_up_date"]
         widgets = {
             "student": forms.Select(attrs={"class": "form-select"}),
             "date": forms.DateInput(attrs={"class": "form-control", "type": "date"}),
@@ -31,6 +31,8 @@ class RewardRecordForm(forms.ModelForm):
             "points": forms.NumberInput(attrs={"class": "form-control"}),
             "description": forms.Textarea(attrs={"class": "form-control", "rows": 2}),
             "certificate_photo": forms.FileInput(attrs={"class": "form-control"}),
+            "needs_follow_up": forms.CheckboxInput(attrs={"class": "form-check-input"}),
+            "follow_up_date": forms.DateInput(attrs={"class": "form-control", "type": "date"}),
         }
 
     def __init__(self, *args, current_class=None, **kwargs):
@@ -57,7 +59,7 @@ class BatchRewardRecordForm(forms.ModelForm):
 
     class Meta:
         model = RewardRecord
-        fields = ["date", "record_type", "item", "custom_name", "level", "points", "description", "certificate_photo"]
+        fields = ["date", "record_type", "item", "custom_name", "level", "points", "description", "certificate_photo", "needs_follow_up", "follow_up_date"]
         widgets = {
             "date": forms.DateInput(attrs={"class": "form-control", "type": "date"}),
             "record_type": forms.Select(attrs={"class": "form-select"}),
@@ -67,6 +69,8 @@ class BatchRewardRecordForm(forms.ModelForm):
             "points": forms.NumberInput(attrs={"class": "form-control"}),
             "description": forms.Textarea(attrs={"class": "form-control", "rows": 2}),
             "certificate_photo": forms.FileInput(attrs={"class": "form-control"}),
+            "needs_follow_up": forms.CheckboxInput(attrs={"class": "form-check-input"}),
+            "follow_up_date": forms.DateInput(attrs={"class": "form-control", "type": "date"}),
         }
 
     def __init__(self, *args, current_class=None, **kwargs):

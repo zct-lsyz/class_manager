@@ -6,35 +6,28 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.utils import timezone
 from django.db.models import Q
 
-from apps.classes.decorators import require_current_class
 from apps.classes.utils import get_current_class
-from apps.classes.models import SchoolClass
 from apps.students.models import Student
 from apps.todos.models import TodoItem
 
 
 @login_required
 def todo_list(request):
-    """待办事项管理页面"""
-    current_class = get_current_class(request.user)
-    if not current_class:
-        messages.info(request, "请先创建班级。")
-        return redirect("classes:settings")
-
+    """待办事项管理页面（同一账号跨班级共享，不随当前班级切换）。"""
     # 未完成待办（按优先级、截止时间排序）
     active_todos = TodoItem.objects.filter(
-        school_class=current_class, is_deleted=False, is_completed=False,
+        created_by=request.user, is_deleted=False, is_completed=False,
     ).select_related("student").order_by("priority", "deadline", "-created_at")
 
     # 已完成待办（最近完成在前）
     completed_todos = TodoItem.objects.filter(
-        school_class=current_class, is_deleted=False, is_completed=True,
+        created_by=request.user, is_deleted=False, is_completed=True,
     ).select_related("student").order_by("-completed_at", "-created_at")[:50]
 
-    # 学生列表（用于关联选择）
+    # 学生列表（该账号全部班级，用于关联选择）
     students = Student.objects.filter(
-        school_class=current_class, is_deleted=False,
-    ).order_by("student_id")
+        school_class__created_by=request.user, is_deleted=False,
+    ).order_by("school_class_id", "student_id")
 
     # 筛选
     priority_filter = request.GET.get("priority", "")
@@ -70,11 +63,8 @@ def todo_list(request):
 
 @login_required
 def todo_add(request):
-    """添加待办项（支持弹窗提交和快速添加）"""
+    """添加待办项（同一账号跨班级共享；支持弹窗提交和快速添加）"""
     current_class = get_current_class(request.user)
-    if not current_class:
-        messages.error(request, "请先创建班级，再添加待办。")
-        return redirect("classes:settings")
 
     title = request.POST.get("title", "").strip()
     if not title:
@@ -112,8 +102,7 @@ def todo_add(request):
 @login_required
 def todo_toggle(request, pk):
     """切换完成状态"""
-    current_class = get_current_class(request.user)
-    todo = get_object_or_404(TodoItem, pk=pk, school_class=current_class, is_deleted=False)
+    todo = get_object_or_404(TodoItem, pk=pk, created_by=request.user, is_deleted=False)
     todo.is_completed = not todo.is_completed
     if todo.is_completed:
         todo.completed_at = timezone.now()
@@ -129,8 +118,7 @@ def todo_toggle(request, pk):
 @login_required
 def todo_delete(request, pk):
     """软删除待办"""
-    current_class = get_current_class(request.user)
-    todo = get_object_or_404(TodoItem, pk=pk, school_class=current_class, is_deleted=False)
+    todo = get_object_or_404(TodoItem, pk=pk, created_by=request.user, is_deleted=False)
     todo.is_deleted = True
     todo.save(update_fields=["is_deleted", "updated_at"])
     messages.info(request, f"待办「{todo.title}」已删除。")
@@ -140,8 +128,7 @@ def todo_delete(request, pk):
 @login_required
 def todo_edit(request, pk):
     """编辑待办"""
-    current_class = get_current_class(request.user)
-    todo = get_object_or_404(TodoItem, pk=pk, school_class=current_class, is_deleted=False)
+    todo = get_object_or_404(TodoItem, pk=pk, created_by=request.user, is_deleted=False)
     if request.method == "POST":
         title = request.POST.get("title", "").strip()
         if not title:

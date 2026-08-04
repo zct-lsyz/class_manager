@@ -6,7 +6,7 @@ from apps.students.models import Student
 class HomeworkTaskForm(forms.ModelForm):
     class Meta:
         model = HomeworkTask
-        fields = ["subject", "title", "content", "assigned_date", "due_date", "person_in_charge", "remarks"]
+        fields = ["subject", "title", "content", "assigned_date", "due_date", "person_in_charge", "remarks", "needs_follow_up", "follow_up_date"]
         widgets = {
             "subject": forms.Select(attrs={"class": "form-select"}),
             "title": forms.TextInput(attrs={"class": "form-control"}),
@@ -15,6 +15,8 @@ class HomeworkTaskForm(forms.ModelForm):
             "due_date": forms.DateInput(attrs={"class": "form-control", "type": "date"}),
             "person_in_charge": forms.TextInput(attrs={"class": "form-control"}),
             "remarks": forms.Textarea(attrs={"class": "form-control", "rows": 2}),
+            "needs_follow_up": forms.CheckboxInput(attrs={"class": "form-check-input"}),
+            "follow_up_date": forms.DateInput(attrs={"class": "form-control", "type": "date"}),
         }
 
 

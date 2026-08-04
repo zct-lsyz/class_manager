@@ -76,6 +76,8 @@ class RewardRecord(BaseModel):
     certificate_photo = models.FileField(
         "奖状照片", upload_to="rewards/", blank=True,
     )
+    needs_follow_up = models.BooleanField("需要跟进", default=False)
+    follow_up_date = models.DateField("跟进日期", null=True, blank=True)
     is_deleted = models.BooleanField("已删除", default=False)
 
     class Meta:

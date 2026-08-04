@@ -80,7 +80,7 @@ class DormHygieneCheckForm(forms.ModelForm):
 
     class Meta:
         model = DormHygieneCheck
-        fields = ["room", "date", "check_time", "inspector", "rectification", "rectification_deadline", "remarks"]
+        fields = ["room", "date", "check_time", "inspector", "rectification", "rectification_deadline", "needs_follow_up", "follow_up_date", "remarks"]
         widgets = {
             "room": forms.Select(attrs={"class": "form-select"}),
             "date": forms.DateInput(attrs={"class": "form-control", "type": "date"}),
@@ -88,5 +88,7 @@ class DormHygieneCheckForm(forms.ModelForm):
             "inspector": forms.TextInput(attrs={"class": "form-control"}),
             "rectification": forms.Textarea(attrs={"class": "form-control", "rows": 2}),
             "rectification_deadline": forms.DateInput(attrs={"class": "form-control", "type": "date"}),
+            "needs_follow_up": forms.CheckboxInput(attrs={"class": "form-check-input"}),
+            "follow_up_date": forms.DateInput(attrs={"class": "form-control", "type": "date"}),
             "remarks": forms.Textarea(attrs={"class": "form-control", "rows": 2}),
         }

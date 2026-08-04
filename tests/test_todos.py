@@ -79,6 +79,63 @@ class TodoItemTests(TestCase):
         self.assertEqual(response.context["active_todos"].count(), 1)
 
 
+class TodoAccountSharedTests(TestCase):
+    """待办在同一账号下跨班级共享，不随切换班级而变化。"""
+
+    def setUp(self):
+        self.user = get_user_model().objects.create_user(username="todo-shared", password="pass")
+        self.client.force_login(self.user)
+        self.cls_a = SchoolClass.objects.create(
+            created_by=self.user, name="A班", is_current=True,
+        )
+        self.cls_b = SchoolClass.objects.create(
+            created_by=self.user, name="B班", is_current=False,
+        )
+
+    def _switch_class(self, target):
+        SchoolClass.objects.filter(created_by=self.user).update(is_current=False)
+        target.is_current = True
+        target.save(update_fields=["is_current"])
+
+    def test_todos_shared_across_classes(self):
+        """A 班创建的待办，切到 B 班后仍能看到。"""
+        TodoItem.objects.create(
+            school_class=self.cls_a, created_by=self.user, title="A班的待办",
+        )
+        self._switch_class(self.cls_b)
+        response = self.client.get(reverse("todos:list"))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "A班的待办")
+        self.assertEqual(response.context["active_todos"].count(), 1)
+
+    def test_todo_toggle_works_after_switching_class(self):
+        """跨班切换后仍可操作 A 班的待办。"""
+        todo = TodoItem.objects.create(
+            school_class=self.cls_a, created_by=self.user, title="跨班待办",
+        )
+        self._switch_class(self.cls_b)
+        self.client.post(reverse("todos:toggle", args=[todo.pk]))
+        todo.refresh_from_db()
+        self.assertTrue(todo.is_completed)
+
+    def test_add_todo_without_current_class(self):
+        """没有当前班级时也能添加待办（账号级共享）。"""
+        SchoolClass.objects.filter(created_by=self.user).update(is_current=False)
+        response = self.client.post(reverse("todos:add"), {"title": "无班级待办"})
+        self.assertEqual(response.status_code, 302)
+        todo = TodoItem.objects.get(title="无班级待办")
+        self.assertIsNone(todo.school_class)
+
+    def test_dashboard_todo_count_across_classes(self):
+        """工作台待办数量跨班共享。"""
+        TodoItem.objects.create(
+            school_class=self.cls_a, created_by=self.user, title="A班待办",
+        )
+        self._switch_class(self.cls_b)
+        response = self.client.get(reverse("dashboard:index"))
+        self.assertEqual(response.context["active_todos"].count(), 1)
+
+
 class TodoNotificationApiTests(TestCase):
     """到期待办通知 API"""
 

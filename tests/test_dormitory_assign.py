@@ -141,6 +141,19 @@ class DormitoryImportSyncTests(TestCase):
         self.assertIsNotNone(s2.bed)
         self.assertNotEqual(s1.bed_id, s2.bed_id)
 
+    def test_two_students_same_room_same_bed_no_500(self):
+        """同宿舍两个学生填了同一床位号：第二个应落到空闲床，而不是报 500。"""
+        rows = [
+            self._row(STUDENT_ID, "张三", "一栋 101", "1"),
+            self._row("2026010100000000002", "李四", "一栋 101", "1"),
+        ]
+        import_students(rows, self.cls)
+        a = Student.objects.get(name="张三").dorm_assignments.get(is_current=True)
+        b = Student.objects.get(name="李四").dorm_assignments.get(is_current=True)
+        self.assertIsNotNone(a.bed)
+        self.assertIsNotNone(b.bed)
+        self.assertNotEqual(a.bed_id, b.bed_id)
+
 
 class AssignDormitoryBedsCommandTests(TestCase):
     """管理命令：把历史「已分配未占床」数据补分到空闲床。"""

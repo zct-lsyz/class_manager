@@ -7,7 +7,7 @@
 <div class="card-body">
 <form method="post">{% csrf_token %}
 {% for f in form %}
-{% if f.name == "student" %}
+{% if f.name == "student" and not edit_mode %}
 {% include "_student_checkbox_field.html" with field=f %}
 {% else %}
 <div class="mb-3">

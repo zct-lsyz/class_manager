@@ -11,6 +11,7 @@ from apps.classes.utils import get_current_class
 from apps.classes.models import SchoolClass, Semester
 from apps.classes.decorators import require_current_class
 from apps.students.models import Student
+from apps.todos.services import sync_follow_up_todo
 
 
 def _sync_attendance_points(record):
@@ -23,6 +24,15 @@ def _sync_attendance_points(record):
         points=record.points_deducted, reason=reason,
         source_type="attendance", source_id=record.pk,
     )
+
+
+def _as_date(value, default=None):
+    """解析表单里的日期字符串（多选考勤登记用）。"""
+    from datetime import date as _date
+    try:
+        return _date.fromisoformat(value) if value else default
+    except (ValueError, TypeError):
+        return default
 
 
 @login_required
@@ -107,6 +117,8 @@ def create(request):
                     points = 0
                 reason = request.POST.get("reason", "").strip()
                 proof = request.FILES.get("leave_proof")
+                needs_follow_up = request.POST.get("needs_follow_up") == "on"
+                follow_up_date = _as_date(request.POST.get("follow_up_date"))
                 created = 0
                 from django.db import transaction
                 with transaction.atomic():
@@ -115,11 +127,13 @@ def create(request):
                             school_class=current_class, semester=current_semester,
                             student=st, date=date, period=period, status=status,
                             points_deducted=points, reason=reason,
+                            needs_follow_up=needs_follow_up, follow_up_date=follow_up_date,
                         )
                         if proof:
                             record.leave_proof = proof
                         record.save()
                         _sync_attendance_points(record)
+                        sync_follow_up_todo(record, request.user)
                         created += 1
                 messages.success(request, f"已为 {created} 名学生登记异常考勤。")
                 return redirect("attendance:index")
@@ -132,6 +146,7 @@ def create(request):
             record.semester = current_semester
             record.save()
             _sync_attendance_points(record)
+            sync_follow_up_todo(record, request.user)
             messages.success(request, "考勤记录已保存。")
             return redirect("attendance:index")
     else:
@@ -142,7 +157,7 @@ def create(request):
             form.fields["student"].initial = student_id
 
     students_json = [
-        {"id": s.pk, "name": s.name} for s in Student.objects.filter(
+        {"id": s.pk, "name": s.name, "bed": s.display_bed_number} for s in Student.objects.filter(
             school_class=current_class, is_deleted=False,
         ).order_by("student_id")
     ] if current_class else []
@@ -162,14 +177,15 @@ def edit(request, pk):
             request.POST, request.FILES, instance=record, current_class=current_class,
         )
         if form.is_valid():
-            form.save()
+            record = form.save()
             _sync_attendance_points(record)
+            sync_follow_up_todo(record, request.user)
             messages.success(request, "异常考勤已更新。")
             return redirect("attendance:index")
     else:
         form = AttendanceForm(instance=record, current_class=current_class)
     students_json = [
-        {"id": s.pk, "name": s.name} for s in Student.objects.filter(
+        {"id": s.pk, "name": s.name, "bed": s.display_bed_number} for s in Student.objects.filter(
             school_class=current_class, is_deleted=False,
         ).order_by("student_id")
     ] if current_class else []

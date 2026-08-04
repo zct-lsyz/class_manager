@@ -63,6 +63,8 @@ class AttendanceRecord(BaseModel):
     leave_proof = models.FileField(
         "请假证明", upload_to="attendance/", blank=True,
     )
+    needs_follow_up = models.BooleanField("需要跟进", default=False)
+    follow_up_date = models.DateField("跟进日期", null=True, blank=True)
 
     class Meta:
         verbose_name = "考勤记录"

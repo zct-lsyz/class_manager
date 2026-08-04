@@ -226,7 +226,7 @@ def index(request):
     try:
         from apps.todos.models import TodoItem
         qs_todos = TodoItem.objects.filter(
-            school_class=current_class, is_deleted=False, is_completed=False,
+            created_by=request.user, is_deleted=False, is_completed=False,
         )
         todo_count = qs_todos.count()
         active_todos = qs_todos.order_by("deadline", "-created_at")[:5]
@@ -535,22 +535,21 @@ def api_notifications(request):
     except Exception:
         pass
 
-    if current_class:
-        try:
-            from apps.todos.models import TodoItem
-            due_todos = TodoItem.objects.filter(
-                school_class=current_class, is_deleted=False, is_completed=False,
-                deadline__lte=timezone.now(),
-            ).order_by("deadline")[:10]
-            result["due_count"] = due_todos.count()
-            result["due_todos"] = [
-                {
-                    "title": t.title,
-                    "deadline": timezone.localtime(t.deadline).strftime("%m-%d %H:%M") if t.deadline else None,
-                }
-                for t in due_todos
-            ]
-        except Exception:
-            pass
+    try:
+        from apps.todos.models import TodoItem
+        due_todos = TodoItem.objects.filter(
+            created_by=request.user, is_deleted=False, is_completed=False,
+            deadline__lte=timezone.now(),
+        ).order_by("deadline")[:10]
+        result["due_count"] = due_todos.count()
+        result["due_todos"] = [
+            {
+                "title": t.title,
+                "deadline": timezone.localtime(t.deadline).strftime("%m-%d %H:%M") if t.deadline else None,
+            }
+            for t in due_todos
+        ]
+    except Exception:
+        pass
 
     return JsonResponse(result)

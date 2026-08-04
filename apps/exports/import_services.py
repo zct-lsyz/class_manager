@@ -94,8 +94,8 @@ def _sync_dormitory_assignment(student, school_class):
         if bed_no not in existing:
             DormBed.objects.create(room=room, bed_number=bed_no)
 
-    # 先取消学生旧分配，再选床位（避免把自己当前占的床算作已占用）
-    DormAssignment.objects.filter(student=student, is_current=True).update(is_current=False)
+    # 先取消学生旧分配，并释放其占用的床位（避免 OneToOne 唯一约束冲突）
+    DormAssignment.objects.filter(student=student, is_current=True).update(is_current=False, bed=None)
 
     bed = None
     bed_number = str(student.bed_number or "").strip()
@@ -108,6 +108,11 @@ def _sync_dormitory_assignment(student, school_class):
             if bed and student.bed_number != padded:
                 student.bed_number = padded
                 student.save(update_fields=["bed_number", "updated_at"])
+        # 指定的床位已被其他学生占用时，改分空闲床（避免 OneToOne 唯一约束冲突报 500）
+        if bed and DormAssignment.objects.filter(
+            room=room, is_current=True, bed=bed,
+        ).exists():
+            bed = None
     if not bed:
         bed = _first_free_bed(room)
         if bed and student.bed_number != bed.bed_number:

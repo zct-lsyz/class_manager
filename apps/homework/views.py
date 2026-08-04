@@ -6,6 +6,7 @@ from django.utils import timezone
 
 from apps.homework.models import HomeworkTask, HomeworkRecord, Subject, HomeworkStatus
 from apps.homework.forms import HomeworkTaskForm, HomeworkRecordForm
+from apps.todos.services import sync_follow_up_todo, remove_follow_up_todo
 from apps.classes.utils import get_current_class
 from apps.classes.models import SchoolClass, Semester
 from apps.classes.decorators import require_current_class
@@ -48,6 +49,7 @@ def task_create(request):
             task.school_class = current_class
             task.semester = current_semester
             task.save()
+            sync_follow_up_todo(task, request.user)
             messages.success(request, f"作业「{task.title}」已创建。")
             return redirect("homework:index")
     else:
@@ -76,6 +78,7 @@ def task_edit(request, pk):
             updated.school_class = current_class
             updated.semester = current_semester
             updated.save()
+            sync_follow_up_todo(updated, request.user)
             from apps.audit.models import OperationLog
             OperationLog.objects.create(
                 user=request.user, action="edit", module="homework",
@@ -102,6 +105,7 @@ def task_delete(request, pk):
         title = task.title
         record_count = task.records.count()
         task.delete()
+        remove_follow_up_todo(task)
         from apps.audit.models import OperationLog
         OperationLog.objects.create(
             user=request.user, action="delete", module="homework",
