@@ -12,6 +12,7 @@ from apps.classes.decorators import require_current_class
 from apps.students.models import Student
 from apps.audit.services import soft_delete
 from apps.audit.models import OperationLog
+from apps.todos.services import sync_discipline_follow_up_todo, remove_discipline_todo
 
 
 def get_client_ip(request):
@@ -128,6 +129,7 @@ def _create_classroom_discipline_records(current_class, current_semester, studen
                 remarks=request.POST.get("remarks", "").strip(),
             )
             _sync_discipline_points(record)
+            sync_discipline_follow_up_todo(record, request.user)
             created += 1
     return created
 
@@ -198,6 +200,7 @@ def classroom_create(request):
             record.semester = current_semester
             record.save()
             _sync_discipline_points(record)
+            sync_discipline_follow_up_todo(record, request.user)
             messages.success(request, "课堂纪律记录已保存。")
             return redirect("discipline:classroom_list")
         return render(request, "discipline/classroom_form.html", {
@@ -218,8 +221,9 @@ def classroom_edit(request, pk):
     if request.method == "POST":
         form = ClassroomDisciplineForm(request.POST, instance=record)
         if form.is_valid():
-            form.save()
+            record = form.save()
             _sync_discipline_points(record)
+            sync_discipline_follow_up_todo(record, request.user)
             messages.success(request, "课堂纪律记录已更新。")
             return redirect("discipline:classroom_list")
     else:
@@ -241,6 +245,7 @@ def classroom_delete(request, pk):
             module="discipline",
             model_name="classroomdiscipline",
         )
+        remove_discipline_todo(record)
         messages.info(request, "课堂纪律记录已删除。")
     return redirect("discipline:classroom_list")
 
@@ -255,6 +260,7 @@ def classroom_follow_up(request, pk):
         record.follow_up_result = request.POST.get("follow_up_result", "").strip()
         record.needs_follow_up = False
         record.save()
+        sync_discipline_follow_up_todo(record, request.user)
         messages.success(request, "跟进处理已保存。")
     return redirect("discipline:classroom_list")
 
@@ -319,6 +325,7 @@ def dorm_create(request):
             record.semester = current_semester
             record.save()
             _sync_discipline_points(record)
+            sync_discipline_follow_up_todo(record, request.user)
             messages.success(request, "宿舍纪律记录已保存。")
             return redirect("discipline:dorm_list")
     else:
@@ -334,8 +341,9 @@ def dorm_edit(request, pk):
     if request.method == "POST":
         form = DormDisciplineForm(request.POST, instance=record)
         if form.is_valid():
-            form.save()
+            record = form.save()
             _sync_discipline_points(record)
+            sync_discipline_follow_up_todo(record, request.user)
             messages.success(request, "宿舍纪律记录已更新。")
             return redirect("discipline:dorm_list")
     else:
@@ -357,6 +365,7 @@ def dorm_delete(request, pk):
             module="dormitory",
             model_name="dormdiscipline",
         )
+        remove_discipline_todo(record)
         messages.info(request, "宿舍纪律记录已删除。")
     return redirect("discipline:dorm_list")
 
@@ -371,6 +380,7 @@ def dorm_follow_up(request, pk):
         record.follow_up_result = request.POST.get("follow_up_result", "").strip()
         record.needs_follow_up = False
         record.save()
+        sync_discipline_follow_up_todo(record, request.user)
         messages.success(request, "跟进处理已保存。")
     return redirect("discipline:dorm_list")
 

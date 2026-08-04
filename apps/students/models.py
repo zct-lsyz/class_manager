@@ -164,8 +164,24 @@ class Guardian(BaseModel):
         return f"{self.student.name} 的家长信息"
 
     def get_primary_contact_display(self):
-        return {
-            "father": "父亲",
-            "mother": "母亲",
-            "other": "其他监护人",
-        }.get(self.primary_contact, "未设置")
+        """主要联系人显示：关系-手机号，如「母亲-13900001111」。
+
+        未设置手机号时只显示关系；兼容旧数据中直接存的中文关系（如「母亲-139xxx」）。
+        """
+        pc = str(self.primary_contact or "").strip()
+        if pc == "father":
+            label, phone = "父亲", self.father_phone
+        elif pc == "mother":
+            label, phone = "母亲", self.mother_phone
+        elif pc == "other":
+            label, phone = self.other_guardian or "其他监护人", ""
+        elif pc:
+            if any(k in pc for k in ("父亲", "爸爸", "老爸", "爹")) or pc.startswith("爸") or pc.startswith("父"):
+                label, phone = "父亲", self.father_phone
+            elif any(k in pc for k in ("母亲", "妈妈", "老妈", "娘")) or pc.startswith("妈") or pc.startswith("母"):
+                label, phone = "母亲", self.mother_phone
+            else:
+                label, phone = pc, ""
+        else:
+            return "未设置"
+        return f"{label}-{phone}" if phone else label

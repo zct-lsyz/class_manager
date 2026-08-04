@@ -50,7 +50,8 @@ function initStudentCheckboxSelect(opts) {
         currentStudents.forEach(function (s) {
             var wrap = document.createElement('div');
             wrap.className = 'form-check';
-            wrap.innerHTML = '<input class="form-check-input scs-check" type="checkbox" value="' + s.id + '"><label class="form-check-label">' + s.name + '</label>';
+            var labelText = s.name + (s.bed ? '（' + s.bed + '号床）' : '');
+            wrap.innerHTML = '<input class="form-check-input scs-check" type="checkbox" value="' + s.id + '"><label class="form-check-label">' + labelText + '</label>';
             var cb = wrap.querySelector('input');
             if (selected.has(String(s.id))) cb.checked = true;
             scroll.appendChild(wrap);

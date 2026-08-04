@@ -21,6 +21,7 @@ from apps.students.models import Student
 from apps.audit.models import OperationLog
 from apps.audit.services import soft_delete
 from apps.dormitory.photo_services import prepare_hygiene_photo
+from apps.todos.services import sync_discipline_follow_up_todo
 
 
 def get_client_ip(request):
@@ -38,11 +39,13 @@ def index(request):
     # 统计
     total_rooms = len(rooms)
     total_beds = sum(r.bed_count for r in rooms)
-    assigned = DormAssignment.objects.filter(room__building__school_class=current_class, is_current=True).count() if current_class else 0
+    assigned = DormAssignment.objects.filter(
+        room__building__school_class=current_class, is_current=True, bed__isnull=False,
+    ).count() if current_class else 0
 
-    # 每宿舍已分配人数
+    # 每宿舍已分配人数（仅统计已占床，与床位分布图一致）
     for r in rooms:
-        r.assigned_count = sum(1 for a in r.assignments.all() if a.is_current)
+        r.assigned_count = sum(1 for a in r.assignments.all() if a.is_current and a.bed_id)
 
     return render(request, "dormitory/index.html", {
         "buildings": buildings, "rooms": rooms,
@@ -108,16 +111,21 @@ def room_detail(request, pk):
         room=room, is_current=True
     ).select_related("student", "bed")
 
-    # 已分配床位映射
+    # 已分配床位映射（仅统计已占床）
     assigned_map = {a.bed_id: a.student for a in assignments if a.bed_id}
+    # 已分配但未占床的学生（如导入时床位号未匹配到生成的 01..08 号床）
+    bedless = [a.student.name for a in assignments if not a.bed_id]
+    # 可选学生 = 本班尚未占床的学生（含未分配者与已分配未占床者）
+    occupied_student_ids = assignments.filter(
+        bed__isnull=False,
+    ).values_list("student_id", flat=True)
     unassigned = Student.objects.filter(
         school_class=current_class, is_deleted=False,
-    ).exclude(
-        id__in=assignments.values_list("student_id", flat=True)
-    )
+    ).exclude(id__in=occupied_student_ids)
 
     return render(request, "dormitory/room_detail.html", {
-        "room": room, "beds": beds, "assigned_map": assigned_map, "unassigned": unassigned,
+        "room": room, "beds": beds, "assigned_map": assigned_map,
+        "unassigned": unassigned, "bedless": bedless,
     })
 
 
@@ -522,6 +530,7 @@ def _create_dorm_discipline_records(current_class, current_semester, room, stude
                     points=-points, reason=f"{record.get_severity_display()}：{item_name}",
                     source_type="dorm_discipline", source_id=record.pk,
                 )
+            sync_discipline_follow_up_todo(record, request.user)
             created += 1
     return created
 
@@ -600,6 +609,7 @@ def discipline_create(request):
             record.school_class = current_class
             record.semester = current_semester
             record.save()
+            sync_discipline_follow_up_todo(record, request.user)
             messages.success(request, "宿舍纪律记录已保存。")
             return redirect("dormitory:discipline")
         return render(request, "dormitory/discipline_form.html", {
@@ -618,13 +628,17 @@ def discipline_create(request):
 
 
 def _build_room_students(current_class):
-    """构建 {room_id: [{id, name}]} 宿舍→当前分配学生映射，供前端联动。"""
+    """构建 {room_id: [{id, name, bed}]} 宿舍→当前分配学生映射，供前端联动。"""
     data = {}
     if not current_class:
         return data
     assignments = DormAssignment.objects.filter(
         room__building__school_class=current_class, is_current=True,
-    ).select_related("room", "student")
+    ).select_related("room", "student", "bed")
     for a in assignments:
-        data.setdefault(a.room_id, []).append({"id": a.student_id, "name": a.student.name})
+        data.setdefault(a.room_id, []).append({
+            "id": a.student_id,
+            "name": a.student.name,
+            "bed": a.bed.bed_number if a.bed else "",
+        })
     return data

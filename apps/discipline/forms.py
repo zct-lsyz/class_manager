@@ -93,7 +93,13 @@ class DormDisciplineForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields["student"].queryset = Student.objects.filter(is_deleted=False)
+        self.fields["student"].label_from_instance = self._student_label
         self.fields["item"].queryset = ConfigurableItem.objects.filter(
             module="dorm_discipline", is_active=True
         )
         self.fields["item"].required = False
+
+    def _student_label(self, obj):
+        """学生下拉选项显示床位号，如「张三（01号床）」。"""
+        bed = obj.display_bed_number
+        return f"{obj.name}（{bed}号床）" if bed else obj.name

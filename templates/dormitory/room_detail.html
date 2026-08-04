@@ -10,6 +10,13 @@
     </h4>
 </div>
 
+{% if bedless %}
+<div class="alert alert-warning py-2 small">
+    <i class="bi bi-exclamation-triangle me-1"></i>
+    {{ bedless|length }} 名学生已分配至本宿舍但尚未占床（{{ bedless|join:"、" }}），请在下方空床或「更换」中为其分配床位。
+</div>
+{% endif %}
+
 <div class="row g-4">
     <!-- 床位网格 -->
     <div class="col-md-8">

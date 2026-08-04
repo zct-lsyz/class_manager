@@ -48,6 +48,8 @@ class TodoItem(BaseModel):
     is_completed = models.BooleanField("已完成", default=False)
     completed_at = models.DateTimeField("完成时间", null=True, blank=True)
     is_deleted = models.BooleanField("已删除", default=False)
+    source_type = models.CharField("来源类型", max_length=50, blank=True, default="")
+    source_id = models.CharField("来源ID", max_length=50, blank=True, default="")
 
     class Meta:
         verbose_name = "待办事项"

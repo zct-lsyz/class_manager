@@ -51,10 +51,24 @@ def _parse_dormitory(dormitory_str):
     return None, s
 
 
+def _first_free_bed(room):
+    """返回宿舍第一张空闲床（未被当前分配占用），无空闲则 None。"""
+    from apps.dormitory.models import DormAssignment, DormBed
+    occupied = set(DormAssignment.objects.filter(
+        room=room, is_current=True, bed__isnull=False,
+    ).values_list("bed_id", flat=True))
+    for b in DormBed.objects.filter(room=room, is_active=True).order_by("bed_number"):
+        if b.id not in occupied:
+            return b
+    return None
+
+
 def _sync_dormitory_assignment(student, school_class):
     """根据学生 dormitory/bed_number 自动创建宿舍楼/宿舍/床位并分配。
 
     只在学生填写了宿舍信息时执行；未填则跳过。
+    床位号未匹配（如 3 vs 生成的 03、或床号超出）时自动分配到空闲床，
+    避免产生「已分配宿舍但没有床位」的不一致数据。
     """
     if not student.dormitory:
         return
@@ -80,13 +94,26 @@ def _sync_dormitory_assignment(student, school_class):
         if bed_no not in existing:
             DormBed.objects.create(room=room, bed_number=bed_no)
 
+    # 先取消学生旧分配，再选床位（避免把自己当前占的床算作已占用）
+    DormAssignment.objects.filter(student=student, is_current=True).update(is_current=False)
+
     bed = None
     bed_number = str(student.bed_number or "").strip()
     if bed_number:
         bed = DormBed.objects.filter(room=room, bed_number=bed_number).first()
+        # 兼容纯数字床位号（如 3 → 生成的 03），并回写规范化编号，保证内外一致
+        if not bed and bed_number.isdigit():
+            padded = f"{int(bed_number):02d}"
+            bed = DormBed.objects.filter(room=room, bed_number=padded).first()
+            if bed and student.bed_number != padded:
+                student.bed_number = padded
+                student.save(update_fields=["bed_number", "updated_at"])
+    if not bed:
+        bed = _first_free_bed(room)
+        if bed and student.bed_number != bed.bed_number:
+            student.bed_number = bed.bed_number
+            student.save(update_fields=["bed_number", "updated_at"])
 
-    # 取消学生旧分配，创建新分配
-    DormAssignment.objects.filter(student=student, is_current=True).update(is_current=False)
     DormAssignment.objects.create(
         student=student, room=room, bed=bed, is_current=True,
         semester=Semester.objects.filter(
@@ -200,7 +227,7 @@ def import_students(valid_rows, school_class):
         birth_date = item["birth_date"]
         if isinstance(birth_date, datetime):
             birth_date = birth_date.date()
-        Student.objects.create(
+        student = Student.objects.create(
             school_class=school_class,
             student_id=item["student_id"],
             name=item["name"],
@@ -216,6 +243,9 @@ def import_students(valid_rows, school_class):
             primary_phone=item["primary_phone"],
             remarks=item["remarks"],
         )
+        # 花名册导入同样自动生成宿舍分配，避免「学生信息有宿舍/床位，宿舍管理里却没有」
+        if item.get("dormitory") or item.get("bed_number"):
+            _sync_dormitory_assignment(student, school_class)
         created += 1
     return created
 
@@ -252,6 +282,9 @@ def validate_guardians(data_rows, current_class=None):
         if mother_phone and not PHONE_RE.match(mother_phone):
             errors.append({"row": idx, "field": "母亲电话", "value": mother_phone, "error": "手机号必须为11位纯数字"})
             continue
+        primary_contact = _normalize_primary_contact(
+            row.get("主要联系人", ""), mother_phone, father_phone,
+        )
         # 用可序列化字段代替 Student ORM 实例，避免 session JSON 序列化崩溃
         valid_rows.append({
             "row": idx,
@@ -262,7 +295,7 @@ def validate_guardians(data_rows, current_class=None):
             "mother_name": str(row.get("母亲姓名", "") or "").strip(),
             "mother_phone": mother_phone,
             "other_guardian": str(row.get("其他监护人", "") or "").strip(),
-            "primary_contact": str(row.get("主要联系人", "") or "").strip(),
+            "primary_contact": primary_contact,
             "home_address": str(row.get("家庭地址", "") or "").strip(),
             "remarks": str(row.get("备注", "") or "").strip(),
         })
@@ -446,6 +479,31 @@ def _is_father(relation):
 
 def _is_mother(relation):
     return relation in _MOTHER_KEYWORDS or relation.startswith("妈") or relation.startswith("娘")
+
+
+def _normalize_primary_contact(raw, mother_phone="", father_phone=""):
+    """把「主要联系人」单元格解析为标准键 father/mother/other。
+
+    - 父亲/爸爸/爸… 或 father → father
+    - 母亲/妈妈/妈… 或 mother → mother
+    - 明确填写其它关系（祖父/外公/other/其他等）→ other
+    - 留空（未写明父亲/母亲）→ 默认母亲（母亲无电话而有父亲电话时默认父亲）
+    """
+    raw = str(raw or "").strip()
+    low = raw.lower()
+    if raw:
+        if any(k in raw for k in ("父亲", "爸爸", "老爸", "爹")) or \
+                raw.startswith("爸") or raw.startswith("父") or low == "father":
+            return "father"
+        if any(k in raw for k in ("母亲", "妈妈", "老妈", "娘")) or \
+                raw.startswith("妈") or raw.startswith("母") or low == "mother":
+            return "mother"
+        return "other"
+    if mother_phone:
+        return "mother"
+    if father_phone:
+        return "father"
+    return "mother"
 
 
 def _create_guardian_from_import(student, item):
