@@ -46,6 +46,7 @@ class ClassroomEditFormTests(TestCase):
             "student": s2.pk,
             "date": "2026-08-02",
             "severity": "moderate",
+            "points_sign": "deduct",
             "points_deducted": "1",
             "description": "上课说话",
         })

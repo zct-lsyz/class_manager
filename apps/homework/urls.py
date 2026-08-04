@@ -11,4 +11,5 @@ urlpatterns = [
     path("<int:pk>/delete/", views.task_delete, name="task_delete"),
     path("status-settings/", views.status_settings, name="status_settings"),
     path("status-settings/<int:pk>/delete/", views.status_delete, name="status_delete"),
+    path("point-rules/", views.point_rules, name="point_rules"),
 ]

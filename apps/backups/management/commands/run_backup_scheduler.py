@@ -11,6 +11,7 @@ from django.utils import timezone
 from apps.backups.services import create_backup
 from apps.seating.services import rotate_due_plans
 from apps.backups.storage_services import check_storage_alerts
+from apps.mobile_api.push import dispatch_due_todos
 
 
 class Command(BaseCommand):
@@ -62,6 +63,13 @@ class Command(BaseCommand):
                     self.stderr.write(self.style.ERROR(f"存储空间检查失败: {exc}"))
 
             due_types = []
+            try:
+                push_result = dispatch_due_todos(now)
+                if push_result.get("sent") or push_result.get("failed"):
+                    self.stdout.write(f"移动端待办推送: {push_result}")
+            except Exception as exc:
+                self.stderr.write(self.style.ERROR(f"移动端待办推送失败: {exc}"))
+
             if current_time >= daily_time and state.get("auto_daily") != today:
                 due_types.append("auto_daily")
             if (

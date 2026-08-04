@@ -1,4 +1,75 @@
 {% extends "base.html" %}{% block title %}{{ title|default:"新增奖惩" }}{% endblock %}
 {% block content %}<div class="row justify-content-center mt-3"><div class="col-md-6">
-  <div class="card"><div class="card-header">{{ title|default:"新增奖惩" }}</div><div class="card-body"><form method="post" enctype="multipart/form-data">{% csrf_token %}{% for f in form %}<div class="mb-3"><label class="form-label small">{{ f.label }}</label>{{ f }}{% if f.errors %}<div class="text-danger small">{{ f.errors.0 }}</div>{% endif %}</div>{% endfor %}<a href="{% url 'rewards:index' %}" class="btn btn-outline-secondary">返回</a> <button class="btn btn-primary">保存</button></form></div></div>
+  <div class="card"><div class="card-header">{{ title|default:"新增奖惩" }}</div><div class="card-body">
+  <form method="post" enctype="multipart/form-data">{% csrf_token %}
+    {% if form.students %}
+    <div class="mb-3"><label class="form-label small">{{ form.students.label }}</label>{{ form.students }}{% if form.students.errors %}<div class="text-danger small">{{ form.students.errors.0 }}</div>{% endif %}</div>
+    {% elif form.student %}
+    <div class="mb-3"><label class="form-label small">{{ form.student.label }}</label>{{ form.student }}{% if form.student.errors %}<div class="text-danger small">{{ form.student.errors.0 }}</div>{% endif %}</div>
+    {% endif %}
+    <div class="mb-3"><label class="form-label small">{{ form.date.label }}</label>{{ form.date }}{% if form.date.errors %}<div class="text-danger small">{{ form.date.errors.0 }}</div>{% endif %}</div>
+    <div class="mb-3"><label class="form-label small">{{ form.record_type.label }}</label>{{ form.record_type }}{% if form.record_type.errors %}<div class="text-danger small">{{ form.record_type.errors.0 }}</div>{% endif %}</div>
+    <div class="mb-3"><label class="form-label small" id="lbl-item">{{ form.item.label }}</label>{{ form.item }}{% if form.item.errors %}<div class="text-danger small">{{ form.item.errors.0 }}</div>{% endif %}</div>
+    <div class="mb-3"><label class="form-label small" id="lbl-custom">{{ form.custom_name.label }}</label>{{ form.custom_name }}{% if form.custom_name.errors %}<div class="text-danger small">{{ form.custom_name.errors.0 }}</div>{% endif %}</div>
+    <div class="mb-3"><label class="form-label small" id="lbl-level">{{ form.level.label }}</label>{{ form.level }}{% if form.level.errors %}<div class="text-danger small">{{ form.level.errors.0 }}</div>{% endif %}</div>
+    <div class="mb-3"><label class="form-label small" id="lbl-points">{{ form.points.label }}</label>{{ form.points }}{% if form.points.errors %}<div class="text-danger small">{{ form.points.errors.0 }}</div>{% endif %}</div>
+    <div class="mb-3"><label class="form-label small" id="lbl-desc">{{ form.description.label }}</label>{{ form.description }}{% if form.description.errors %}<div class="text-danger small">{{ form.description.errors.0 }}</div>{% endif %}</div>
+    <div class="mb-3"><label class="form-label small" id="lbl-photo">{{ form.certificate_photo.label }}</label>{{ form.certificate_photo }}{% if form.certificate_photo.errors %}<div class="text-danger small">{{ form.certificate_photo.errors.0 }}</div>{% endif %}</div>
+    <div class="mb-3 form-check"><label class="form-check-label small">{{ form.needs_follow_up }} {{ form.needs_follow_up.label }}</label></div>
+    <div class="mb-3"><label class="form-label small">{{ form.follow_up_date.label }}</label>{{ form.follow_up_date }}{% if form.follow_up_date.errors %}<div class="text-danger small">{{ form.follow_up_date.errors.0 }}</div>{% endif %}</div>
+    <div class="d-flex justify-content-between"><a href="{% url 'rewards:index' %}" class="btn btn-outline-secondary">返回</a> <button class="btn btn-primary">保存</button></div>
+  </form>
+  </div></div>
 </div></div>{% endblock %}
+
+{% block extra_js %}
+<script>
+(function() {
+    var typeSel = document.querySelector('[name="record_type"]');
+    var itemSel = document.querySelector('[name="item"]');
+    var levelSel = document.querySelector('[name="level"]');
+    var pointsInput = document.querySelector('[name="points"]');
+    if (!typeSel) return;
+
+    function applyType() {
+        var t = typeSel.value;
+        var isPenalty = t === 'penalty';
+        var map = { 'lbl-item': isPenalty ? '惩罚条目' : '奖励条目',
+                    'lbl-level': isPenalty ? '惩罚等级' : '奖励等级',
+                    'lbl-points': isPenalty ? '扣分' : '加分',
+                    'lbl-desc': isPenalty ? '惩罚说明' : '奖励说明',
+                    'lbl-photo': isPenalty ? '惩罚照片' : '奖状照片',
+                    'lbl-custom': isPenalty ? '自定义惩罚名称' : '自定义奖励名称' };
+        Object.keys(map).forEach(function(id) {
+            var el = document.getElementById(id);
+            if (el) el.textContent = map[id];
+        });
+        if (itemSel) {
+            Array.prototype.forEach.call(itemSel.options, function(opt) {
+                opt.style.display = (opt.dataset.type === t) ? '' : 'none';
+            });
+        }
+        if (levelSel) {
+            Array.prototype.forEach.call(levelSel.options, function(opt) {
+                opt.style.display = (opt.dataset.type === t || opt.dataset.type === '') ? '' : 'none';
+            });
+        }
+        if (pointsInput) {
+            var v = parseFloat(pointsInput.value);
+            if (!isNaN(v)) pointsInput.value = Math.abs(v);
+        }
+    }
+    function fillPoints() {
+        if (!itemSel || !pointsInput) return;
+        var opt = itemSel.options[itemSel.selectedIndex];
+        if (opt && opt.dataset.points !== undefined && opt.dataset.points !== '') {
+            pointsInput.value = opt.dataset.points;
+        }
+    }
+    typeSel.addEventListener('change', applyType);
+    if (itemSel) itemSel.addEventListener('change', fillPoints);
+    applyType();
+    {% if not form.instance.pk %}{# 新建时按当前选中的条目自动带出默认分值 #}fillPoints();{% endif %}
+})();
+</script>
+{% endblock %}

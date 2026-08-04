@@ -87,6 +87,33 @@ class HomeworkTask(BaseModel):
         return self.title
 
 
+class HomeworkPointRule(BaseModel):
+    """作业状态积分规则（可配置，按班级）：为某完成状态自定义加分/扣分。"""
+    school_class = models.ForeignKey(
+        SchoolClass, on_delete=models.CASCADE,
+        related_name="homework_point_rules", verbose_name="班级",
+    )
+    status = models.CharField("完成状态", max_length=30)
+    points = models.PositiveIntegerField("分值（恒为正）", default=0)
+    is_add = models.BooleanField("加分", default=True)  # False 表示扣分
+
+    class Meta:
+        verbose_name = "作业状态积分规则"
+        verbose_name_plural = "作业状态积分规则"
+        ordering = ["status"]
+        unique_together = ["school_class", "status"]
+
+    @property
+    def signed_points(self):
+        return self.points if self.is_add else -self.points
+
+    def __str__(self):
+        return f"{self.get_status_display_name()}：{self.signed_points:+d}"
+
+    def get_status_display_name(self):
+        return dict(HomeworkRecord.STATUS_CHOICES).get(self.status, self.status)
+
+
 class HomeworkRecord(BaseModel):
     """学生作业完成状态"""
     STATUS_CHOICES = [

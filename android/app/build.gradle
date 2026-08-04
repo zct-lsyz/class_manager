@@ -2,6 +2,9 @@ plugins {
     id 'com.android.application'
 }
 
+def xiaomiAppId = System.getenv("XIAOMI_PUSH_APP_ID") ?: ""
+def xiaomiAppKey = System.getenv("XIAOMI_PUSH_APP_KEY") ?: ""
+
 android {
     namespace 'com.classmanager.app'
     compileSdk 34
@@ -10,8 +13,16 @@ android {
         applicationId "com.classmanager.app"
         minSdk 26
         targetSdk 34
-        versionCode 1
-        versionName "1.0"
+        versionCode 2
+        versionName "2.0.0"
+        buildConfigField "String", "API_BASE_URL", '"https://120.27.231.112/api/v1/"'
+        buildConfigField "String", "XIAOMI_APP_ID", '"' + xiaomiAppId + '"'
+        buildConfigField "String", "XIAOMI_APP_KEY", '"' + xiaomiAppKey + '"'
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+    }
+
+    buildFeatures {
+        buildConfig true
     }
 
     buildTypes {
@@ -22,20 +33,21 @@ android {
     }
 
     compileOptions {
-        sourceCompatibility JavaVersion.VERSION_1_8
-        targetCompatibility JavaVersion.VERSION_1_8
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
     }
 }
 
+configurations.configureEach {
+    exclude group: 'org.jetbrains.kotlin', module: 'kotlin-stdlib-jdk7'
+    exclude group: 'org.jetbrains.kotlin', module: 'kotlin-stdlib-jdk8'
+}
+
 dependencies {
-    // Kotlin BOM：把所有 Kotlin 构件统一到 1.8.22。
-    // 从 Kotlin 1.8.0 起，kotlin-stdlib-jdk7/jdk8 的内容已合并进 kotlin-stdlib，
-    // 这两个旧构件在 1.8.x 只是空壳（重定向到 stdlib）。
-    // 不统一版本会导致同时拉入 stdlib 1.8.22 和 jdk7/jdk8 1.6.0，出现重复类冲突；
-    // 同时也不要手动 exclude 它们，否则会触发 AGP alignWith 的
-    // "Cannot mutate ... after the configuration was resolved" 崩溃。
-    implementation platform('org.jetbrains.kotlin:kotlin-bom:1.8.22')
-    implementation 'androidx.appcompat:appcompat:1.6.1'
-    implementation 'androidx.core:core:1.12.0'
-    implementation 'androidx.webkit:webkit:1.9.0'
+    implementation 'androidx.appcompat:appcompat:1.7.0'
+    implementation 'androidx.core:core:1.13.1'
+    testImplementation 'junit:junit:4.13.2'
+    if (file('libs/MiPush_SDK_Client.aar').exists()) {
+        implementation files('libs/MiPush_SDK_Client.aar')
+    }
 }

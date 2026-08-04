@@ -35,6 +35,15 @@ def _as_date(value, default=None):
         return default
 
 
+def _apply_attendance_sign(record, form):
+    """按「加分/扣分」选择把正分值转成带符号的 points_deducted（正=加分、负=扣分）。"""
+    value = abs(record.points_deducted or 0)
+    if form.cleaned_data.get("points_sign") == "add":
+        record.points_deducted = value
+    else:
+        record.points_deducted = -value
+
+
 @login_required
 def index(request):
     """考勤管理首页"""
@@ -112,9 +121,12 @@ def create(request):
                 status = request.POST.get("status", "late")
                 points = 0
                 try:
-                    points = int(request.POST.get("points_deducted", "0") or "0")
+                    points = abs(int(request.POST.get("points_deducted", "0") or "0"))
                 except (ValueError, TypeError):
                     points = 0
+                # 分值恒为正；考勤中 points_deducted 正=加分、负=扣分
+                if request.POST.get("points_sign") != "add":
+                    points = -points
                 reason = request.POST.get("reason", "").strip()
                 proof = request.FILES.get("leave_proof")
                 needs_follow_up = request.POST.get("needs_follow_up") == "on"
@@ -144,6 +156,7 @@ def create(request):
             record = form.save(commit=False)
             record.school_class = current_class
             record.semester = current_semester
+            _apply_attendance_sign(record, form)
             record.save()
             _sync_attendance_points(record)
             sync_follow_up_todo(record, request.user)
@@ -177,7 +190,9 @@ def edit(request, pk):
             request.POST, request.FILES, instance=record, current_class=current_class,
         )
         if form.is_valid():
-            record = form.save()
+            record = form.save(commit=False)
+            _apply_attendance_sign(record, form)
+            record.save()
             _sync_attendance_points(record)
             sync_follow_up_todo(record, request.user)
             messages.success(request, "异常考勤已更新。")

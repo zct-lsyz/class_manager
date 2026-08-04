@@ -572,9 +572,12 @@ def discipline_create(request):
                     pk=item_id, module="dorm_discipline", school_class=current_class,
                 ).first()
             try:
-                points = int(request.POST.get("points_deducted", "0") or "0")
+                points = abs(int(request.POST.get("points_deducted", "0") or "0"))
             except (ValueError, TypeError):
                 points = 0
+            # 分值恒为正；纪律中 points_deducted 正=扣分、负=加分
+            if request.POST.get("points_sign") == "add":
+                points = -points
 
             if student_mode == "all":
                 students = _room_students(room)
@@ -610,6 +613,9 @@ def discipline_create(request):
             record = form.save(commit=False)
             record.school_class = current_class
             record.semester = current_semester
+            # 分值恒为正；纪律中 points_deducted 正=扣分、负=加分
+            value = abs(record.points_deducted or 0)
+            record.points_deducted = -value if request.POST.get("points_sign") == "add" else value
             record.save()
             sync_follow_up_todo(record, request.user)
             messages.success(request, "宿舍纪律记录已保存。")

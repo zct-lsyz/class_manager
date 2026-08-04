@@ -132,9 +132,16 @@ HOMEWORK_POINTS = {
 
 
 def _sync_homework_points(record):
-    """作业完成状态同步到统一积分（source_type=homework）。"""
+    """作业完成状态同步到统一积分（source_type=homework）。
+
+    优先使用该班级配置的作业积分规则（HomeworkPointRule），未配置则用内置默认。
+    """
     from apps.rewards.services import sync_source_point
-    points = HOMEWORK_POINTS.get(record.status, 0)
+    from apps.homework.models import HomeworkPointRule
+    rule = HomeworkPointRule.objects.filter(
+        school_class=record.task.school_class, status=record.status,
+    ).first()
+    points = rule.signed_points if rule else HOMEWORK_POINTS.get(record.status, 0)
     sync_source_point(
         student=record.student, school_class=record.task.school_class,
         semester=record.task.semester,
@@ -268,3 +275,40 @@ def status_delete(request, pk):
             status.delete()
             messages.info(request, "作业状态已删除。")
     return redirect("homework:status_settings")
+
+
+@login_required
+@require_current_class
+def point_rules(request):
+    """作业状态积分规则：为各完成状态自定义加分/扣分（分数恒为正）。"""
+    from apps.homework.models import HomeworkPointRule
+    current_class = get_current_class(request.user)
+    rules = {r.status: r for r in HomeworkPointRule.objects.filter(school_class=current_class)}
+
+    if request.method == "POST":
+        for status, _label in HomeworkRecord.STATUS_CHOICES:
+            raw = request.POST.get(f"points_{status}", "").strip()
+            if raw == "":
+                HomeworkPointRule.objects.filter(
+                    school_class=current_class, status=status,
+                ).delete()
+                continue
+            try:
+                value = int(raw)
+            except (ValueError, TypeError):
+                continue
+            is_add = request.POST.get(f"is_add_{status}") == "on"
+            if value < 0:
+                value = abs(value)
+                is_add = False
+            HomeworkPointRule.objects.update_or_create(
+                school_class=current_class, status=status,
+                defaults={"points": value, "is_add": is_add},
+            )
+        messages.success(request, "作业积分规则已保存（未填写的状态不参与加减分）。")
+        return redirect("homework:point_rules")
+
+    return render(request, "homework/point_rules.html", {
+        "status_choices": HomeworkRecord.STATUS_CHOICES,
+        "rules": rules,
+    })

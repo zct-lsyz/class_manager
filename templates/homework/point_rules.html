@@ -1,0 +1,42 @@
+{% extends "base.html" %}{% load custom_filters %}{% block title %}作业积分规则{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mt-3 mb-4">
+    <h4 class="mb-0"><i class="bi bi-sliders me-2 text-primary"></i>作业积分规则</h4>
+    <a href="{% url 'homework:index' %}" class="btn btn-outline-secondary btn-sm">返回作业检查</a>
+</div>
+<div class="alert alert-light border small mb-3">
+    <i class="bi bi-info-circle me-1"></i>
+    为每个作业完成状态设置<b>加分或扣分</b>（分值一律填正数，加减由左侧选择决定）。登记作业状态时会自动按此规则计入积分；留空表示该状态不参与加减分。
+</div>
+<form method="post" class="card">
+    {% csrf_token %}
+    <div class="table-responsive">
+        <table class="table mb-0">
+            <thead class="table-light"><tr><th style="width:160px">完成状态</th><th style="width:180px">加分/扣分</th><th>分值（正数）</th></tr></thead>
+            <tbody>
+            {% for status, label in status_choices %}
+            {% with rule=rules|get_item:status %}
+            <tr>
+                <td><strong>{{ label }}</strong></td>
+                <td>
+                    <select name="is_add_{{ status }}" class="form-select form-select-sm">
+                        <option value="add" {% if rule and rule.is_add %}selected{% endif %}>加分</option>
+                        <option value="deduct" {% if rule and not rule.is_add %}selected{% endif %}>扣分</option>
+                    </select>
+                </td>
+                <td>
+                    <input type="number" name="points_{{ status }}" class="form-control form-control-sm"
+                           min="0" step="1" value="{% if rule %}{{ rule.points }}{% endif %}"
+                           placeholder="留空则不计分">
+                </td>
+            </tr>
+            {% endwith %}
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    <div class="card-footer">
+        <button class="btn btn-primary"><i class="bi bi-check-lg me-1"></i>保存规则</button>
+    </div>
+</form>
+{% endblock %}

@@ -20,6 +20,15 @@ def get_client_ip(request):
     return x_forwarded_for.split(",")[0].strip() if x_forwarded_for else request.META.get("REMOTE_ADDR", "")
 
 
+def _apply_discipline_sign(record, request):
+    """按「加分/扣分」选择把正分值转成带符号的 points_deducted（正=扣分、负=加分）。"""
+    value = abs(record.points_deducted or 0)
+    if request.POST.get("points_sign") == "add":
+        record.points_deducted = -value
+    else:
+        record.points_deducted = value
+
+
 def _sync_discipline_points(record):
     """课堂/宿舍纪律的加减分同步到统一积分明细。
 
@@ -159,9 +168,12 @@ def classroom_create(request):
                     pk=item_id, module="classroom_discipline", school_class=current_class,
                 ).first()
             try:
-                points = int(request.POST.get("points_deducted", "0") or "0")
+                points = abs(int(request.POST.get("points_deducted", "0") or "0"))
             except (ValueError, TypeError):
                 points = 0
+            # 分值恒为正；纪律中 points_deducted 正=扣分、负=加分
+            if request.POST.get("points_sign") == "add":
+                points = -points
 
             if student_mode == "all":
                 students = Student.objects.filter(
@@ -198,6 +210,7 @@ def classroom_create(request):
             record = form.save(commit=False)
             record.school_class = current_class
             record.semester = current_semester
+            _apply_discipline_sign(record, request)
             record.save()
             _sync_discipline_points(record)
             sync_follow_up_todo(record, request.user)
@@ -221,7 +234,9 @@ def classroom_edit(request, pk):
     if request.method == "POST":
         form = ClassroomDisciplineForm(request.POST, instance=record)
         if form.is_valid():
-            record = form.save()
+            record = form.save(commit=False)
+            _apply_discipline_sign(record, request)
+            record.save()
             _sync_discipline_points(record)
             sync_follow_up_todo(record, request.user)
             messages.success(request, "课堂纪律记录已更新。")
@@ -325,6 +340,7 @@ def dorm_create(request):
             record = form.save(commit=False)
             record.school_class = current_class
             record.semester = current_semester
+            _apply_discipline_sign(record, request)
             record.save()
             _sync_discipline_points(record)
             sync_follow_up_todo(record, request.user)
@@ -343,7 +359,9 @@ def dorm_edit(request, pk):
     if request.method == "POST":
         form = DormDisciplineForm(request.POST, instance=record)
         if form.is_valid():
-            record = form.save()
+            record = form.save(commit=False)
+            _apply_discipline_sign(record, request)
+            record.save()
             _sync_discipline_points(record)
             sync_follow_up_todo(record, request.user)
             messages.success(request, "宿舍纪律记录已更新。")

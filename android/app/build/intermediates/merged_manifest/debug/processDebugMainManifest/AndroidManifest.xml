@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.classmanager.app"
-    android:versionCode="1"
-    android:versionName="1.0" >
+    android:versionCode="2"
+    android:versionName="2.0.0" >
 
     <uses-sdk
         android:minSdkVersion="26"
@@ -10,7 +10,6 @@
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
-    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
     <permission
@@ -20,21 +19,26 @@
     <uses-permission android:name="com.classmanager.app.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION" />
 
     <application
-        android:allowBackup="true"
+        android:name="com.classmanager.app.ClassManagerApp"
+        android:allowBackup="false"
         android:appComponentFactory="androidx.core.app.CoreComponentFactory"
         android:debuggable="true"
         android:extractNativeLibs="false"
-        android:icon="@mipmap/ic_launcher"
-        android:label="@string/app_name"
+        android:icon="@drawable/ic_app"
+        android:label="班级教学管理"
+        android:networkSecurityConfig="@xml/network_security_config"
         android:supportsRtl="true"
-        android:testOnly="true"
         android:theme="@style/Theme.ClassManager"
-        android:usesCleartextTraffic="true" >
+        android:usesCleartextTraffic="false" >
+        <activity android:name="com.classmanager.app.ui.AccountActivity" />
+        <activity android:name="com.classmanager.app.ui.BackupActivity" />
+        <activity android:name="com.classmanager.app.ui.ReportActivity" />
+        <activity android:name="com.classmanager.app.ui.ResourceActivity" />
+        <activity android:name="com.classmanager.app.ui.SectionActivity" />
+        <activity android:name="com.classmanager.app.ui.MainActivity" />
         <activity
-            android:name="com.classmanager.app.MainActivity"
-            android:configChanges="orientation|screenSize|keyboardHidden"
-            android:exported="true"
-            android:windowSoftInputMode="adjustResize" >
+            android:name="com.classmanager.app.ui.LoginActivity"
+            android:exported="true" >
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
 
@@ -42,20 +46,18 @@
             </intent-filter>
         </activity>
 
-        <service
-            android:name="com.classmanager.app.PollingService"
-            android:exported="false" />
-
         <receiver
-            android:name="com.classmanager.app.BootReceiver"
-            android:exported="false" >
+            android:name="com.classmanager.app.notification.AlarmReceiver"
+            android:exported="false" />
+        <receiver
+            android:name="com.classmanager.app.notification.BootReceiver"
+            android:enabled="true"
+            android:exported="true" >
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
             </intent-filter>
         </receiver>
-        <receiver
-            android:name="com.classmanager.app.PollAlarmReceiver"
-            android:exported="false" />
 
         <provider
             android:name="androidx.startup.InitializationProvider"
@@ -67,7 +69,30 @@
             <meta-data
                 android:name="androidx.lifecycle.ProcessLifecycleInitializer"
                 android:value="androidx.startup" />
+            <meta-data
+                android:name="androidx.profileinstaller.ProfileInstallerInitializer"
+                android:value="androidx.startup" />
         </provider>
+
+        <receiver
+            android:name="androidx.profileinstaller.ProfileInstallReceiver"
+            android:directBootAware="false"
+            android:enabled="true"
+            android:exported="true"
+            android:permission="android.permission.DUMP" >
+            <intent-filter>
+                <action android:name="androidx.profileinstaller.action.INSTALL_PROFILE" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="androidx.profileinstaller.action.SKIP_FILE" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="androidx.profileinstaller.action.SAVE_PROFILE" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="androidx.profileinstaller.action.BENCHMARK_OPERATION" />
+            </intent-filter>
+        </receiver>
     </application>
 
 </manifest>

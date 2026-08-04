@@ -42,7 +42,10 @@ class FollowUpTodoTests(TestCase):
             source_type="classroom_discipline", source_id=str(record.pk),
         )
         self.assertEqual(todo.title, "课堂纪律跟进：上课说话（小明）")
-        self.assertEqual(timezone.localtime(todo.deadline).date(), date(2026, 8, 5))
+        local = timezone.localtime(todo.deadline)
+        self.assertEqual(local.date(), date(2026, 8, 5))
+        # 截止时间统一为当天 22:00
+        self.assertEqual((local.hour, local.minute), (22, 0))
         self.assertEqual(todo.student, self.student)
         self.assertEqual(todo.school_class, self.cls)
         self.assertEqual(todo.created_by, self.user)
@@ -106,6 +109,30 @@ class FollowUpTodoTests(TestCase):
             source_type="classroom_discipline", source_id=str(record.pk),
         )
         self.assertTrue(todo.is_deleted)
+
+    def test_set_followup_deadline_command(self):
+        """把已有跟进待办的截止时间统一改为当天 22:00。"""
+        from io import StringIO
+        from datetime import datetime as _dt, time as _time
+        from django.core.management import call_command
+        record = ClassroomDisciplineRecord.objects.create(
+            school_class=self.cls, semester=self.sem, student=self.student,
+            date=date(2026, 8, 2), item=self.item,
+            needs_follow_up=True, follow_up_date=date(2026, 8, 5),
+        )
+        sync_follow_up_todo(record, self.user)
+        todo = TodoItem.objects.get(
+            source_type="classroom_discipline", source_id=str(record.pk),
+        )
+        # 模拟旧数据（0 点）
+        todo.deadline = timezone.make_aware(_dt.combine(date(2026, 8, 5), _time(0, 0)))
+        todo.save()
+        out = StringIO()
+        call_command("set_followup_deadline", stdout=out)
+        self.assertIn("1 条，已更新为当天 22:00", out.getvalue())
+        todo.refresh_from_db()
+        local = timezone.localtime(todo.deadline)
+        self.assertEqual((local.hour, local.minute), (22, 0))
 
 
 class FollowUpTodoExtendedTests(TestCase):

@@ -61,6 +61,8 @@ urlpatterns = [
     path("todos/", include("apps.todos.urls")),
     # 评选管理
     path("evaluation/", include("apps.evaluation.urls")),
+    # 原生 Android 客户端 API
+    path("api/v1/", include("apps.mobile_api.urls")),
     # 登录保护的上传附件
     path("protected-media/<path:path>", protected_media, name="protected_media"),
 ]

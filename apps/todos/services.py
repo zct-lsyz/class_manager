@@ -7,10 +7,10 @@ from apps.todos.models import TodoItem
 
 
 def _deadline_from_date(date):
-    """日期 → 待办截止时间（当天 0 点，带时区）。"""
+    """日期 → 待办截止时间（当天 22:00，带时区）。"""
     if not date:
         return None
-    return timezone.make_aware(datetime.combine(date, dt_time()))
+    return timezone.make_aware(datetime.combine(date, dt_time(22, 0)))
 
 
 def _severity_priority(severity):

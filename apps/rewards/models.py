@@ -14,20 +14,28 @@ class BaseModel(models.Model):
 
 
 class RewardItem(BaseModel):
-    """奖励条目（可配置）"""
+    """奖惩条目（可配置，区分奖励/表扬与惩罚）"""
+    ITEM_TYPE_CHOICES = [
+        ("reward", "奖励/表扬"),
+        ("penalty", "惩罚"),
+    ]
     school_class = models.ForeignKey(
         SchoolClass, on_delete=models.CASCADE,
         related_name="reward_items", verbose_name="班级",
     )
-    name = models.CharField("奖励名称", max_length=100)
-    default_points = models.IntegerField("默认加分", default=1)
+    item_type = models.CharField(
+        "条目类型", max_length=20, choices=ITEM_TYPE_CHOICES,
+        default="reward",
+    )
+    name = models.CharField("条目名称", max_length=100)
+    default_points = models.IntegerField("默认分值", default=1)
     category = models.CharField("分类", max_length=50, blank=True, default="")
     is_active = models.BooleanField("启用", default=True)
     sort_order = models.IntegerField("排序", default=0)
 
     class Meta:
-        verbose_name = "奖励条目"
-        verbose_name_plural = "奖励条目"
+        verbose_name = "奖惩条目"
+        verbose_name_plural = "奖惩条目"
         ordering = ["sort_order"]
 
     def __str__(self):
@@ -63,10 +71,13 @@ class RewardRecord(BaseModel):
     )
     custom_name = models.CharField("自定义名称", max_length=200, blank=True, default="")
     level = models.CharField(
-        "奖励等级", max_length=20,
+        "等级", max_length=20,
         choices=[
             ("class", "班级表扬"),
             ("school", "校级荣誉"),
+            ("serious", "严重"),
+            ("moderate", "一般"),
+            ("mild", "轻微"),
             ("other", "其他"),
         ],
         default="class",

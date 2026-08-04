@@ -1,22 +1,18 @@
 [
     {
-        "merged": "com.classmanager.app-debug-21:/drawable_ic_notification.xml.flat",
-        "source": "com.classmanager.app-main-23:/drawable/ic_notification.xml"
+        "merged": "com.classmanager.app-debug-23:/xml_network_security_config.xml.flat",
+        "source": "com.classmanager.app-main-25:/xml/network_security_config.xml"
     },
     {
-        "merged": "com.classmanager.app-debug-21:/layout_dialog_server_url.xml.flat",
-        "source": "com.classmanager.app-main-23:/layout/dialog_server_url.xml"
+        "merged": "com.classmanager.app-debug-23:/layout_activity_container.xml.flat",
+        "source": "com.classmanager.app-main-25:/layout/activity_container.xml"
     },
     {
-        "merged": "com.classmanager.app-debug-21:/mipmap-anydpi-v26_ic_launcher.xml.flat",
-        "source": "com.classmanager.app-main-23:/mipmap-anydpi-v26/ic_launcher.xml"
+        "merged": "com.classmanager.app-debug-23:/drawable_ic_app.xml.flat",
+        "source": "com.classmanager.app-main-25:/drawable/ic_app.xml"
     },
     {
-        "merged": "com.classmanager.app-debug-21:/layout_activity_main.xml.flat",
-        "source": "com.classmanager.app-main-23:/layout/activity_main.xml"
-    },
-    {
-        "merged": "com.classmanager.app-debug-21:/drawable_ic_launcher_foreground.xml.flat",
-        "source": "com.classmanager.app-main-23:/drawable/ic_launcher_foreground.xml"
+        "merged": "com.classmanager.app-debug-23:/drawable_bg_card.xml.flat",
+        "source": "com.classmanager.app-main-25:/drawable/bg_card.xml"
     }
 ]

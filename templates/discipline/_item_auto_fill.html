@@ -1,21 +1,22 @@
-<!-- 选择纪律条目后，自动匹配默认严重程度和扣分 -->
+<!-- 选择纪律条目后，自动匹配默认严重程度、分值及加分/扣分 -->
 <script>
 (function() {
     const itemSel = document.getElementById('id_item');
     const severitySel = document.getElementById('id_severity');
     const pointsInput = document.getElementById('id_points_deducted');
+    const signSel = document.querySelector('[name="points_sign"]');
     if (!itemSel || !severitySel) return;
     itemSel.addEventListener('change', function() {
         const opt = itemSel.options[itemSel.selectedIndex];
         if (!opt || !opt.value) return;
         if (opt.dataset.severity) {
             severitySel.value = opt.dataset.severity;
-            if (severitySel.value !== opt.dataset.severity) {
-                // 若下拉里没有该选项则忽略
-            }
         }
         if (pointsInput && opt.dataset.points !== undefined) {
             pointsInput.value = opt.dataset.points;
+        }
+        if (signSel && opt.dataset.add !== undefined) {
+            signSel.value = opt.dataset.add === '1' ? 'add' : 'deduct';
         }
     });
 })();

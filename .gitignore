@@ -45,6 +45,9 @@ staticfiles/
 
 # 日志
 *.log
+android/.gradle/
+android/**/build/
+android/local.properties
 logs/
 
 # Excel 和 CSV 数据文件

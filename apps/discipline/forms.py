@@ -8,6 +8,8 @@ class ItemPointsSelect(forms.Select):
         option = super().create_option(name, value, label, selected, index, subindex, attrs)
         if value and getattr(value, "instance", None):
             option["attrs"]["data-points"] = abs(value.instance.default_points)
+            # default_points 为负表示加分条目
+            option["attrs"]["data-add"] = "1" if value.instance.default_points < 0 else "0"
             option["attrs"]["data-severity"] = value.instance.default_severity
         return option
 
@@ -29,12 +31,18 @@ class ConfigurableItemForm(forms.ModelForm):
 
 
 class ClassroomDisciplineForm(forms.ModelForm):
+    """课堂纪律表单：分值恒为正，用「加分/扣分」选择决定加还是扣。"""
+    points_sign = forms.ChoiceField(
+        label="加分/扣分", choices=[("add", "加分"), ("deduct", "扣分")],
+        initial="deduct", widget=forms.Select(attrs={"class": "form-select"}),
+    )
+
     class Meta:
         model = ClassroomDisciplineRecord
         fields = [
             "student", "date", "time", "period", "subject",
             "item", "custom_content", "severity", "description",
-            "action_taken", "points_deducted", "needs_follow_up",
+            "action_taken", "points_sign", "points_deducted", "needs_follow_up",
             "follow_up_date", "follow_up_result", "remarks",
         ]
         widgets = {
@@ -48,11 +56,14 @@ class ClassroomDisciplineForm(forms.ModelForm):
             "severity": forms.Select(attrs={"class": "form-select"}),
             "description": forms.Textarea(attrs={"class": "form-control", "rows": 3}),
             "action_taken": forms.Textarea(attrs={"class": "form-control", "rows": 2}),
-            "points_deducted": forms.NumberInput(attrs={"class": "form-control"}),
+            "points_deducted": forms.NumberInput(attrs={"class": "form-control", "min": "0", "step": "1"}),
             "needs_follow_up": forms.CheckboxInput(attrs={"class": "form-check-input"}),
             "follow_up_date": forms.DateInput(attrs={"class": "form-control", "type": "date"}),
             "follow_up_result": forms.Textarea(attrs={"class": "form-control", "rows": 2}),
             "remarks": forms.Textarea(attrs={"class": "form-control", "rows": 2}),
+        }
+        labels = {
+            "points_deducted": "分值（填正数）",
         }
 
     def __init__(self, *args, **kwargs):
@@ -62,15 +73,25 @@ class ClassroomDisciplineForm(forms.ModelForm):
             module="classroom_discipline", is_active=True
         )
         self.fields["item"].required = False
+        # 编辑时：分值恒为正显示，加减由选择决定（正=扣分、负=加分）
+        if self.instance and self.instance.pk:
+            self.fields["points_sign"].initial = "add" if self.instance.points_deducted < 0 else "deduct"
+            self.fields["points_deducted"].initial = abs(self.instance.points_deducted or 0)
 
 
 class DormDisciplineForm(forms.ModelForm):
+    """宿舍纪律表单：分值恒为正，用「加分/扣分」选择决定加还是扣。"""
+    points_sign = forms.ChoiceField(
+        label="加分/扣分", choices=[("add", "加分"), ("deduct", "扣分")],
+        initial="deduct", widget=forms.Select(attrs={"class": "form-select"}),
+    )
+
     class Meta:
         model = DormDisciplineRecord
         fields = [
             "dorm_room", "student", "date", "time",
             "item", "custom_content", "severity", "description",
-            "action_taken", "points_deducted", "needs_follow_up",
+            "action_taken", "points_sign", "points_deducted", "needs_follow_up",
             "follow_up_date", "follow_up_result", "remarks",
         ]
         widgets = {
@@ -83,11 +104,14 @@ class DormDisciplineForm(forms.ModelForm):
             "severity": forms.Select(attrs={"class": "form-select"}),
             "description": forms.Textarea(attrs={"class": "form-control", "rows": 3}),
             "action_taken": forms.Textarea(attrs={"class": "form-control", "rows": 2}),
-            "points_deducted": forms.NumberInput(attrs={"class": "form-control"}),
+            "points_deducted": forms.NumberInput(attrs={"class": "form-control", "min": "0", "step": "1"}),
             "needs_follow_up": forms.CheckboxInput(attrs={"class": "form-check-input"}),
             "follow_up_date": forms.DateInput(attrs={"class": "form-control", "type": "date"}),
             "follow_up_result": forms.Textarea(attrs={"class": "form-control", "rows": 2}),
             "remarks": forms.Textarea(attrs={"class": "form-control", "rows": 2}),
+        }
+        labels = {
+            "points_deducted": "分值（填正数）",
         }
 
     def __init__(self, *args, **kwargs):
@@ -98,6 +122,10 @@ class DormDisciplineForm(forms.ModelForm):
             module="dorm_discipline", is_active=True
         )
         self.fields["item"].required = False
+        # 编辑时：分值恒为正显示，加减由选择决定（正=扣分、负=加分）
+        if self.instance and self.instance.pk:
+            self.fields["points_sign"].initial = "add" if self.instance.points_deducted < 0 else "deduct"
+            self.fields["points_deducted"].initial = abs(self.instance.points_deducted or 0)
 
     def _student_label(self, obj):
         """学生下拉选项显示床位号，如「张三（01号床）」。"""

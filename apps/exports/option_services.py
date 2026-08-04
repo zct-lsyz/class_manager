@@ -8,7 +8,7 @@ from openpyxl import Workbook, load_workbook
 HEADERS = {
     "classroom_discipline": ["名称", "默认分值", "分类", "严重程度", "需要跟进", "启用", "排序"],
     "dorm_discipline": ["名称", "默认分值", "分类", "严重程度", "需要跟进", "启用", "排序"],
-    "reward": ["名称", "默认分值", "分类", "启用", "排序"],
+    "reward": ["类型", "名称", "默认分值", "分类", "启用", "排序"],
     "dorm_hygiene": ["名称", "满分", "默认扣分", "启用", "排序"],
     "attendance_reason": ["名称", "启用", "排序"],
     "duty_task": ["名称", "区域", "默认人数", "启用", "排序"],
@@ -32,7 +32,7 @@ def option_template_response(category):
     examples = {
         "classroom_discipline": ["上课讲话", -1, "课堂秩序", "mild", "否", "是", 0],
         "dorm_discipline": ["晚归", -2, "作息", "moderate", "是", "是", 0],
-        "reward": ["主动帮助同学", 1, "品德", "是", 0],
+        "reward": ["奖励", "主动帮助同学", 1, "品德", "是", 0],
         "dorm_hygiene": ["地面", 10, 1, "是", 0],
         "attendance_reason": ["交通拥堵", "是", 0],
         "duty_task": ["擦黑板", "讲台", 1, "是", 0],
@@ -68,7 +68,18 @@ def import_options(category, uploaded, school_class):
             )
         elif category == "reward":
             from apps.rewards.models import RewardItem
-            RewardItem.objects.update_or_create(school_class=school_class, name=name, defaults={"default_points": int(values[1] or 0), "category": str(values[2] or ""), "is_active": _bool(values[3]), "sort_order": int(values[4] or 0)})
+            item_type_raw = str(values[0] or "").strip()
+            item_type = "penalty" if any(k in item_type_raw for k in ("惩罚", "扣分", "penalty")) else "reward"
+            RewardItem.objects.update_or_create(
+                school_class=school_class, name=name,
+                defaults={
+                    "item_type": item_type,
+                    "default_points": int(values[2] or 0),
+                    "category": str(values[3] or ""),
+                    "is_active": _bool(values[4]),
+                    "sort_order": int(values[5] or 0),
+                },
+            )
         elif category == "dorm_hygiene":
             from apps.dormitory.models import DormHygieneItem
             DormHygieneItem.objects.update_or_create(school_class=school_class, name=name, defaults={"full_score": int(values[1] or 10), "default_deduction": int(values[2] or 0), "is_active": _bool(values[3]), "sort_order": int(values[4] or 0)})
