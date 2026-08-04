@@ -3,6 +3,7 @@ package com.classmanager.app.ui;
 import android.Manifest;
 import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.view.ViewGroup;
@@ -19,6 +20,7 @@ import com.classmanager.app.data.ApiClient;
 import com.classmanager.app.data.SessionStore;
 import com.classmanager.app.notification.NotificationScheduler;
 
+import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.util.Map;
@@ -55,6 +57,13 @@ public class MainActivity extends BaseActivity {
         summary.setBackgroundResource(R.drawable.bg_card);
         root.addView(summary, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        root.addView(Ui.title(this, "工作台工具"));
+        Button countdowns = Ui.button(this, "倒计时管理");
+        countdowns.setOnClickListener(view -> openResource("countdowns", "倒计时管理"));
+        root.addView(countdowns);
+        Button websites = Ui.button(this, "常用教学网站管理");
+        websites.setOnClickListener(view -> openResource("teaching_websites", "常用教学网站管理"));
+        root.addView(websites);
         root.addView(Ui.title(this, "功能模块"));
         GridLayout grid = new GridLayout(this);
         grid.setColumnCount(2);
@@ -105,6 +114,27 @@ public class MainActivity extends BaseActivity {
                             "学生 " + stats.optInt("students") + " 人    今日异常 " + stats.optInt("today_absent") + " 人\n" +
                             "本周未交 " + stats.optInt("week_unsubmitted") + " 条    待办 " + stats.optInt("active_todos") + " 条"));
                 }
+                JSONObject quote = data.optJSONObject("quote");
+                if (quote != null) summary.addView(Ui.text(MainActivity.this,
+                        "每日一句：" + quote.optString("content") + (quote.optString("author").isEmpty() ? "" : " —— " + quote.optString("author"))));
+                JSONArray countdownRows = data.optJSONArray("countdowns");
+                if (countdownRows != null && countdownRows.length() > 0) {
+                    summary.addView(Ui.title(MainActivity.this, "倒计时"));
+                    for (int i = 0; i < countdownRows.length(); i++) {
+                        JSONObject row = countdownRows.optJSONObject(i);
+                        summary.addView(Ui.text(MainActivity.this, row.optString("name") + "：" + row.optInt("days_remaining") + " 天"));
+                    }
+                }
+                JSONArray websiteRows = data.optJSONArray("websites");
+                if (websiteRows != null && websiteRows.length() > 0) {
+                    summary.addView(Ui.title(MainActivity.this, "常用教学网站"));
+                    for (int i = 0; i < websiteRows.length(); i++) {
+                        JSONObject row = websiteRows.optJSONObject(i);
+                        Button link = Ui.button(MainActivity.this, row.optString("name"));
+                        link.setOnClickListener(view -> startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(row.optString("url")))));
+                        summary.addView(link);
+                    }
+                }
             }
             @Override public void onError(String message, int statusCode) {
                 summary.removeAllViews();
@@ -112,6 +142,13 @@ public class MainActivity extends BaseActivity {
                 handleAuthError(statusCode);
             }
         });
+    }
+
+    private void openResource(String resource, String title) {
+        Intent intent = new Intent(this, ResourceActivity.class);
+        intent.putExtra("resource", resource);
+        intent.putExtra("title", title);
+        startActivity(intent);
     }
 
     private void requestNotifications() {

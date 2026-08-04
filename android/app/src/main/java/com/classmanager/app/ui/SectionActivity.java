@@ -38,6 +38,10 @@ public class SectionActivity extends BaseActivity {
             intent.putExtra("title", entry.title);
         } else if (FeatureCatalog.BACKUP.equals(entry.kind)) {
             intent = new Intent(this, BackupActivity.class);
+        } else if (FeatureCatalog.AI.equals(entry.kind)) {
+            intent = new Intent(this, AiAnalysisActivity.class);
+        } else if (FeatureCatalog.DORMITORY.equals(entry.kind)) {
+            intent = new Intent(this, DormitoryActivity.class);
         } else {
             intent = new Intent(this, AccountActivity.class);
         }

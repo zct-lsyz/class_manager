@@ -351,6 +351,7 @@ def _apply_data(instance, spec, data, request):
         field = instance._meta.get_field(name)
         if isinstance(field, models.FileField):
             if name in request.FILES:
+                request.FILES[name].seek(0)
                 setattr(instance, name, request.FILES[name])
             continue
         setattr(instance, name, _convert(field, data.get(name), spec, request.mobile_user, data))
@@ -578,7 +579,7 @@ def resource_list(request, resource):
     })
 
 
-@mobile_api(["GET", "PUT", "PATCH", "DELETE"])
+@mobile_api(["GET", "POST", "PUT", "PATCH", "DELETE"])
 def resource_detail(request, resource, pk):
     spec = get_spec(resource)
     if not spec:

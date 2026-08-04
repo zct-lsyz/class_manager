@@ -3,7 +3,14 @@
   <div class="card"><div class="card-header">{{ title|default:"新增奖惩" }}</div><div class="card-body">
   <form method="post" enctype="multipart/form-data">{% csrf_token %}
     {% if form.students %}
-    <div class="mb-3"><label class="form-label small">{{ form.students.label }}</label>{{ form.students }}{% if form.students.errors %}<div class="text-danger small">{{ form.students.errors.0 }}</div>{% endif %}</div>
+    <div class="mb-3">
+        <label class="form-label small">{{ form.students.label }}</label>
+        <div class="border rounded p-2 bg-white" style="max-height:260px;overflow-y:auto;">
+            {{ form.students }}
+        </div>
+        <div class="form-text small">最多显示约 10 人，可上下滚动查看全部学生。</div>
+        {% if form.students.errors %}<div class="text-danger small">{{ form.students.errors.0 }}</div>{% endif %}
+    </div>
     {% elif form.student %}
     <div class="mb-3"><label class="form-label small">{{ form.student.label }}</label>{{ form.student }}{% if form.student.errors %}<div class="text-danger small">{{ form.student.errors.0 }}</div>{% endif %}</div>
     {% endif %}

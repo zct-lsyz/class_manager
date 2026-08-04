@@ -16,6 +16,7 @@ def dashboard(request):
     from apps.attendance.models import AttendanceRecord
     from apps.backups.models import BackupRecord
     from apps.classes.models import Semester
+    from apps.dashboard.models import Countdown, DailyQuote, TeachingWebsite
     from apps.homework.models import HomeworkRecord, HomeworkStatus
     from apps.students.models import Student
     from apps.todos.models import TodoItem
@@ -38,6 +39,7 @@ def dashboard(request):
         created_by=user, is_deleted=False, is_completed=False,
     ).select_related("student").order_by("priority", "deadline", "-created_at")[:8]
     last_backup = BackupRecord.objects.filter(user=user).order_by("-created_at").first()
+    quote = DailyQuote.objects.filter(date=today).first() or DailyQuote.objects.order_by("-date").first()
     return api_ok({
         "has_current_class": True,
         "today": today.isoformat(),
@@ -60,6 +62,14 @@ def dashboard(request):
             ).count(),
         },
         "todos": [serialize_instance(item, get_spec("todos").fields) for item in todos],
+        "countdowns": [{
+            "id": row.pk, "name": row.name, "target_date": row.target_date.isoformat(),
+            "days_remaining": row.days_remaining,
+        } for row in Countdown.objects.filter(created_by=user, is_active=True).order_by("target_date")[:8]],
+        "websites": [{
+            "id": row.pk, "name": row.name, "url": row.url,
+        } for row in TeachingWebsite.objects.filter(created_by=user).order_by("sort_order", "name")[:12]],
+        "quote": {"content": quote.quote, "author": quote.author} if quote else None,
         "backup": {
             "status": last_backup.status,
             "created_at": last_backup.created_at.isoformat(),

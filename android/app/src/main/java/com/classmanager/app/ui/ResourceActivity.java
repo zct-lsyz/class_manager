@@ -1,6 +1,8 @@
 package com.classmanager.app.ui;
 
 import android.app.AlertDialog;
+import android.content.Intent;
+import android.net.Uri;
 import android.os.Bundle;
 import android.text.InputType;
 import android.view.View;
@@ -33,6 +35,7 @@ public class ResourceActivity extends BaseActivity {
     private ListView list;
     private JSONArray records = new JSONArray();
     private JSONObject schema;
+    private FileButton pendingFileButton;
 
     @Override
     protected void onCreate(Bundle state) {
@@ -69,7 +72,11 @@ public class ResourceActivity extends BaseActivity {
         list = new ListView(this);
         root.addView(list, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, 0, 1));
-        list.setOnItemClickListener((parent, view, position, id) -> edit(records.optJSONObject(position)));
+        list.setOnItemClickListener((parent, view, position, id) -> {
+            JSONObject record = records.optJSONObject(position);
+            if ("hygiene_checks".equals(resource)) hygieneActions(record);
+            else edit(record);
+        });
         list.setOnItemLongClickListener((parent, view, position, id) -> {
             confirmDelete(records.optJSONObject(position));
             return true;
@@ -156,7 +163,7 @@ public class ResourceActivity extends BaseActivity {
         dialog.setOnShowListener(ignored -> dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(view -> {
             JSONObject body = collect(inputs, definitions);
             if (body == null) return;
-            save(record, body, dialog);
+            save(record, body, collectFiles(inputs), dialog);
         }));
         dialog.show();
     }
@@ -241,6 +248,18 @@ public class ResourceActivity extends BaseActivity {
             box.setChecked(current instanceof Boolean ? (Boolean) current : Boolean.parseBoolean(String.valueOf(current)));
             return box;
         }
+        if ("file".equals(type)) {
+            FileButton button = new FileButton();
+            button.setText(current == null || current == JSONObject.NULL || String.valueOf(current).isEmpty() ? "选择附件" : "保留现有附件（点此替换）");
+            button.setOnClickListener(view -> {
+                pendingFileButton = button;
+                Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+                intent.setType("*/*");
+                intent.addCategory(Intent.CATEGORY_OPENABLE);
+                startActivityForResult(intent, 4201);
+            });
+            return button;
+        }
         if ((options != null && options.length() > 0) || (choices != null && choices.length() > 0)) {
             JSONArray values = options != null && options.length() > 0 ? options : choices;
             Spinner spinner = new Spinner(this);
@@ -270,7 +289,7 @@ public class ResourceActivity extends BaseActivity {
         if ("date".equals(type)) return "YYYY-MM-DD";
         if ("datetime".equals(type)) return "YYYY-MM-DDTHH:MM:SS+08:00";
         if ("time".equals(type)) return "HH:MM";
-        if ("file".equals(type)) return "附件请暂在网站端上传";
+        if ("file".equals(type)) return "选择附件";
         return "请输入";
     }
 
@@ -283,6 +302,7 @@ public class ResourceActivity extends BaseActivity {
                 Object value;
                 if (view instanceof CheckBox) value = ((CheckBox) view).isChecked();
                 else if (view instanceof Spinner) value = ((Option) ((Spinner) view).getSelectedItem()).value;
+                else if (view instanceof FileButton) continue;
                 else value = ((EditText) view).getText().toString().trim();
                 if (definition.optBoolean("required") && String.valueOf(value).isEmpty()) {
                     toast(definition.optString("label") + "不能为空。");
@@ -301,7 +321,25 @@ public class ResourceActivity extends BaseActivity {
         }
     }
 
-    private void save(JSONObject record, JSONObject body, AlertDialog dialog) {
+    private Map<String, Uri> collectFiles(Map<String, View> inputs) {
+        Map<String, Uri> files = new LinkedHashMap<>();
+        for (Map.Entry<String, View> item : inputs.entrySet()) {
+            if (item.getValue() instanceof FileButton && ((FileButton) item.getValue()).uri != null)
+                files.put(item.getKey(), ((FileButton) item.getValue()).uri);
+        }
+        return files;
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode == 4201 && resultCode == RESULT_OK && data != null && data.getData() != null && pendingFileButton != null) {
+            pendingFileButton.uri = data.getData();
+            pendingFileButton.setText("已选择附件");
+        }
+    }
+
+    private void save(JSONObject record, JSONObject body, Map<String, Uri> files, AlertDialog dialog) {
         ApiClient.Callback callback = new ApiClient.Callback() {
             @Override public void onSuccess(JSONObject response) {
                 dialog.dismiss();
@@ -313,7 +351,8 @@ public class ResourceActivity extends BaseActivity {
                 handleAuthError(statusCode);
             }
         };
-        if (record == null) ApiClient.get(this).post("resources/" + resource + "/", body, callback);
+        if (!files.isEmpty()) ApiClient.get(this).upload("resources/" + resource + "/" + (record == null ? "" : record.optInt("id") + "/"), body, files, callback);
+        else if (record == null) ApiClient.get(this).post("resources/" + resource + "/", body, callback);
         else ApiClient.get(this).patch("resources/" + resource + "/" + record.optInt("id") + "/", body, callback);
     }
 
@@ -340,10 +379,72 @@ public class ResourceActivity extends BaseActivity {
                 }).show();
     }
 
+    private void hygieneActions(JSONObject record) {
+        new AlertDialog.Builder(this).setTitle(record.optString("display"))
+                .setItems(new String[]{"编辑检查信息", "填写各项目得分"}, (dialog, which) -> {
+                    if (which == 0) edit(record);
+                    else editHygieneScores(record.optInt("id"));
+                }).show();
+    }
+
+    private void editHygieneScores(int id) {
+        ApiClient.get(this).get("dormitory/hygiene/" + id + "/scores/", new ApiClient.Callback() {
+            @Override public void onSuccess(JSONObject response) {
+                JSONObject data = response.optJSONObject("data");
+                JSONArray items = data == null ? null : data.optJSONArray("items");
+                LinearLayout form = Ui.vertical(ResourceActivity.this);
+                Map<Integer, EditText[]> inputs = new LinkedHashMap<>();
+                for (int i = 0; items != null && i < items.length(); i++) {
+                    JSONObject item = items.optJSONObject(i);
+                    form.addView(Ui.text(ResourceActivity.this, item.optString("name") + "（满分 " + item.optInt("full_score") + "）"));
+                    EditText score = new EditText(ResourceActivity.this);
+                    score.setHint("得分");
+                    score.setInputType(InputType.TYPE_CLASS_NUMBER);
+                    if (!item.isNull("score")) score.setText(String.valueOf(item.optInt("score")));
+                    EditText reason = new EditText(ResourceActivity.this);
+                    reason.setHint("扣分原因");
+                    reason.setText(item.optString("deduction_reason"));
+                    form.addView(score); form.addView(reason);
+                    inputs.put(item.optInt("item_id"), new EditText[]{score, reason});
+                }
+                ScrollView scroll = new ScrollView(ResourceActivity.this);
+                scroll.addView(form);
+                AlertDialog editor = new AlertDialog.Builder(ResourceActivity.this)
+                        .setTitle("卫生项目评分").setView(scroll)
+                        .setNegativeButton("取消", null).setPositiveButton("保存", null).create();
+                editor.setOnShowListener(ignored -> editor.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(view -> {
+                    JSONArray scores = new JSONArray();
+                    try {
+                        for (Map.Entry<Integer, EditText[]> item : inputs.entrySet()) {
+                            if (item.getValue()[0].getText().toString().trim().isEmpty()) continue;
+                            JSONObject value = new JSONObject();
+                            value.put("item_id", item.getKey());
+                            value.put("score", Integer.parseInt(item.getValue()[0].getText().toString()));
+                            value.put("deduction_reason", item.getValue()[1].getText().toString());
+                            scores.put(value);
+                        }
+                        JSONObject body = new JSONObject(); body.put("scores", scores);
+                        ApiClient.get(ResourceActivity.this).put("dormitory/hygiene/" + id + "/scores/", body, new ApiClient.Callback() {
+                            @Override public void onSuccess(JSONObject result) { editor.dismiss(); toast("项目得分已保存并重算总分。"); load(search.getText().toString().trim()); }
+                            @Override public void onError(String message, int statusCode) { toast(message); handleAuthError(statusCode); }
+                        });
+                    } catch (Exception exception) { toast("得分必须是整数。"); }
+                }));
+                editor.show();
+            }
+            @Override public void onError(String message, int statusCode) { toast(message); handleAuthError(statusCode); }
+        });
+    }
+
     private static final class Option {
         final String value;
         final String label;
         Option(String value, String label) { this.value = value; this.label = label; }
         @Override public String toString() { return label; }
+    }
+
+    private final class FileButton extends Button {
+        Uri uri;
+        FileButton() { super(ResourceActivity.this); }
     }
 }

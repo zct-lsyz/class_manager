@@ -13,6 +13,9 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.ClassManager"
         android:usesCleartextTraffic="false">
+        <activity android:name=".ui.MediaArchiveActivity" />
+        <activity android:name=".ui.DormitoryActivity" />
+        <activity android:name=".ui.AiAnalysisActivity" />
         <activity android:name=".ui.AccountActivity" />
         <activity android:name=".ui.BackupActivity" />
         <activity android:name=".ui.ReportActivity" />

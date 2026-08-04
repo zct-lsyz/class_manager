@@ -34,6 +34,9 @@ public class BackupActivity extends BaseActivity {
         Button create = Ui.button(this, "立即创建完整备份");
         create.setOnClickListener(view -> createBackup());
         root.addView(create);
+        Button media = Ui.button(this, "媒体归档与存储管理");
+        media.setOnClickListener(view -> startActivity(new Intent(this, MediaArchiveActivity.class)));
+        root.addView(media);
         list = new ListView(this);
         root.addView(list, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, 0, 1));

@@ -1,6 +1,6 @@
 from django.urls import path
 
-from apps.mobile_api import account_views, backup_views, module_views, resources
+from apps.mobile_api import account_views, ai_views, backup_views, module_views, resources
 
 
 app_name = "mobile_api"
@@ -31,6 +31,7 @@ urlpatterns = [
     path("dormitory/rooms/<int:pk>/monitor/", module_views.set_room_monitor, name="set_room_monitor"),
     path("dormitory/hygiene/<int:pk>/scores/", module_views.hygiene_scores, name="hygiene_scores"),
     path("students/<int:pk>/score-analysis/", module_views.student_score_analysis, name="student_score_analysis"),
+    path("ai-analysis/", ai_views.analysis, name="ai_analysis"),
 
     path("backups/", backup_views.backups, name="backups"),
     path("backups/<int:pk>/", backup_views.backup_detail, name="backup_detail"),
