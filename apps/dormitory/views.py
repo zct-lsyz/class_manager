@@ -21,6 +21,7 @@ from apps.students.models import Student
 from apps.audit.models import OperationLog
 from apps.audit.services import soft_delete
 from apps.dormitory.photo_services import prepare_hygiene_photo
+from apps.dormitory.services import release_bed
 from apps.todos.services import sync_follow_up_todo
 
 
@@ -176,8 +177,8 @@ def bed_assign(request, pk):
             )
             # 先取消该学生其他分配（释放床位，避免 OneToOne 唯一约束冲突）
             DormAssignment.objects.filter(student=student, is_current=True).update(is_current=False, bed=None)
-            # 如果床位已有学生，取消其分配（释放床位）
-            DormAssignment.objects.filter(bed=bed, is_current=True).update(is_current=False, bed=None)
+            # 释放目标床的所有引用（含历史分配，bed_id 有全局唯一约束）
+            release_bed(bed)
             DormAssignment.objects.create(
                 student=student, room=bed.room, bed=bed, is_current=True,
                 semester=Semester.objects.filter(
@@ -189,8 +190,8 @@ def bed_assign(request, pk):
             student.save(update_fields=["dormitory", "bed_number", "updated_at"])
             messages.success(request, f"{student.name} 已分配至 {bed.room.room_number} - {bed.bed_number} 号床。")
         else:
-            # 清空床位（释放床位引用）
-            DormAssignment.objects.filter(bed=bed, is_current=True).update(is_current=False, bed=None)
+            # 清空床位（释放床位引用，含历史分配）
+            release_bed(bed)
             messages.info(request, "床位已清空。")
         for previous_student in previous_students:
             if not previous_student.dorm_assignments.filter(is_current=True).exists():

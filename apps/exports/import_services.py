@@ -51,18 +51,6 @@ def _parse_dormitory(dormitory_str):
     return None, s
 
 
-def _first_free_bed(room):
-    """返回宿舍第一张空闲床（未被当前分配占用），无空闲则 None。"""
-    from apps.dormitory.models import DormAssignment, DormBed
-    occupied = set(DormAssignment.objects.filter(
-        room=room, is_current=True, bed__isnull=False,
-    ).values_list("bed_id", flat=True))
-    for b in DormBed.objects.filter(room=room, is_active=True).order_by("bed_number"):
-        if b.id not in occupied:
-            return b
-    return None
-
-
 def _sync_dormitory_assignment(student, school_class):
     """根据学生 dormitory/bed_number 自动创建宿舍楼/宿舍/床位并分配。
 
@@ -94,6 +82,8 @@ def _sync_dormitory_assignment(student, school_class):
         if bed_no not in existing:
             DormBed.objects.create(room=room, bed_number=bed_no)
 
+    from apps.dormitory.services import first_free_bed, release_bed
+
     # 先取消学生旧分配，并释放其占用的床位（避免 OneToOne 唯一约束冲突）
     DormAssignment.objects.filter(student=student, is_current=True).update(is_current=False, bed=None)
 
@@ -114,10 +104,14 @@ def _sync_dormitory_assignment(student, school_class):
         ).exists():
             bed = None
     if not bed:
-        bed = _first_free_bed(room)
+        bed = first_free_bed(room)
         if bed and student.bed_number != bed.bed_number:
             student.bed_number = bed.bed_number
             student.save(update_fields=["bed_number", "updated_at"])
+
+    # 释放目标床的历史引用后再创建新分配（bed_id 唯一约束）
+    if bed:
+        release_bed(bed)
 
     DormAssignment.objects.create(
         student=student, room=room, bed=bed, is_current=True,

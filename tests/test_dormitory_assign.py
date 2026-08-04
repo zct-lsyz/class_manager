@@ -155,6 +155,69 @@ class DormitoryImportSyncTests(TestCase):
         self.assertNotEqual(a.bed_id, b.bed_id)
 
 
+class BedReleaseTests(TestCase):
+    """历史分配仍引用床位时，重新分配/导入不应撞 bed_id 唯一约束。"""
+
+    def setUp(self):
+        User = get_user_model()
+        self.user = User.objects.create_user(username="dorm-rel", password="pass")
+        self.client = Client()
+        self.client.force_login(self.user)
+        self.cls = SchoolClass.objects.create(
+            created_by=self.user, name="释放班", is_current=True,
+        )
+        self.sem = Semester.objects.create(
+            school_class=self.cls, academic_year="2026-2027",
+            semester_type="first", is_current=True,
+        )
+        self.building = DormBuilding.objects.create(school_class=self.cls, name="一栋")
+        self.room = DormRoom.objects.create(
+            building=self.building, room_number="104", bed_count=8,
+        )
+        for i in range(1, 9):
+            DormBed.objects.create(room=self.room, bed_number=f"{i:02d}")
+        self.bed01 = DormBed.objects.get(room=self.room, bed_number="01")
+
+    def test_bed_assign_releases_historical_reference(self):
+        """某床存在历史(非当前)分配仍引用时，重新分配不报 500。"""
+        old_student = Student.objects.create(
+            school_class=self.cls, student_id=STUDENT_ID, name="旧生", gender="male",
+        )
+        DormAssignment.objects.create(
+            student=old_student, room=self.room, bed=self.bed01,
+            is_current=False, semester=self.sem,
+        )
+        new_student = Student.objects.create(
+            school_class=self.cls, student_id="2026010100000000002", name="新生", gender="male",
+        )
+        resp = self.client.post(
+            reverse("dormitory:bed_assign", args=[self.bed01.pk]),
+            {"student_id": new_student.pk},
+        )
+        self.assertEqual(resp.status_code, 302)
+        new = DormAssignment.objects.get(student=new_student, is_current=True)
+        self.assertEqual(new.bed_id, self.bed01.pk)
+
+    def test_import_releases_historical_bed_reference(self):
+        """导入学生到一张有历史引用的床时不应报 500。"""
+        old_student = Student.objects.create(
+            school_class=self.cls, student_id=STUDENT_ID, name="旧生", gender="male",
+        )
+        DormAssignment.objects.create(
+            student=old_student, room=self.room, bed=self.bed01,
+            is_current=False, semester=self.sem,
+        )
+        import_students([{
+            "row": 2, "student_id": "2026010100000000003", "name": "导入生", "gender": "male",
+            "birth_date": None, "height": None, "vision": "", "seat_requirement": "",
+            "class_position": "", "dormitory": "一栋 104", "bed_number": "1",
+            "primary_contact": "", "primary_phone": "", "remarks": "",
+        }], self.cls)
+        student = Student.objects.get(name="导入生")
+        assignment = student.dorm_assignments.get(is_current=True)
+        self.assertEqual(assignment.bed_id, self.bed01.pk)
+
+
 class AssignDormitoryBedsCommandTests(TestCase):
     """管理命令：把历史「已分配未占床」数据补分到空闲床。"""
 

@@ -8,7 +8,7 @@
 from django.core.management.base import BaseCommand
 
 from apps.dormitory.models import DormAssignment
-from apps.exports.import_services import _first_free_bed
+from apps.dormitory.services import first_free_bed, release_bed
 
 
 class Command(BaseCommand):
@@ -29,13 +29,15 @@ class Command(BaseCommand):
         placed = 0
         skipped = 0
         for assignment in bedless:
-            bed = _first_free_bed(assignment.room)
+            bed = first_free_bed(assignment.room)
             if not bed:
                 skipped += 1
                 continue
             if dry_run:
                 placed += 1
                 continue
+            # 释放该床的历史引用，再补分（bed_id 唯一约束）
+            release_bed(bed)
             assignment.bed = bed
             assignment.save(update_fields=["bed", "updated_at"])
             student = assignment.student
