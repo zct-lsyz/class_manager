@@ -5,10 +5,14 @@ from django.test import TestCase
 from apps.classes.models import SchoolClass, Semester
 from apps.students.models import Student
 from apps.exports.import_services import (
-    import_student_info, validate_student_info, parse_uploaded_file,
+    import_student_info, import_students, validate_student_info,
+    validate_students, parse_uploaded_file,
 )
 from openpyxl import Workbook
 import io
+
+
+STUDENT_ID = "2026010100000000001"
 
 
 def make_excel(headers, rows):
@@ -65,3 +69,63 @@ class StudentInfoImportReproTests(TestCase):
         # 家长记录应已生成
         self.assertTrue(hasattr(zhang, "guardian"))
         self.assertEqual(zhang.guardian.mother_phone, "13800138000")
+
+    def test_duplicate_id_cross_class_caught_at_validate(self):
+        """学号在其他班级已存在时，校验应报错，而不是导入时 500。"""
+        other = SchoolClass.objects.create(
+            created_by=self.user, name="另一班", is_current=False,
+        )
+        Student.objects.create(
+            school_class=other, student_id=STUDENT_ID, name="跨班生", gender="male",
+        )
+        excel = make_excel(
+            ["学号", "姓名", "性别"], [[STUDENT_ID, "张三", "男"]],
+        )
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        uploaded = SimpleUploadedFile("stu.xlsx", excel.getvalue())
+        _headers, data_rows = parse_uploaded_file(uploaded)
+        valid_rows, errors = validate_student_info(data_rows, self.cls)
+        self.assertFalse(valid_rows)
+        self.assertTrue(any("已存在" in e["error"] for e in errors))
+
+    def test_import_skips_duplicate_student_id(self):
+        """重复导入同一批数据时应跳过已存在的学号，而不是 500。"""
+        excel = make_excel(
+            ["学号", "姓名", "性别"], [[STUDENT_ID, "张三", "男"]],
+        )
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        uploaded = SimpleUploadedFile("stu.xlsx", excel.getvalue())
+        _headers, data_rows = parse_uploaded_file(uploaded)
+        valid_rows, _ = validate_student_info(data_rows, self.cls)
+        self.assertEqual(import_student_info(valid_rows, self.cls), 1)
+        # 再次导入（模拟重复/预览过期）：不应 500，应跳过
+        self.assertEqual(import_student_info(valid_rows, self.cls), 0)
+        self.assertEqual(Student.objects.filter(student_id=STUDENT_ID).count(), 1)
+
+    def test_roster_import_skips_duplicate_student_id(self):
+        """花名册导入同样跳过已存在的学号，不报 500。"""
+        Student.objects.create(
+            school_class=self.cls, student_id=STUDENT_ID, name="已存在", gender="male",
+        )
+        rows = [{
+            "row": 2, "student_id": STUDENT_ID, "name": "张三", "gender": "male",
+            "birth_date": None, "height": None, "vision": "", "seat_requirement": "",
+            "class_position": "", "dormitory": "", "bed_number": "",
+            "primary_contact": "", "primary_phone": "", "remarks": "",
+        }]
+        self.assertEqual(import_students(rows, self.cls), 0)
+        self.assertEqual(Student.objects.filter(student_id=STUDENT_ID).count(), 1)
+
+    def test_roster_validate_duplicate_cross_class_caught(self):
+        """花名册校验也需全库查重。"""
+        other = SchoolClass.objects.create(
+            created_by=self.user, name="三班", is_current=False,
+        )
+        Student.objects.create(
+            school_class=other, student_id=STUDENT_ID, name="跨班生", gender="male",
+        )
+        valid_rows, errors = validate_students(
+            [{"学号": STUDENT_ID, "姓名": "张三", "性别": "男"}], self.cls,
+        )
+        self.assertFalse(valid_rows)
+        self.assertTrue(any("已存在" in e["error"] for e in errors))

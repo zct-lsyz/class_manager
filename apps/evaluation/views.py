@@ -185,8 +185,13 @@ def calculate(request, pk):
                 request,
                 f"「{project.name}」已重新计算（{period_label}），共 {count} 名学生参与。",
             )
+        elif not project.rules():
+            messages.warning(request, "该项目未配置评分规则，请先在「编辑」中设置指标与权重。")
         else:
-            messages.warning(request, "该项目未配置评分规则，无法计算。")
+            messages.warning(
+                request,
+                "该项目已配置评分规则，但当前没有可参与评选的学生或指标数据，无法计算。",
+            )
     return redirect(f"/evaluation/?project={project.pk}")
 
 

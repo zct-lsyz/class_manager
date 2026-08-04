@@ -146,14 +146,12 @@ def validate_students(data_rows, school_class=None):
     """
     校验学生数据，返回 (有效行列表, 错误列表)
     错误格式: {row: 行号, field: 字段, value: 原始值, error: 原因}
-    学号重复检查仅在当前班级内进行，避免跨班误判（账户隔离）。
+    学号在数据库中全库唯一（unique=True），因此重复检查必须全库进行，
+    否则会出现「校验通过、导入时却撞唯一约束报 500」。
     """
     valid_rows = []
     errors = []
-    existing_qs = Student.objects.all()
-    if school_class:
-        existing_qs = existing_qs.filter(school_class=school_class)
-    existing_ids = set(existing_qs.values_list("student_id", flat=True))
+    existing_ids = set(Student.objects.values_list("student_id", flat=True))
 
     for idx, row in enumerate(data_rows, start=2):  # 从第2行开始（跳过表头）
         student_id = str(row.get("学号", "") or "").strip()
@@ -222,7 +220,12 @@ def validate_students(data_rows, school_class=None):
 def import_students(valid_rows, school_class):
     """正式导入学生数据"""
     created = 0
+    existing_ids = set(Student.objects.values_list("student_id", flat=True))
     for item in valid_rows:
+        student_id = item.get("student_id")
+        # 学号已存在（含跨班/重复导入）时跳过，避免撞唯一约束报 500
+        if student_id and student_id in existing_ids:
+            continue
         birth_date = item["birth_date"]
         if isinstance(birth_date, datetime):
             birth_date = birth_date.date()
@@ -242,6 +245,8 @@ def import_students(valid_rows, school_class):
             primary_phone=item["primary_phone"],
             remarks=item["remarks"],
         )
+        if student_id:
+            existing_ids.add(student_id)
         # 花名册导入同样自动生成宿舍分配，避免「学生信息有宿舍/床位，宿舍管理里却没有」
         if item.get("dormitory") or item.get("bed_number"):
             _sync_dormitory_assignment(student, school_class)
@@ -327,14 +332,12 @@ def validate_student_info(data_rows, school_class=None):
     统一校验学生信息（含简化联系人）。
     合并原 validate_students 和 validate_guardians 的字段：
     花名册字段 + 联系人关系/电话 + 备用联系人（选填）。
-    学号重复检查仅在当前班级内进行（账户隔离）。
+    学号在数据库中全库唯一（unique=True），因此重复检查必须全库进行，
+    否则会出现「校验通过、导入时却撞唯一约束报 500」。
     """
     valid_rows = []
     errors = []
-    existing_qs = Student.objects.all()
-    if school_class:
-        existing_qs = existing_qs.filter(school_class=school_class)
-    existing_ids = set(existing_qs.values_list("student_id", flat=True))
+    existing_ids = set(Student.objects.values_list("student_id", flat=True))
 
     for idx, row in enumerate(data_rows, start=2):
         student_id = str(row.get("学号", "") or "").strip()
@@ -434,7 +437,12 @@ def validate_student_info(data_rows, school_class=None):
 def import_student_info(valid_rows, school_class):
     """统一导入学生信息（含联系人），并自动为有联系人的学生创建家长记录"""
     created = 0
+    existing_ids = set(Student.objects.values_list("student_id", flat=True))
     for item in valid_rows:
+        student_id = item.get("student_id")
+        # 学号已存在（含跨班/重复导入）时跳过，避免撞唯一约束报 500
+        if student_id and student_id in existing_ids:
+            continue
         birth_date = item["birth_date"]
         if isinstance(birth_date, datetime):
             birth_date = birth_date.date()
@@ -459,6 +467,8 @@ def import_student_info(valid_rows, school_class):
             secondary_phone=item.get("secondary_phone", ""),
             remarks=item["remarks"],
         )
+        if student_id:
+            existing_ids.add(student_id)
         created += 1
         # 根据导入的联系人关系自动匹配创建家长记录
         _create_guardian_from_import(student, item)
