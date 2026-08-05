@@ -172,7 +172,7 @@ def create(request):
     students_json = [
         {"id": s.pk, "name": s.name} for s in Student.objects.filter(
             school_class=current_class, is_deleted=False,
-        ).order_by("name", "student_id")
+        ).order_by("name_pinyin", "name", "student_id")
     ] if current_class else []
     reasons = AttendanceReason.objects.filter(school_class=current_class, is_active=True) if current_class else []
     return render(request, "attendance/form.html", {
@@ -202,7 +202,7 @@ def edit(request, pk):
     students_json = [
         {"id": s.pk, "name": s.name} for s in Student.objects.filter(
             school_class=current_class, is_deleted=False,
-        ).order_by("name", "student_id")
+        ).order_by("name_pinyin", "name", "student_id")
     ] if current_class else []
     initial_selected = [{"id": record.student.pk, "name": record.student.name}]
     reasons = AttendanceReason.objects.filter(school_class=current_class, is_active=True) if current_class else []

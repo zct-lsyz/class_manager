@@ -164,11 +164,34 @@ class RewardTypeTests(TestCase):
 
     def test_penalty_record_points_negative(self):
         """选「惩罚」时，填正分值保存后为负。"""
-        from apps.rewards.models import RewardRecord
+        from apps.rewards.models import RewardItem, RewardRecord
+        item = RewardItem.objects.create(school_class=self.cls, item_type="penalty", name="打架", default_points=2)
         resp = self.client.post(reverse("rewards:reward_create"), {
             "students": [self.student.pk], "date": "2026-08-04",
-            "record_type": "penalty", "level": "serious", "points": "2",
+            "record_type": "penalty", "item": item.pk, "level": "serious", "points": "2",
         })
         self.assertEqual(resp.status_code, 302)
         record = RewardRecord.objects.get(student=self.student)
         self.assertEqual(record.points, -2)
+
+    def test_reward_form_filters_configured_reasons_and_rejects_type_mismatch(self):
+        from apps.rewards.models import RewardItem, RewardRecord
+        reward_item = RewardItem.objects.create(school_class=self.cls, item_type="reward", name="课堂表扬", default_points=2)
+        penalty_item = RewardItem.objects.create(school_class=self.cls, item_type="penalty", name="违反纪律", default_points=3)
+        response = self.client.get(reverse("rewards:reward_create"))
+        self.assertContains(response, 'data-type="reward"')
+        self.assertContains(response, 'data-type="penalty"')
+        self.assertContains(response, "奖励原因")
+        self.assertContains(response, "惩罚原因")
+        response = self.client.post(reverse("rewards:reward_create"), {
+            "students": [self.student.pk], "date": "2026-08-04", "record_type": "reward",
+            "item": penalty_item.pk, "level": "class", "points": "3",
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(RewardRecord.objects.exists())
+        response = self.client.post(reverse("rewards:reward_create"), {
+            "students": [self.student.pk], "date": "2026-08-04", "record_type": "reward",
+            "item": reward_item.pk, "level": "class", "points": "2",
+        })
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(RewardRecord.objects.get().points, 2)

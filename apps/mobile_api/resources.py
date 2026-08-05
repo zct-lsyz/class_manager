@@ -61,11 +61,11 @@ def _specs():
         ResourceSpec("students", "学生花名册", Student,
             ("school_class", "student_id", "name", "gender", "birth_date", "height", "vision", "seat_requirement", "class_position", "home_address", "is_league_member", "is_boarder", "dormitory", "bed_number", "primary_contact", "primary_phone", "secondary_contact", "secondary_phone", "remarks", "sort_order"),
             ("school_class", "student_id", "name", "gender", "birth_date", "height", "vision", "seat_requirement", "home_address", "is_league_member", "is_boarder", "dormitory", "bed_number", "primary_contact", "primary_phone", "secondary_contact", "secondary_phone", "remarks"),
-            ("student_id", "name", "primary_contact", "primary_phone"), ("name", "student_id"), "current", "students", "student"),
+            ("student_id", "name", "primary_contact", "primary_phone"), ("name_pinyin", "name", "student_id"), "current", "students", "student"),
         ResourceSpec("guardians", "家长联系方式", Guardian,
             ("student", "father_name", "father_phone", "mother_name", "mother_phone", "other_guardian", "primary_contact", "home_address", "remarks"),
             ("student", "father_name", "father_phone", "mother_name", "mother_phone", "other_guardian", "primary_contact", "home_address", "remarks"),
-            ("student__name", "student__student_id", "father_name", "mother_name"), ("student__student_id",), "current", "students", allow_delete=False),
+            ("student__name", "student__student_id", "father_name", "mother_name"), ("student__name_pinyin", "student__name", "student__student_id"), "current", "students", allow_delete=False),
         ResourceSpec("todos", "待办事项", TodoItem,
             ("title", "priority", "deadline", "student", "is_completed", "completed_at", "source_type", "source_id"),
             ("title", "priority", "deadline", "student", "is_completed"),
@@ -284,8 +284,8 @@ def _relation_queryset(spec, field, user, data=None):
         return model.objects.filter(school_class__created_by=user)
     if model is Student:
         if spec.key == "todos":
-            return model.objects.filter(school_class__created_by=user, is_deleted=False).order_by("name", "student_id")
-        return model.objects.filter(school_class=current, is_deleted=False).order_by("name", "student_id")
+            return model.objects.filter(school_class__created_by=user, is_deleted=False).order_by("name_pinyin", "name", "student_id")
+        return model.objects.filter(school_class=current, is_deleted=False).order_by("name_pinyin", "name", "student_id")
     if model is Subject:
         return model.objects.filter(Q(created_by=user) | Q(created_by__isnull=True), is_active=True)
     if model is ConfigurableItem:
@@ -308,7 +308,7 @@ def _relation_queryset(spec, field, user, data=None):
     if model is HomeworkTask:
         return model.objects.filter(school_class=current)
     if model is RewardItem:
-        return model.objects.filter(school_class=current)
+        return model.objects.filter(school_class=current, is_active=True)
     if model is Exam:
         return model.objects.filter(school_class=current, is_deleted=False)
     if model is ExamSubject:
@@ -401,6 +401,8 @@ def _apply_data(instance, spec, data, request):
             student_id=instance.student_id, room_id=instance.dorm_room_id, is_current=True,
         ).exists():
             raise ValidationError({"student": ["所选学生不属于该宿舍。"]})
+    if spec.key == "rewards" and instance.item_id and instance.item.item_type != instance.record_type:
+        raise ValidationError({"item": ["所选原因与奖惩类型不匹配。"]})
 
 
 def _force_scope(instance, spec, user, creating=True):
@@ -606,6 +608,11 @@ def _schema(spec, user):
                 } for obj in _relation_queryset(spec, field, user)[:500]]
                 if spec.key == "dorm_discipline":
                     item["required"] = True
+            if spec.key == "rewards" and name == "item":
+                item["options"] = [{
+                    "value": obj.pk, "label": obj.name,
+                    "item_type": obj.item_type, "default_points": abs(obj.default_points),
+                } for obj in _relation_queryset(spec, field, user)[:500]]
             if spec.key == "dorm_discipline" and name == "student":
                 item["options"] = _dorm_student_options(user)
         fields.append(item)

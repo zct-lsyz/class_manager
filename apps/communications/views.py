@@ -74,7 +74,7 @@ def conversation_create(request):
     students_json = [
         {"id": s.pk, "name": s.name} for s in Student.objects.filter(
             school_class=current_class, is_deleted=False,
-        ).order_by("name", "student_id")
+        ).order_by("name_pinyin", "name", "student_id")
     ] if current_class else []
     return render(request, "communications/conversation_form.html", {"form": form, "students_json": students_json})
 
@@ -161,7 +161,7 @@ def home_school_create(request):
     students_json = [
         {"id": s.pk, "name": s.name} for s in Student.objects.filter(
             school_class=current_class, is_deleted=False,
-        ).order_by("name", "student_id")
+        ).order_by("name_pinyin", "name", "student_id")
     ] if current_class else []
     return render(request, "communications/home_school_form.html", {"form": form, "students_json": students_json})
 
@@ -236,7 +236,7 @@ def concern_create(request):
     students_json = [
         {"id": s.pk, "name": s.name} for s in Student.objects.filter(
             school_class=current_class, is_deleted=False,
-        ).order_by("name", "student_id")
+        ).order_by("name_pinyin", "name", "student_id")
     ] if current_class else []
     return render(request, "communications/concern_form.html", {"form": form, "students_json": students_json})
 
@@ -268,7 +268,7 @@ def concern_update(request, pk):
     students_json = [
         {"id": s.pk, "name": s.name} for s in Student.objects.filter(
             school_class=current_class, is_deleted=False,
-        ).order_by("name", "student_id")
+        ).order_by("name_pinyin", "name", "student_id")
     ] if current_class else []
     return render(request, "communications/concern_form.html", {
         "form": form, "record": record, "students_json": students_json,

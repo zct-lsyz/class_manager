@@ -54,7 +54,7 @@ def _exam_source(row):
 
 def _payload(current, config):
     exams = Exam.objects.filter(school_class=current, is_deleted=False).order_by("-date")
-    students = Student.objects.filter(school_class=current, is_deleted=False).order_by("sort_order", "student_id")
+    students = Student.objects.filter(school_class=current, is_deleted=False).order_by("name_pinyin", "name", "student_id")
     records = AIAnalysisRecord.objects.filter(school_class=current).select_related("exam", "student")[:50]
     return {
         "config": {

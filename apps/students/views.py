@@ -405,7 +405,7 @@ def growth(request):
     current_class = get_current_class(request.user)
     students = Student.objects.filter(
         school_class=current_class, is_deleted=False,
-    ).order_by("name", "student_id") if current_class else []
+    ).order_by("name_pinyin", "name", "student_id") if current_class else []
 
     student_id = request.GET.get("student_id", "")
     selected = None
@@ -501,7 +501,7 @@ def guardian_list(request):
     current_class = get_current_class(request.user)
     guardians = Guardian.objects.select_related("student").filter(
         student__school_class=current_class,
-    ).order_by("student__student_id")
+    ).order_by("student__name_pinyin", "student__name", "student__student_id")
 
     search = request.GET.get("search", "")
     if search:

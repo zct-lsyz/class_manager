@@ -55,7 +55,19 @@ class RewardLevelSelect(forms.Select):
         return option
 
 
-class RewardRecordForm(forms.ModelForm):
+class RewardTypeItemMixin:
+    def clean(self):
+        cleaned_data = super().clean()
+        item = cleaned_data.get("item")
+        record_type = cleaned_data.get("record_type")
+        if item and record_type and item.item_type != record_type:
+            self.add_error("item", "所选原因与奖惩类型不匹配。")
+        if cleaned_data.get("points") is not None and cleaned_data["points"] < 0:
+            self.add_error("points", "分值不能小于 0。")
+        return cleaned_data
+
+
+class RewardRecordForm(RewardTypeItemMixin, forms.ModelForm):
     class Meta:
         model = RewardRecord
         fields = ["student", "date", "record_type", "item", "custom_name", "level", "points", "description", "certificate_photo", "needs_follow_up", "follow_up_date"]
@@ -83,8 +95,8 @@ class RewardRecordForm(forms.ModelForm):
         self.fields["student"].queryset = students
         self.fields["item"].queryset = items
         self.fields["item"].required = False
-        self.fields["item"].label = "奖励条目（可选）"
-        self.fields["custom_name"].label = "自定义名称"
+        self.fields["item"].label = "奖励原因（可选）"
+        self.fields["custom_name"].label = "其他奖励原因"
         self.fields["points"].label = "分值（加分/扣分由奖惩类型决定）"
         self.fields["description"].label = "说明"
         self.fields["level"].label = "等级"
@@ -93,7 +105,7 @@ class RewardRecordForm(forms.ModelForm):
             self.fields["points"].initial = abs(self.instance.points)
 
 
-class BatchRewardRecordForm(forms.ModelForm):
+class BatchRewardRecordForm(RewardTypeItemMixin, forms.ModelForm):
     students = forms.ModelMultipleChoiceField(
         label="学生（可多选）", queryset=Student.objects.none(),
         widget=forms.CheckboxSelectMultiple(attrs={"class": "list-unstyled"}),
@@ -122,11 +134,11 @@ class BatchRewardRecordForm(forms.ModelForm):
         if current_class:
             students = students.filter(school_class=current_class)
             items = items.filter(school_class=current_class)
-        self.fields["students"].queryset = students.order_by("name", "student_id")
+        self.fields["students"].queryset = students.order_by("name_pinyin", "name", "student_id")
         self.fields["item"].queryset = items
         self.fields["item"].required = False
-        self.fields["item"].label = "奖励条目（可选）"
-        self.fields["custom_name"].label = "自定义名称"
+        self.fields["item"].label = "奖励原因（可选）"
+        self.fields["custom_name"].label = "其他奖励原因"
         self.fields["points"].label = "分值（加分/扣分由奖惩类型决定）"
         self.fields["description"].label = "说明"
         self.fields["level"].label = "等级"

@@ -16,7 +16,7 @@ from apps.dormitory.models import DormAssignment, DormBed, DormBuilding, DormHyg
 from apps.homework.models import HomeworkPointRule, Subject
 from apps.mobile_api.models import MobileNotificationDelivery, MobilePushDevice
 from apps.mobile_api.push import dispatch_due_todos
-from apps.rewards.models import PointRecord
+from apps.rewards.models import PointRecord, RewardItem, RewardRecord
 from apps.scores.ai_models import AIAnalysisConfig, AIExamAnalysisSource, AIQuestionWeakness
 from apps.scores.models import Exam, ExamSubject, ExternalClass, Score
 from apps.students.models import Student
@@ -198,13 +198,13 @@ class MobileApiTests(TestCase):
         self.assertEqual(seat["student_gender"], "male")
 
     def test_relation_options_hide_student_number_and_ranking_accepts_sources(self):
-        Student.objects.create(school_class=self.school_class, student_id="Z999", name="A同学", gender="male")
-        Student.objects.create(school_class=self.school_class, student_id="A000", name="B同学", gender="female")
+        Student.objects.create(school_class=self.school_class, student_id="Z999", name="张同学", gender="male")
+        Student.objects.create(school_class=self.school_class, student_id="A000", name="安同学", gender="female")
         roster = self.client.get(reverse("mobile_api:resource_list", args=["students"]), **self.auth)
-        self.assertEqual([row["name"] for row in roster.json()["data"]["results"][:2]], ["A同学", "B同学"])
+        self.assertEqual([row["name"] for row in roster.json()["data"]["results"][:3]], ["安同学", "测试学生", "张同学"])
         response = self.client.get(reverse("mobile_api:resource_list", args=["todos"]), **self.auth)
         student_field = next(item for item in response.json()["data"]["schema"]["fields"] if item["name"] == "student")
-        self.assertEqual([row["label"] for row in student_field["options"][:2]], ["A同学", "B同学"])
+        self.assertEqual([row["label"] for row in student_field["options"][:3]], ["安同学", "测试学生", "张同学"])
         todo = TodoItem.objects.create(created_by=self.user, student=self.student, title="不显示学号")
         response = self.client.get(reverse("mobile_api:resource_list", args=["todos"]), **self.auth)
         self.assertEqual(next(row for row in response.json()["data"]["results"] if row["id"] == todo.pk)["student_label"], self.student.name)
@@ -222,6 +222,29 @@ class MobileApiTests(TestCase):
         self.assertEqual((response.json()["data"]["date_from"], response.json()["data"]["date_to"]), ("2026-08-04", "2026-08-06"))
         response = self.client.get(reverse("mobile_api:resource_list", args=["point_records"]) + f"?student={self.student.pk}&sources=reward&date_from=2026-08-04&date_to=2026-08-06", **self.auth)
         self.assertEqual([row["reason"] for row in response.json()["data"]["results"]], ["范围内"])
+
+    def test_reward_reason_options_match_type_and_fill_signed_points(self):
+        RewardItem.objects.create(school_class=self.school_class, item_type="reward", name="课堂表扬", default_points=2)
+        penalty_item = RewardItem.objects.create(school_class=self.school_class, item_type="penalty", name="违反纪律", default_points=3)
+        response = self.client.get(reverse("mobile_api:resource_list", args=["rewards"]), **self.auth)
+        item_field = next(item for item in response.json()["data"]["schema"]["fields"] if item["name"] == "item")
+        options = {item["label"]: item for item in item_field["options"]}
+        self.assertEqual((options["课堂表扬"]["item_type"], options["课堂表扬"]["default_points"]), ("reward", 2))
+        self.assertEqual((options["违反纪律"]["item_type"], options["违反纪律"]["default_points"]), ("penalty", 3))
+        url = reverse("mobile_api:resource_list", args=["rewards"])
+        mismatch = self.request_json("post", url, {
+            "student": self.student.pk, "date": "2026-08-05", "record_type": "reward",
+            "item": penalty_item.pk, "level": "class", "points": 3,
+        })
+        self.assertEqual(mismatch.status_code, 400)
+        response = self.request_json("post", url, {
+            "student": self.student.pk, "date": "2026-08-05", "record_type": "penalty",
+            "item": penalty_item.pk, "level": "serious", "points": 3,
+        })
+        self.assertEqual(response.status_code, 201, response.content)
+        record = RewardRecord.objects.get(pk=response.json()["data"]["id"])
+        self.assertEqual(record.points, -3)
+        self.assertEqual(PointRecord.objects.get(source_type="reward", source_id=record.pk).points, -3)
 
     def test_unauthenticated_resource_request_is_rejected(self):
         response = self.client.get(reverse("mobile_api:resource_list", args=["students"]))

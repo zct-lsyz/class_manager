@@ -27,7 +27,7 @@ def todo_list(request):
     # 学生列表（该账号全部班级，用于关联选择）
     students = Student.objects.filter(
         school_class__created_by=request.user, is_deleted=False,
-    ).order_by("school_class_id", "name", "student_id")
+    ).order_by("school_class_id", "name_pinyin", "name", "student_id")
 
     # 筛选
     priority_filter = request.GET.get("priority", "")

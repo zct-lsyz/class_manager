@@ -235,7 +235,7 @@ def task_detail(request, pk):
         "unrecorded": unrecorded,
         "all_students": Student.objects.filter(
             school_class=task.school_class, is_deleted=False,
-        ).order_by("name", "student_id"),
+        ).order_by("name_pinyin", "name", "student_id"),
         "status_options": status_options,
     }
     return render(request, "homework/task_detail.html", context)

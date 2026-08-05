@@ -6,6 +6,15 @@ from apps.students.models import Student
 
 
 class StudentValidationTests(TestCase):
+    def test_students_are_ordered_by_name_pinyin(self):
+        Student.objects.create(student_id="2026010100000000003", name="张同学", gender="male")
+        Student.objects.create(student_id="2026010100000000001", name="安同学", gender="male")
+        chen = Student.objects.create(student_id="2026010100000000002", name="陈同学", gender="male")
+        self.assertEqual(list(Student.objects.values_list("name", flat=True)), ["安同学", "陈同学", "张同学"])
+        chen.name = "赵同学"
+        chen.save()
+        self.assertEqual(list(Student.objects.values_list("name", flat=True)), ["安同学", "张同学", "赵同学"])
+
     def test_student_form_rejects_invalid_formats(self):
         form = StudentForm(data={
             "student_id": "123",

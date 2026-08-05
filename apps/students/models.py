@@ -1,6 +1,7 @@
 from django.db import models
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.utils import timezone
+from pypinyin import lazy_pinyin
 
 from apps.classes.models import SchoolClass
 from apps.students.validators import phone_validator, student_id_validator
@@ -44,6 +45,7 @@ class Student(BaseModel):
         null=True, blank=True, unique=True, validators=[student_id_validator],
     )
     name = models.CharField("姓名", max_length=50)
+    name_pinyin = models.CharField("姓名拼音", max_length=200, blank=True, default="", editable=False, db_index=True)
     gender = models.CharField("性别", max_length=10, choices=GENDER_CHOICES)
     birth_date = models.DateField("出生日期", null=True, blank=True)
     height = models.IntegerField("身高(cm)", null=True, blank=True, validators=[MinValueValidator(50), MaxValueValidator(250)])
@@ -77,7 +79,11 @@ class Student(BaseModel):
     class Meta:
         verbose_name = "学生"
         verbose_name_plural = "学生"
-        ordering = ["name", "student_id"]
+        ordering = ["name_pinyin", "name", "student_id"]
+
+    def save(self, *args, **kwargs):
+        self.name_pinyin = "".join(lazy_pinyin(self.name)).casefold()
+        super().save(*args, **kwargs)
 
     def __str__(self):
         return f"{self.name} ({self.student_id})" if self.student_id else self.name

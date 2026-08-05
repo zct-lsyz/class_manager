@@ -41,20 +41,24 @@
     function applyType() {
         var t = typeSel.value;
         var isPenalty = t === 'penalty';
-        var map = { 'lbl-item': isPenalty ? '惩罚条目' : '奖励条目',
+        var map = { 'lbl-item': isPenalty ? '惩罚原因' : '奖励原因',
                     'lbl-level': isPenalty ? '惩罚等级' : '奖励等级',
                     'lbl-points': isPenalty ? '扣分' : '加分',
                     'lbl-desc': isPenalty ? '惩罚说明' : '奖励说明',
                     'lbl-photo': isPenalty ? '惩罚照片' : '奖状照片',
-                    'lbl-custom': isPenalty ? '自定义惩罚名称' : '自定义奖励名称' };
+                    'lbl-custom': isPenalty ? '其他惩罚原因' : '其他奖励原因' };
         Object.keys(map).forEach(function(id) {
             var el = document.getElementById(id);
             if (el) el.textContent = map[id];
         });
         if (itemSel) {
             Array.prototype.forEach.call(itemSel.options, function(opt) {
-                opt.style.display = (opt.dataset.type === t) ? '' : 'none';
+                var allowed = !opt.value || opt.dataset.type === t;
+                opt.hidden = !allowed;
+                opt.disabled = !allowed;
             });
+            var selected = itemSel.options[itemSel.selectedIndex];
+            if (selected && selected.disabled) itemSel.value = '';
         }
         if (levelSel) {
             Array.prototype.forEach.call(levelSel.options, function(opt) {
@@ -65,6 +69,7 @@
             var v = parseFloat(pointsInput.value);
             if (!isNaN(v)) pointsInput.value = Math.abs(v);
         }
+        fillPoints();
     }
     function fillPoints() {
         if (!itemSel || !pointsInput) return;

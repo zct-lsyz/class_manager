@@ -444,6 +444,7 @@ public class ResourceActivity extends BaseActivity {
         }
         applyConditionalFields(inputs, labels);
         if (record == null) bindDisciplineItemDefaults(inputs, definitions);
+        bindRewardItemDefaults(inputs, definitions, labels);
         ScrollView scroll = new ScrollView(this);
         scroll.addView(form);
         AlertDialog dialog = new AlertDialog.Builder(this)
@@ -505,6 +506,7 @@ public class ResourceActivity extends BaseActivity {
         }
         applyConditionalFields(inputs, fieldLabels);
         bindDisciplineItemDefaults(inputs, definitions);
+        bindRewardItemDefaults(inputs, definitions, fieldLabels);
         if (studentField == null || studentField.optJSONArray("options") == null) {
             toast("无法加载学生列表。");
             return;
@@ -810,7 +812,7 @@ public class ResourceActivity extends BaseActivity {
             input.setText(choiceLabel(choices, current == null || current == JSONObject.NULL ? "" : String.valueOf(current)));
             return input;
         }
-        if ("relation".equals(type) || options != null || choices != null) {
+        if (usesChoiceInput(type, options, choices)) {
             JSONArray values = options != null ? options : choices != null ? choices : new JSONArray();
             Spinner spinner = new Spinner(this);
             Ui.styleSpinner(this, spinner);
@@ -844,6 +846,10 @@ public class ResourceActivity extends BaseActivity {
         return input;
     }
 
+    static boolean usesChoiceInput(String type, JSONArray options, JSONArray choices) {
+        return "relation".equals(type) || options != null || choices != null && choices.length() > 0;
+    }
+
     private void applyConditionalFields(Map<String, View> inputs, Map<String, TextView> labels) {
         bindVisibility(inputs, labels, "is_boarder", "dormitory", "bed_number");
         bindVisibility(inputs, labels, "needs_follow_up", "follow_up_date");
@@ -869,6 +875,64 @@ public class ResourceActivity extends BaseActivity {
     private boolean editableChoiceField(String name) {
         return ("classroom_discipline".equals(resource) || "dorm_discipline".equals(resource)) &&
                 ("severity".equals(name) || "points_sign".equals(name));
+    }
+
+    private void bindRewardItemDefaults(Map<String, View> inputs, Map<String, JSONObject> definitions,
+                                        Map<String, TextView> labels) {
+        if (!"rewards".equals(resource) || !(inputs.get("record_type") instanceof Spinner) ||
+                !(inputs.get("item") instanceof Spinner)) return;
+        Spinner typeInput = (Spinner) inputs.get("record_type");
+        Spinner itemInput = (Spinner) inputs.get("item");
+        EditText pointsInput = inputs.get("points") instanceof EditText ? (EditText) inputs.get("points") : null;
+        itemInput.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+            @Override public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
+                fillRewardPoints(itemInput, pointsInput);
+            }
+            @Override public void onNothingSelected(AdapterView<?> parent) {}
+        });
+        typeInput.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+            @Override public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
+                applyRewardType(typeInput, itemInput, pointsInput, definitions.get("item"), labels);
+            }
+            @Override public void onNothingSelected(AdapterView<?> parent) {}
+        });
+        applyRewardType(typeInput, itemInput, pointsInput, definitions.get("item"), labels);
+    }
+
+    private void applyRewardType(Spinner typeInput, Spinner itemInput, EditText pointsInput,
+                                 JSONObject itemDefinition, Map<String, TextView> labels) {
+        Option selectedType = (Option) typeInput.getSelectedItem();
+        String type = selectedType == null ? "reward" : selectedType.value;
+        boolean penalty = "penalty".equals(type);
+        if (labels.get("item") != null) labels.get("item").setText(penalty ? "惩罚原因" : "奖励原因");
+        if (labels.get("custom_name") != null) labels.get("custom_name").setText(penalty ? "其他惩罚原因" : "其他奖励原因");
+        if (labels.get("level") != null) labels.get("level").setText(penalty ? "惩罚等级 *" : "奖励等级 *");
+        if (labels.get("points") != null) labels.get("points").setText(penalty ? "扣分 *" : "加分 *");
+        if (labels.get("description") != null) labels.get("description").setText(penalty ? "惩罚说明" : "奖励说明");
+        Option previous = itemInput.getSelectedItem() instanceof Option ? (Option) itemInput.getSelectedItem() : null;
+        List<Option> items = new ArrayList<>();
+        items.add(new Option("", penalty ? "请选择惩罚原因" : "请选择奖励原因"));
+        JSONArray options = itemDefinition == null ? null : itemDefinition.optJSONArray("options");
+        for (int i = 0; options != null && i < options.length(); i++) {
+            JSONObject option = options.optJSONObject(i);
+            if (rewardOptionMatches(option, type))
+                items.add(new Option(String.valueOf(option.opt("value")), option.optString("label"), option));
+        }
+        itemInput.setAdapter(new ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item, items));
+        if (previous != null) for (int i = 0; i < items.size(); i++)
+            if (items.get(i).value.equals(previous.value)) itemInput.setSelection(i);
+        fillRewardPoints(itemInput, pointsInput);
+    }
+
+    static boolean rewardOptionMatches(JSONObject option, String type) {
+        return option != null && type.equals(option.optString("item_type"));
+    }
+
+    private void fillRewardPoints(Spinner itemInput, EditText pointsInput) {
+        if (pointsInput == null || !(itemInput.getSelectedItem() instanceof Option)) return;
+        Option option = (Option) itemInput.getSelectedItem();
+        if (option.metadata != null && option.metadata.has("default_points"))
+            pointsInput.setText(String.valueOf(option.metadata.optInt("default_points")));
     }
 
     private String choiceLabel(JSONArray choices, String value) {

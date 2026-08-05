@@ -12,12 +12,33 @@ import androidx.test.ext.junit.runners.AndroidJUnit4;
 import androidx.test.platform.app.InstrumentationRegistry;
 
 import org.json.JSONObject;
+import org.json.JSONArray;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
 @RunWith(AndroidJUnit4.class)
 public class StructuredReportRendererTest {
     private final Context context = InstrumentationRegistry.getInstrumentation().getTargetContext();
+
+    @Test
+    public void emptyChoicesDoNotTurnTextNumberOrDateIntoSpinners() throws Exception {
+        JSONArray empty = new JSONArray();
+        assertFalse(ResourceActivity.usesChoiceInput("text", null, empty));
+        assertFalse(ResourceActivity.usesChoiceInput("number", null, empty));
+        assertFalse(ResourceActivity.usesChoiceInput("date", null, empty));
+        assertFalse(ResourceActivity.usesChoiceInput("time", null, empty));
+        assertTrue(ResourceActivity.usesChoiceInput("text", null, new JSONArray("[{\"value\":\"yes\"}]")));
+        assertTrue(ResourceActivity.usesChoiceInput("relation", empty, empty));
+    }
+
+    @Test
+    public void rewardReasonsAreFilteredByRewardOrPenaltyType() throws Exception {
+        JSONObject reward = new JSONObject("{\"item_type\":\"reward\",\"default_points\":2}");
+        JSONObject penalty = new JSONObject("{\"item_type\":\"penalty\",\"default_points\":3}");
+        assertTrue(ResourceActivity.rewardOptionMatches(reward, "reward"));
+        assertFalse(ResourceActivity.rewardOptionMatches(reward, "penalty"));
+        assertTrue(ResourceActivity.rewardOptionMatches(penalty, "penalty"));
+    }
 
     @Test
     public void courseScheduleRendersWebsiteStyleGridWithoutInternalFields() throws Exception {

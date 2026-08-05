@@ -34,7 +34,7 @@ def class_meeting_create(request):
     students_json = [
         {"id": s.pk, "name": s.name} for s in Student.objects.filter(
             school_class=current_class, is_deleted=False,
-        ).order_by("name", "student_id")
+        ).order_by("name_pinyin", "name", "student_id")
     ] if current_class else []
     if request.method == "POST":
         form = ClassMeetingForm(request.POST, request.FILES)
@@ -77,7 +77,7 @@ def activity_create(request):
     students_json = [
         {"id": s.pk, "name": s.name} for s in Student.objects.filter(
             school_class=current_class, is_deleted=False,
-        ).order_by("name", "student_id")
+        ).order_by("name_pinyin", "name", "student_id")
     ] if current_class else []
     if request.method == "POST":
         form = ActivityForm(request.POST, request.FILES)
