@@ -1,5 +1,6 @@
 package com.classmanager.app.ui;
 
+import android.app.ActivityOptions;
 import android.content.Intent;
 import android.graphics.Color;
 import android.graphics.Typeface;
@@ -125,7 +126,8 @@ public abstract class BaseActivity extends AppCompatActivity {
 
     private void navigateAsRoot(Intent intent) {
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
-        startActivity(intent);
+        startActivity(intent, ActivityOptions.makeCustomAnimation(
+                this, R.anim.module_enter, R.anim.module_exit).toBundle());
     }
 
     @Override
