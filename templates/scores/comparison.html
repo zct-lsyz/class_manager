@@ -134,7 +134,7 @@
                         <tr>
                             <th rowspan="2">科目</th><th rowspan="2">满分</th>
                             {% for cc in comparison_classes %}
-                            <th class="text-center" colspan="6">{{ cc.name }}
+                            <th class="text-center" colspan="5">{{ cc.name }}
                                 <small class="fw-normal">{% if cc.school_name %}{{ cc.school_name }}{% endif %}</small>
                             </th>
                             {% endfor %}
@@ -151,11 +151,7 @@
                             <td><strong>{{ row.subject }}</strong></td>
                             <td>{{ row.full_score }}</td>
                             {% for cc in comparison_classes %}
-                            {% if cc.id %}
-                            {% with key="ext_"|add:cc.id %}{% with stats=row.classes|get_item:key %}{% include "scores/_comparison_cells.html" %}{% endwith %}{% endwith %}
-                            {% else %}
-                            {% with key="own" %}{% with stats=row.classes|get_item:key %}{% include "scores/_comparison_cells.html" %}{% endwith %}{% endwith %}
-                            {% endif %}
+                            {% with stats=row.classes|get_item:cc.key %}{% include "scores/_comparison_cells.html" %}{% endwith %}
                             {% endfor %}
                         </tr>
                         {% endfor %}
@@ -190,6 +186,8 @@
 <script>
 {% if comparison_chart %}
 const compareData = JSON.parse(document.getElementById('comparison-chart-data').textContent);
+const compareClasses = JSON.parse(document.getElementById('comparison-classes-data').textContent);
+const classNames = Object.fromEntries(compareClasses.map(item => [item.key, item.name]));
 const classColors = ['#1a73e8', '#28a745', '#f57c00', '#7c3aed', '#dc3545', '#00acc1', '#f9a825', '#5e35b1'];
 const metricLabels = {
     'avg': '平均分', 'variance': '方差', 'max': '最高分', 'min': '最低分',
@@ -203,11 +201,11 @@ function buildCompareChart() {
     const metric = compareMetricSelect.value;
     const datasets = [];
     const ownValues = subjectNames.map(s => compareData[metric][s].own);
-    datasets.push({ label: '本班', data: ownValues, backgroundColor: classColors[0] });
+    datasets.push({ label: classNames.own, data: ownValues, backgroundColor: classColors[0] });
     const extKeys = Object.keys(compareData[metric][subjectNames[0]]).filter(k => k.startsWith('ext_'));
     extKeys.forEach((key, i) => {
         datasets.push({
-            label: key.replace('ext_', '') + '班',
+            label: classNames[key],
             data: subjectNames.map(s => compareData[metric][s][key]),
             backgroundColor: classColors[(i + 1) % classColors.length]
         });

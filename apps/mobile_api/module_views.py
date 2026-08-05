@@ -233,7 +233,8 @@ def student_profile(request):
     from apps.comments.models import StudentComment
     from apps.communications.models import StudentConversation
     from apps.rewards.models import PointRecord
-    from apps.scores.models import Score
+    from apps.scores.models import Exam, Score
+    from apps.scores.views import _get_or_compute_total_ranks
     from apps.students.history_services import get_student_all_events
     from apps.students.models import Guardian, Student
     current = get_current_class(request.mobile_user)
@@ -244,17 +245,45 @@ def student_profile(request):
         return api_error("请选择当前班级的学生。", 400, "student_required")
     guardian = Guardian.objects.filter(student=student, is_deleted=False).first()
     events = get_student_all_events(student)
-    scores = Score.objects.filter(
-        student=student, is_deleted=False, exam__is_deleted=False,
-    ).select_related("exam", "exam_subject__subject").order_by("-exam__date", "exam_subject__sort_order")[:50]
+    latest_exam_rows = list(Exam.objects.filter(
+        scores__student=student, scores__is_deleted=False, is_deleted=False,
+    ).distinct().order_by("-date", "-pk")[:10])
+    scores = list(Score.objects.filter(
+        student=student, exam__in=latest_exam_rows, is_deleted=False,
+    ).select_related("exam", "exam_subject__subject").order_by("-exam__date", "exam_subject__sort_order"))
+    scores_by_exam = defaultdict(list)
+    for row in scores:
+        scores_by_exam[row.exam_id].append(row)
+    latest_exams = []
+    for exam in latest_exam_rows:
+        total = _get_or_compute_total_ranks(exam).get(student.pk, {})
+        latest_exams.append({
+            "exam_id": exam.pk, "exam": exam.name, "date": exam.date.isoformat(),
+            "total_score": total.get("total_score"), "class_rank": total.get("class_rank"),
+            "grade_rank": total.get("grade_rank"), "city_rank": total.get("city_rank"),
+            "subjects": [{
+                "subject": row.exam_subject.subject.name, "full_score": row.exam_subject.full_score,
+                "score": float(row.score) if row.score is not None else None,
+                "status": row.status, "status_display": row.get_status_display(),
+                "class_rank": row.rank, "grade_rank": row.grade_rank, "city_rank": row.city_rank,
+            } for row in scores_by_exam[exam.pk]],
+        })
     conversations = StudentConversation.objects.filter(
         student=student, is_deleted=False,
     ).order_by("-date")[:30]
     comments = StudentComment.objects.filter(
         student=student, is_deleted=False,
     ).order_by("-created_at")[:30]
+    student_data = serialize_instance(student, get_spec("students").fields)
+    student_data.update({
+        "display_class_position": student.display_class_position,
+        "display_dormitory": student.display_dormitory,
+        "display_bed_number": student.display_bed_number,
+        "display_primary_contact": student.display_primary_contact,
+        "display_primary_phone": student.display_primary_phone,
+    })
     return api_ok({
-        "student": serialize_instance(student, get_spec("students").fields),
+        "student": student_data,
         "guardian": serialize_instance(guardian, get_spec("guardians").fields) if guardian else None,
         "summary": {
             "growth_event_count": len(events),
@@ -263,12 +292,13 @@ def student_profile(request):
             "point_total": PointRecord.objects.filter(student=student, is_deleted=False).aggregate(total=Sum("points"))["total"] or 0,
         },
         "latest_scores": [{
-            "exam": row.exam.name, "date": row.exam.date.isoformat(),
-            "subject": row.exam_subject.subject.name,
+            "exam_id": row.exam_id, "exam": row.exam.name, "date": row.exam.date.isoformat(),
+            "subject": row.exam_subject.subject.name, "full_score": row.exam_subject.full_score,
             "score": float(row.score) if row.score is not None else None,
             "status": row.get_status_display(), "rank": row.rank,
             "grade_rank": row.grade_rank, "city_rank": row.city_rank,
         } for row in scores],
+        "latest_exams": latest_exams,
         "growth_events": [{**item, "date": item["date"].isoformat()} for item in events[:100]],
         "conversations": [{
             "date": row.date.isoformat(), "reason": row.reason,
@@ -282,14 +312,38 @@ def student_profile(request):
     })
 
 
-@mobile_api(["GET"])
+@mobile_api(["GET", "POST"])
 def ranking(request):
     from apps.rewards.models import PointRecord, RankingSetting
     from apps.students.models import Student
     current = get_current_class(request.mobile_user)
     setting, _ = RankingSetting.objects.get_or_create(school_class=current)
+    sources = [
+        {"key": "reward", "label": "奖惩统计", "enabled": setting.enable_reward},
+        {"key": "classroom_discipline", "label": "课堂纪律", "enabled": setting.enable_classroom_discipline},
+        {"key": "dorm_discipline", "label": "宿舍纪律", "enabled": setting.enable_dorm_discipline},
+        {"key": "hygiene", "label": "宿舍卫生", "enabled": setting.enable_hygiene},
+        {"key": "attendance", "label": "考勤管理", "enabled": setting.enable_attendance},
+        {"key": "homework", "label": "作业检查", "enabled": setting.enable_homework},
+    ]
+    data = parse_data(request) if request.method == "POST" else {}
+    requested_value = data.get("sources") if request.method == "POST" else request.GET.get("sources", "")
+    requested = requested_value if isinstance(requested_value, list) else [value for value in str(requested_value).split(",") if value]
+    available = {item["key"] for item in sources}
+    enabled_types = [value for value in requested if value in available] if request.method == "POST" or requested else setting.enabled_source_types()
+    if request.method == "POST":
+        fields = {
+            "reward": "enable_reward", "classroom_discipline": "enable_classroom_discipline",
+            "dorm_discipline": "enable_dorm_discipline", "hygiene": "enable_hygiene",
+            "attendance": "enable_attendance", "homework": "enable_homework",
+        }
+        for key, name in fields.items():
+            setattr(setting, name, key in enabled_types)
+        setting.save(update_fields=[*fields.values(), "updated_at"])
+        for item in sources:
+            item["enabled"] = item["key"] in enabled_types
     qs = PointRecord.objects.filter(
-        school_class=current, source_type__in=setting.enabled_source_types(), is_deleted=False,
+        school_class=current, source_type__in=enabled_types, is_deleted=False,
     ).select_related("student")
     if request.GET.get("date_from"):
         qs = qs.filter(date__gte=request.GET["date_from"])
@@ -316,30 +370,53 @@ def ranking(request):
             rank = index
             last = row["total"]
         row["rank"] = rank
-    return api_ok({"enabled_labels": setting.enabled_labels(), "ranking": rows})
+    return api_ok({
+        "sources": sources, "selected_sources": enabled_types,
+        "enabled_labels": [item["label"] for item in sources if item["key"] in enabled_types],
+        "ranking": rows,
+    })
 
 
 @mobile_api(["GET"])
 def score_analysis(request):
     from apps.scores.analysis_exports import compute_analysis_data
-    from apps.scores.models import Exam
+    from apps.scores.models import Exam, Score
     current = get_current_class(request.mobile_user)
     exams = Exam.objects.filter(school_class=current, is_deleted=False).order_by("-date") if current else []
     exam = exams.filter(pk=request.GET.get("exam_id")).first() if request.GET.get("exam_id") else exams.first()
     if not exam:
         return api_ok({"exam": None, "exams": []})
     data = compute_analysis_data(current, exam)
+    score_rows = {
+        (row.student_id, row.exam_subject_id): row
+        for row in Score.objects.filter(exam=exam, is_deleted=False)
+    }
+    student_rows = []
+    for row in data["class_total_table"]:
+        subject_details = []
+        for exam_subject in data["exam_subjects"]:
+            score = score_rows.get((row["student"].pk, exam_subject.pk))
+            subject_details.append({
+                "subject": exam_subject.subject.name, "full_score": exam_subject.full_score,
+                "score": float(score.score) if score and score.score is not None else None,
+                "status": score.status if score else None,
+                "status_display": score.get_status_display() if score else "未录入",
+                "class_rank": score.rank if score else None,
+                "grade_rank": score.grade_rank if score else None,
+                "city_rank": score.city_rank if score else None,
+            })
+        student_rows.append({
+            "student_id": row["student"].pk, "student_name": row["student"].name,
+            "total_score": row["total_score"], "rank": row["rank"],
+            "grade_rank": row["total_grade_rank"], "city_rank": row["total_city_rank"],
+            "subjects": row["subjects"], "subject_details": subject_details,
+        })
     return api_ok({
         "exams": [{"id": row.pk, "name": row.name, "date": row.date.isoformat()} for row in exams[:50]],
         "exam": {"id": exam.pk, "name": exam.name, "date": exam.date.isoformat(), "published": exam.is_published},
         "subjects": [{"name": name, **values} for name, values in data["analysis_data"].items()],
         "total": {"count": data["total_count"], "avg": data["total_avg"], "max": data["total_max"]},
-        "students": [{
-            "student_id": row["student"].pk, "student_name": row["student"].name,
-            "total_score": row["total_score"], "rank": row["rank"],
-            "grade_rank": row["total_grade_rank"], "city_rank": row["total_city_rank"],
-            "subjects": row["subjects"],
-        } for row in data["class_total_table"]],
+        "students": student_rows,
     })
 
 
@@ -443,15 +520,91 @@ def reward_stats(request):
     })
 
 
+def _batch_create_hygiene(request, spec, data):
+    from apps.dormitory.models import DormAssignment, DormHygieneItem, DormHygieneItemScore
+    from apps.dormitory.views import _create_hygiene_deductions
+    from apps.students.models import Student
+    current = get_current_class(request.mobile_user)
+    instance = spec.model()
+    _apply_data(instance, spec, data, request)
+    _force_scope(instance, spec, request.mobile_user, True)
+    instance.full_clean()
+    student_ids = data.get("student_ids", [])
+    if not isinstance(student_ids, list):
+        raise ValidationError({"student_ids": ["请选择学生。"]})
+    student_mode = "all" if data.get("student_mode") == "all" or "all" in student_ids else "selected"
+    assignments = DormAssignment.objects.filter(
+        room=instance.room, room__building__school_class=current, is_current=True,
+        student__school_class=current, student__is_deleted=False,
+    )
+    room_student_ids = set(assignments.values_list("student_id", flat=True))
+    if student_mode == "all":
+        selected_ids = room_student_ids
+    else:
+        try:
+            selected_ids = {int(value) for value in student_ids}
+        except (TypeError, ValueError):
+            raise ValidationError({"student_ids": ["学生参数无效。"]})
+        if selected_ids - room_student_ids:
+            raise ValidationError({"student_ids": ["所选学生不属于该宿舍。"]})
+    if not selected_ids:
+        raise ValidationError({"student_ids": ["请选择至少一名该宿舍学生。"]})
+    values = data.get("scores", [])
+    if not isinstance(values, list):
+        raise ValidationError({"scores": ["scores 必须是数组。"]})
+    items = {
+        row.pk: row for row in DormHygieneItem.objects.filter(
+            school_class=current, is_active=True,
+        )
+    }
+    score_rows = []
+    total = 0
+    deduction = 0
+    for value in values:
+        try:
+            item = items.get(int(value.get("item_id", 0)))
+            score = int(value.get("score", 0))
+        except (AttributeError, TypeError, ValueError):
+            raise ValidationError({"scores": ["卫生检查得分参数无效。"]})
+        if not item:
+            raise ValidationError({"scores": ["卫生检查项不存在或不属于当前班级。"]})
+        score = max(0, min(score, item.full_score))
+        score_rows.append((item, score, str(value.get("deduction_reason", ""))))
+        total += score
+        deduction += max(0, item.full_score - score)
+    full = sum(item.full_score for item in items.values())
+    ratio = total / full if full else 0
+    instance.total_score = total
+    instance.grade = "excellent" if ratio >= .9 else "good" if ratio >= .8 else "fair" if ratio >= .6 else "poor"
+    with transaction.atomic():
+        instance.save()
+        for item, score, reason in score_rows:
+            DormHygieneItemScore.objects.create(
+                check_record=instance, item=item, score=score, deduction_reason=reason,
+            )
+        _after_save(instance, spec, request.mobile_user)
+        students = Student.objects.filter(pk__in=selected_ids, school_class=current, is_deleted=False)
+        deducted_count = _create_hygiene_deductions(
+            current, instance.semester, instance, students, deduction,
+        ) if deduction else 0
+    return api_ok({
+        "count": 1, "records": [serialize_instance(instance, spec.fields)],
+        "selected_student_count": len(selected_ids), "deducted_count": deducted_count,
+        "points_deducted": deduction,
+    }, 201)
+
+
 @mobile_api(["POST"])
 def batch_create(request, resource):
     spec = get_spec(resource)
     if not spec or resource not in {
         "attendance", "homework_records", "classroom_discipline", "dorm_discipline",
-        "rewards", "conversations", "home_school_contacts", "concerns", "scores",
+        "hygiene_checks", "rewards", "conversations", "home_school_contacts", "concerns", "scores",
     }:
         return api_error("该资源不支持批量登记。", 404, "batch_not_supported")
     data = parse_data(request)
+    if resource == "hygiene_checks":
+        return _batch_create_hygiene(request, spec, data)
     records = data.get("records")
     if not isinstance(records, list):
         student_ids = data.get("student_ids", [])
@@ -625,14 +778,14 @@ def hygiene_scores(request, pk):
 
 @mobile_api(["GET"])
 def student_score_analysis(request, pk):
-    from apps.scores.models import Exam, ExamSubject, ExamTotal, Score
+    from apps.scores.models import Exam, ExamSubject, Score
+    from apps.scores.views import _get_or_compute_total_ranks
     from apps.students.models import Student
     current = get_current_class(request.mobile_user)
     student = Student.objects.filter(pk=pk, school_class=current, is_deleted=False).first()
     if not student:
         return api_error("学生不存在。", 404, "not_found")
     exams = list(Exam.objects.filter(school_class=current, is_deleted=False).order_by("date"))
-    total_map = {row.exam_id: row for row in ExamTotal.objects.filter(exam__in=exams, student=student)}
     rows = []
     for exam in exams:
         subjects = []
@@ -645,20 +798,22 @@ def student_score_analysis(request, pk):
             subjects.append({
                 "subject": exam_subject.subject.name, "full_score": exam_subject.full_score,
                 "score": float(score.score) if score and score.score is not None else None,
-                "status": score.status if score else None, "rank": score.rank if score else None,
+                "status": score.status if score else None,
+                "status_display": score.get_status_display() if score else "未录入",
+                "rank": score.rank if score else None,
                 "grade_rank": score.grade_rank if score else None, "city_rank": score.city_rank if score else None,
             })
             if score and score.status == "normal" and score.score is not None:
                 calculated_total += float(score.score)
                 has_score = True
-        official = total_map.get(exam.pk)
-        if has_score or official:
+        total = _get_or_compute_total_ranks(exam).get(student.pk)
+        if has_score or total:
             rows.append({
                 "exam_id": exam.pk, "exam": exam.name, "date": exam.date.isoformat(),
-                "total": float(official.total_score) if official and official.total_score is not None else round(calculated_total, 1),
-                "class_rank": official.class_rank if official else None,
-                "grade_rank": official.grade_rank if official else None,
-                "city_rank": official.city_rank if official else None,
+                "total": total["total_score"] if total and total["total_score"] is not None else round(calculated_total, 1),
+                "class_rank": total["class_rank"] if total else None,
+                "grade_rank": total["grade_rank"] if total else None,
+                "city_rank": total["city_rank"] if total else None,
                 "subjects": subjects,
             })
     return api_ok({"student": {"id": student.pk, "name": student.name}, "history": rows})

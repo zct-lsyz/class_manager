@@ -3,7 +3,9 @@ package com.classmanager.app.ui;
 import android.content.Intent;
 import android.graphics.Color;
 import android.graphics.Typeface;
+import android.os.SystemClock;
 import android.view.Gravity;
+import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
@@ -23,8 +25,10 @@ import java.util.List;
 import java.util.Map;
 
 public abstract class BaseActivity extends AppCompatActivity {
+    private static final long EXIT_CONFIRM_WINDOW_MS = 2000L;
     protected FrameLayout content;
     protected DrawerLayout drawer;
+    private long lastBackPressedAt;
 
     protected void setup(String title, boolean showBack) {
         setContentView(R.layout.activity_container);
@@ -36,6 +40,23 @@ public abstract class BaseActivity extends AppCompatActivity {
         if (SessionStore.get(this).isLoggedIn()) {
             toolbar.setNavigationIcon(R.drawable.ic_menu);
             toolbar.setNavigationOnClickListener(view -> drawer.openDrawer(GravityCompat.START));
+            MenuItem backItem = toolbar.getMenu().add("返回上一级");
+            backItem.setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS | MenuItem.SHOW_AS_ACTION_WITH_TEXT);
+            backItem.setOnMenuItemClickListener(item -> {
+                onBackPressed();
+                return true;
+            });
+            backItem.setVisible(false);
+            TextView toolbarBack = Ui.text(this, "返回上一级");
+            toolbarBack.setTextColor(Color.WHITE);
+            toolbarBack.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+            toolbarBack.setGravity(Gravity.CENTER);
+            toolbarBack.setPadding(Ui.dp(this, 12), 0, Ui.dp(this, 12), 0);
+            toolbarBack.setOnClickListener(view -> onBackPressed());
+            Toolbar.LayoutParams backParams = new Toolbar.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.MATCH_PARENT);
+            backParams.gravity = Gravity.END;
+            toolbar.addView(toolbarBack, backParams);
             populateNavigation(title);
         } else if (showBack && getSupportActionBar() != null) {
             getSupportActionBar().setDisplayHomeAsUpEnabled(true);
@@ -55,7 +76,7 @@ public abstract class BaseActivity extends AppCompatActivity {
         navigation.addView(brand);
         addNavigationItem(navigation, "工作台首页", "工作台".equals(currentTitle), 0, view -> {
             drawer.closeDrawer(GravityCompat.START);
-            if (!(this instanceof MainActivity)) startActivity(new Intent(this, MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP));
+            if (!(this instanceof MainActivity)) navigateAsRoot(new Intent(this, MainActivity.class));
         });
         int colorIndex = 1;
         for (Map.Entry<String, List<String>> group : FeatureCatalog.groups().entrySet()) {
@@ -94,18 +115,36 @@ public abstract class BaseActivity extends AppCompatActivity {
     private void openNavigation(String section) {
         drawer.closeDrawer(GravityCompat.START);
         List<FeatureCatalog.Entry> entries = FeatureCatalog.sections().get(section);
-        if (entries != null && entries.size() == 1) startActivity(SectionActivity.intentFor(this, entries.get(0)));
+        if (entries != null && entries.size() == 1) navigateAsRoot(SectionActivity.intentFor(this, entries.get(0)));
         else {
             Intent intent = new Intent(this, SectionActivity.class);
             intent.putExtra("section", section);
-            startActivity(intent);
+            navigateAsRoot(intent);
         }
+    }
+
+    private void navigateAsRoot(Intent intent) {
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
+        startActivity(intent);
     }
 
     @Override
     public void onBackPressed() {
         if (drawer != null && drawer.isDrawerOpen(GravityCompat.START)) drawer.closeDrawer(GravityCompat.START);
-        else super.onBackPressed();
+        else if (this instanceof MainActivity) {
+            long now = SystemClock.elapsedRealtime();
+            if (isSecondBackPress(lastBackPressedAt, now)) finishAffinity();
+            else {
+                lastBackPressedAt = now;
+                Toast.makeText(this, "再按一次返回键退出", Toast.LENGTH_SHORT).show();
+            }
+        } else if (SessionStore.get(this).isLoggedIn() && isTaskRoot()) {
+            navigateAsRoot(new Intent(this, MainActivity.class));
+        } else super.onBackPressed();
+    }
+
+    static boolean isSecondBackPress(long previous, long now) {
+        return previous > 0 && now >= previous && now - previous <= EXIT_CONFIRM_WINDOW_MS;
     }
 
     protected void show(View view) {

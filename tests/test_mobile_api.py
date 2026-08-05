@@ -11,13 +11,14 @@ from django.utils import timezone
 
 from apps.attendance.models import AttendanceRecord
 from apps.classes.models import Course, CourseScheduleEntry, SchoolClass, Semester
-from apps.dormitory.models import DormBuilding, DormHygieneCheck, DormHygienePhoto, DormRoom
+from apps.discipline.models import ConfigurableItem, DormDisciplineRecord
+from apps.dormitory.models import DormAssignment, DormBed, DormBuilding, DormHygieneCheck, DormHygieneItem, DormHygieneItemScore, DormHygienePhoto, DormRoom
 from apps.homework.models import HomeworkPointRule, Subject
 from apps.mobile_api.models import MobileNotificationDelivery, MobilePushDevice
 from apps.mobile_api.push import dispatch_due_todos
 from apps.rewards.models import PointRecord
 from apps.scores.ai_models import AIAnalysisConfig, AIExamAnalysisSource, AIQuestionWeakness
-from apps.scores.models import ExternalClass
+from apps.scores.models import Exam, ExamSubject, ExternalClass, Score
 from apps.students.models import Student
 from apps.seating.models import ClassroomLayout, SeatAssignment, SeatPlan
 from apps.todos.models import TodoItem
@@ -26,7 +27,10 @@ from apps.todos.models import TodoItem
 class MobileApiTests(TestCase):
     def setUp(self):
         self.user = User.objects.create_user("teacher", password="safe-password")
-        self.school_class = SchoolClass.objects.create(created_by=self.user, name="测试一班", is_current=True)
+        self.school_class = SchoolClass.objects.create(
+            created_by=self.user, name="测试一班", is_current=True,
+            head_teacher="王老师", school_name="测试中学",
+        )
         self.semester = Semester.objects.create(
             school_class=self.school_class, academic_year="2026-2027",
             semester_type="first", is_current=True,
@@ -56,8 +60,8 @@ class MobileApiTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["data"]["username"], "teacher")
         response = self.client.get(reverse("mobile_api:dashboard"), **self.auth)
-        self.assertIn("head_teacher", response.json()["data"]["class"])
-        self.assertIn("school_name", response.json()["data"]["class"])
+        self.assertEqual(response.json()["data"]["class"]["head_teacher"], "王老师")
+        self.assertEqual(response.json()["data"]["class"]["school_name"], "测试中学")
 
     def test_todo_crud_and_completion_timestamp(self):
         response = self.request_json("post", reverse("mobile_api:resource_list", args=["todos"]), {
@@ -87,12 +91,86 @@ class MobileApiTests(TestCase):
         response = self.request_json("post", reverse("mobile_api:batch_create", args=["attendance"]), {
             "student_ids": [self.student.pk], "date": "2026-08-04",
             "period": "full_day", "status": "late", "reason": "测试迟到",
-            "points_deducted": -1, "needs_follow_up": False,
+            "points_deducted": 1, "needs_follow_up": False,
         })
         self.assertEqual(response.status_code, 201, response.content)
         record = AttendanceRecord.objects.get(student=self.student)
         point = PointRecord.objects.get(source_type="attendance", source_id=record.pk)
+        self.assertEqual(record.points_deducted, -1)
         self.assertEqual(point.points, -1)
+
+    def test_mobile_forms_match_website_sign_and_guardian_choices(self):
+        response = self.client.get(reverse("mobile_api:schemas"), **self.auth)
+        schemas = {item["key"]: item for item in response.json()["data"]}
+        attendance = {item["name"]: item for item in schemas["attendance"]["fields"]}
+        self.assertNotIn("points_sign", attendance)
+        self.assertEqual(attendance["points_deducted"]["label"], "扣分")
+        self.assertEqual(attendance["points_deducted"]["min"], 0)
+        self.assertNotIn("normal", [item["value"] for item in attendance["status"]["choices"]])
+        guardian = {item["name"]: item for item in schemas["guardians"]["fields"]}
+        self.assertEqual([item["label"] for item in guardian["primary_contact"]["choices"]], ["父亲", "母亲", "其他监护人"])
+
+    def test_discipline_schema_exposes_item_defaults_and_room_students(self):
+        item = ConfigurableItem.objects.create(
+            school_class=self.school_class, name="夜间喧哗", module="dorm_discipline",
+            default_severity="serious", default_points=3,
+        )
+        classroom_item = ConfigurableItem.objects.create(
+            school_class=self.school_class, name="课堂讲话", module="classroom_discipline",
+            default_severity="mild", default_points=1,
+        )
+        building = DormBuilding.objects.create(school_class=self.school_class, name="一号楼")
+        room = DormRoom.objects.create(building=building, room_number="101")
+        bed = DormBed.objects.create(room=room, bed_number="01")
+        DormAssignment.objects.create(student=self.student, room=room, bed=bed, semester=self.semester)
+        response = self.client.get(reverse("mobile_api:schemas"), **self.auth)
+        schemas = {row["key"]: row for row in response.json()["data"]}
+        fields = {row["name"]: row for row in schemas["dorm_discipline"]["fields"]}
+        option = next(row for row in fields["item"]["options"] if row["value"] == item.pk)
+        self.assertEqual((option["severity"], option["points_deducted"], option["points_sign"]), ("serious", 3, "deduct"))
+        classroom_fields = {row["name"]: row for row in schemas["classroom_discipline"]["fields"]}
+        classroom_option = next(row for row in classroom_fields["item"]["options"] if row["value"] == classroom_item.pk)
+        self.assertEqual((classroom_option["severity"], classroom_option["points_deducted"]), ("mild", 1))
+        student = fields["student"]["options"][0]
+        self.assertEqual((student["label"], student["room_id"], student["bed_number"]), (f"{self.student.name}（01号床）", room.pk, "01"))
+
+    def test_hygiene_batch_scores_and_rejects_cross_room_students(self):
+        building = DormBuilding.objects.create(school_class=self.school_class, name="一号楼")
+        room = DormRoom.objects.create(building=building, room_number="101")
+        other_room = DormRoom.objects.create(building=building, room_number="102")
+        bed = DormBed.objects.create(room=room, bed_number="01")
+        other_bed = DormBed.objects.create(room=other_room, bed_number="02")
+        other_student = Student.objects.create(
+            school_class=self.school_class, student_id="T002", name="另一学生", gender="female",
+        )
+        DormAssignment.objects.create(student=self.student, room=room, bed=bed, semester=self.semester)
+        DormAssignment.objects.create(student=other_student, room=other_room, bed=other_bed, semester=self.semester)
+        item = DormHygieneItem.objects.create(
+            school_class=self.school_class, name="地面", full_score=10, default_deduction=1,
+        )
+        response = self.client.get(reverse("mobile_api:schemas"), **self.auth)
+        hygiene = next(row for row in response.json()["data"] if row["key"] == "hygiene_checks")
+        student_field = next(row for row in hygiene["fields"] if row["name"] == "student")
+        room_options = [row for row in student_field["options"] if row["room_id"] == room.pk]
+        self.assertEqual([row["label"] for row in room_options], ["所有学生", f"{self.student.name}（01号床）"])
+        self.assertEqual(hygiene["hygiene_items"][0]["default_score"], 9)
+        url = reverse("mobile_api:batch_create", args=["hygiene_checks"])
+        invalid = self.request_json("post", url, {
+            "room": room.pk, "date": "2026-08-04", "student_mode": "selected",
+            "student_ids": [other_student.pk], "scores": [{"item_id": item.pk, "score": 8}],
+        })
+        self.assertEqual(invalid.status_code, 400)
+        response = self.request_json("post", url, {
+            "room": room.pk, "date": "2026-08-04", "student_mode": "all",
+            "student_ids": [], "scores": [{"item_id": item.pk, "score": 8}],
+        })
+        self.assertEqual(response.status_code, 201, response.content)
+        check = DormHygieneCheck.objects.get(room=room)
+        self.assertEqual((check.total_score, check.grade), (8, "good"))
+        self.assertEqual(DormHygieneItemScore.objects.get(check_record=check).score, 8)
+        discipline = DormDisciplineRecord.objects.get(student=self.student, dorm_room=room)
+        self.assertEqual(discipline.points_deducted, 2)
+        self.assertEqual(PointRecord.objects.get(source_type="dorm_discipline", source_id=discipline.pk).points, -2)
 
     def test_course_schedule_is_read_only_and_scoped(self):
         course = Course.objects.create(school_class=self.school_class, name="数学")
@@ -115,6 +193,21 @@ class MobileApiTests(TestCase):
         seat = response.json()["data"]["assignments"][0]
         self.assertEqual(seat["student_name"], self.student.name)
         self.assertEqual(seat["student_gender"], "male")
+
+    def test_relation_options_hide_student_number_and_ranking_accepts_sources(self):
+        response = self.client.get(reverse("mobile_api:resource_list", args=["todos"]), **self.auth)
+        student_field = next(item for item in response.json()["data"]["schema"]["fields"] if item["name"] == "student")
+        self.assertEqual(student_field["options"][0]["label"], self.student.name)
+        todo = TodoItem.objects.create(created_by=self.user, student=self.student, title="不显示学号")
+        response = self.client.get(reverse("mobile_api:resource_list", args=["todos"]), **self.auth)
+        self.assertEqual(next(row for row in response.json()["data"]["results"] if row["id"] == todo.pk)["student_label"], self.student.name)
+        response = self.client.get(reverse("mobile_api:ranking") + "?sources=attendance,homework", **self.auth)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["data"]["selected_sources"], ["attendance", "homework"])
+        response = self.request_json("post", reverse("mobile_api:ranking"), {"sources": ["attendance"]})
+        self.assertEqual(response.json()["data"]["selected_sources"], ["attendance"])
+        response = self.request_json("post", reverse("mobile_api:ranking"), {"sources": []})
+        self.assertEqual(response.json()["data"]["selected_sources"], [])
 
     def test_unauthenticated_resource_request_is_rejected(self):
         response = self.client.get(reverse("mobile_api:resource_list", args=["students"]))
@@ -165,6 +258,41 @@ class MobileApiTests(TestCase):
         self.assertEqual(response.status_code, 200, response.content)
         self.assertEqual(response.json()["data"]["student"]["name"], "测试学生")
         self.assertIn("growth_events", response.json()["data"])
+
+    def test_mobile_score_reports_group_exam_and_expose_subject_ranks(self):
+        chinese = Subject.objects.create(name="语文")
+        math = Subject.objects.create(name="数学")
+        exam = Exam.objects.create(
+            school_class=self.school_class, semester=self.semester,
+            name="期中考试", date="2026-08-01",
+        )
+        chinese_exam = ExamSubject.objects.create(exam=exam, subject=chinese, full_score=100, sort_order=1)
+        math_exam = ExamSubject.objects.create(exam=exam, subject=math, full_score=100, sort_order=2)
+        Score.objects.create(
+            exam=exam, exam_subject=chinese_exam, student=self.student,
+            score=80, rank=1, grade_rank=3, city_rank=20,
+        )
+        Score.objects.create(
+            exam=exam, exam_subject=math_exam, student=self.student,
+            score=90, rank=1, grade_rank=2, city_rank=15,
+        )
+        response = self.client.get(
+            reverse("mobile_api:student_profile") + f"?student_id={self.student.pk}", **self.auth,
+        )
+        latest = response.json()["data"]["latest_exams"]
+        self.assertEqual(len(latest), 1)
+        self.assertEqual((latest[0]["total_score"], latest[0]["class_rank"]), (170.0, 1))
+        self.assertEqual([row["subject"] for row in latest[0]["subjects"]], ["语文", "数学"])
+        response = self.client.get(
+            reverse("mobile_api:score_analysis") + f"?exam_id={exam.pk}", **self.auth,
+        )
+        details = response.json()["data"]["students"][0]["subject_details"]
+        self.assertEqual(details[0]["class_rank"], 1)
+        self.assertEqual(details[0]["grade_rank"], 3)
+        response = self.client.get(
+            reverse("mobile_api:selected_student_score_analysis") + f"?student_id={self.student.pk}", **self.auth,
+        )
+        self.assertEqual(len(response.json()["data"]["history"][0]["subjects"]), 2)
 
     def test_homework_point_rule_choices_and_create(self):
         response = self.client.get(reverse("mobile_api:schemas"), **self.auth)

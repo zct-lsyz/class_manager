@@ -1,7 +1,7 @@
 {% with stat=stats|default:'' %}
-<td>{% if stat %}{{ stat.count|default:"—" }}{% else %}—{% endif %}</td>
-<td>{% if stat %}{{ stat.avg|default:"—" }}{% else %}—{% endif %}</td>
-<td>{% if stat and stat.variance %}{{ stat.variance }}{% else %}—{% endif %}</td>
-<td>{% if stat %}{{ stat.max|default:"—" }}{% else %}—{% endif %}</td>
-<td>{% if stat %}{{ stat.min|default:"—" }}{% else %}—{% endif %}</td>
+<td>{% if stat %}{{ stat.count|default_if_none:"—" }}{% else %}—{% endif %}</td>
+<td>{% if stat %}{{ stat.avg|default_if_none:"—" }}{% else %}—{% endif %}</td>
+<td>{% if stat %}{{ stat.variance|default_if_none:"—" }}{% else %}—{% endif %}</td>
+<td>{% if stat %}{{ stat.max|default_if_none:"—" }}{% else %}—{% endif %}</td>
+<td>{% if stat %}{{ stat.min|default_if_none:"—" }}{% else %}—{% endif %}</td>
 {% endwith %}

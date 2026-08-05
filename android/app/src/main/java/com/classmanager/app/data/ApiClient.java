@@ -157,10 +157,11 @@ public final class ApiClient {
                     Iterator<String> keys = fields.keys();
                     while (keys.hasNext()) {
                         String key = keys.next();
-                        output.writeBytes("--" + boundary + "\r\n");
-                        output.writeBytes("Content-Disposition: form-data; name=\"" + key + "\"\r\n\r\n");
-                        output.write(String.valueOf(fields.opt(key)).getBytes(StandardCharsets.UTF_8));
-                        output.writeBytes("\r\n");
+                        Object value = fields.opt(key);
+                        if (value instanceof org.json.JSONArray) {
+                            org.json.JSONArray values = (org.json.JSONArray) value;
+                            for (int i = 0; i < values.length(); i++) writeField(output, boundary, key, String.valueOf(values.opt(i)));
+                        } else writeField(output, boundary, key, String.valueOf(value));
                     }
                     for (Map.Entry<String, Uri> item : files.entrySet()) {
                         String name = displayName(item.getValue());
@@ -201,6 +202,13 @@ public final class ApiClient {
             if (cursor != null && cursor.moveToFirst()) return cursor.getString(0);
         }
         return "upload.bin";
+    }
+
+    private static void writeField(DataOutputStream output, String boundary, String key, String value) throws Exception {
+        output.writeBytes("--" + boundary + "\r\n");
+        output.writeBytes("Content-Disposition: form-data; name=\"" + key + "\"\r\n\r\n");
+        output.write(value.getBytes(StandardCharsets.UTF_8));
+        output.writeBytes("\r\n");
     }
 
     static String resolve(String path) {

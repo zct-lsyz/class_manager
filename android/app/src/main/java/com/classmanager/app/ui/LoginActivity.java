@@ -67,6 +67,7 @@ public class LoginActivity extends BaseActivity {
 
     private EditText input(String hint, int type) {
         EditText input = new EditText(this);
+        Ui.styleInput(this, input);
         input.setHint(hint);
         input.setInputType(type);
         input.setSingleLine(true);

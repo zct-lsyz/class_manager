@@ -166,6 +166,7 @@ public class ExamPaperAnalysisActivity extends BaseActivity {
 
     private <T> Spinner spinner(List<T> values) {
         Spinner spinner = new Spinner(this);
+        Ui.styleSpinner(this, spinner);
         spinner.setAdapter(new ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item, values));
         return spinner;
     }

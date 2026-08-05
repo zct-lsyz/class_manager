@@ -20,6 +20,8 @@ def scalar(value):
 
 
 def object_label(value):
+    if value is not None and value.__class__.__name__ == "Student":
+        return value.name
     return str(value) if value is not None else ""
 
 

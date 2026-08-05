@@ -46,11 +46,11 @@ public class AccountActivity extends BaseActivity {
         Button devices = Ui.button(this, "受信任设备管理");
         devices.setOnClickListener(view -> devices());
         root.addView(devices);
-        root.addView(Ui.text(this, "后台每约 15 分钟自动同步网站待办；同步成功后由系统闹钟负责到期提醒。"));
+        root.addView(Ui.text(this, "后台每约 15 分钟自动同步网站待办；同步成功后由安卓系统通知在到期时提醒。"));
         Button sync = Ui.button(this, "立即同步待办提醒");
         sync.setOnClickListener(view -> NotificationScheduler.sync(this, retry -> runOnUiThread(() -> toast(retry ? "同步失败，后台将自动重试。" : "待办提醒已同步。"))));
         root.addView(sync);
-        Button alarm = Ui.button(this, "允许精确待办提醒");
+        Button alarm = Ui.button(this, "允许准时显示待办通知");
         alarm.setOnClickListener(view -> {
             if (Build.VERSION.SDK_INT >= 31) startActivity(new Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM, Uri.parse("package:" + getPackageName())));
             else toast("当前系统已支持精确提醒。");
@@ -186,6 +186,7 @@ public class AccountActivity extends BaseActivity {
 
     private EditText input(String hint, boolean password) {
         EditText input = new EditText(this);
+        Ui.styleInput(this, input);
         input.setHint(hint);
         if (password) input.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
         input.setLayoutParams(new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));

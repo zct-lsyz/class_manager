@@ -4,6 +4,7 @@ import android.Manifest;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
+import android.graphics.Paint;
 import android.graphics.Typeface;
 import android.net.Uri;
 import android.os.Build;
@@ -11,6 +12,7 @@ import android.os.Bundle;
 import android.view.Gravity;
 import android.view.ViewGroup;
 import android.widget.Button;
+import android.widget.CheckBox;
 import android.widget.GridLayout;
 import android.widget.HorizontalScrollView;
 import android.widget.LinearLayout;
@@ -107,7 +109,7 @@ public class MainActivity extends BaseActivity {
             statRow.setOrientation(LinearLayout.HORIZONTAL);
             LinearLayout.LayoutParams statParams = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1);
             statParams.setMargins(Ui.dp(this, 3), Ui.dp(this, 3), Ui.dp(this, 3), Ui.dp(this, 3));
-            statRow.addView(stat("全班人数", stats.optInt("students"), getColor(R.color.primary)), new LinearLayout.LayoutParams(statParams));
+            statRow.addView(stat("全班人数\n男 " + stats.optInt("male") + " · 女 " + stats.optInt("female"), stats.optInt("students"), getColor(R.color.primary)), new LinearLayout.LayoutParams(statParams));
             statRow.addView(stat("今日异常", stats.optInt("today_absent"), 0xfff57c00), new LinearLayout.LayoutParams(statParams));
             statRow.addView(stat("本周未交", stats.optInt("week_unsubmitted"), 0xffdc3545), new LinearLayout.LayoutParams(statParams));
             summary.addView(statRow);
@@ -147,6 +149,7 @@ public class MainActivity extends BaseActivity {
         addQuickAction(quickGrid, "录入考勤", "考勤管理", 0xffe8f0fe);
         addQuickAction(quickGrid, "登记课堂纪律", "课堂纪律", 0xfffff3e0);
         addQuickAction(quickGrid, "登记宿舍卫生", "宿舍管理", 0xffe8f5e9);
+        addQuickAction(quickGrid, "登记宿舍纪律", "宿舍管理", 0xffeceff1);
         addQuickAction(quickGrid, "登记作业未交", "作业检查", 0xffffebee);
         addQuickAction(quickGrid, "成绩分析", "成绩分析", 0xffe0f7fa);
         addQuickAction(quickGrid, "查看座位", "座位表", 0xffede7f6);
@@ -158,8 +161,10 @@ public class MainActivity extends BaseActivity {
         LinearLayout infoCard = dashboardCard("基本信息");
         addKeyValue(infoCard, "班级", classInfo == null ? "未设置" : classInfo.optString("name", "未设置"));
         addKeyValue(infoCard, "学期", semester == null ? "未设置" : semester.optString("name", "未设置"));
-        addKeyValue(infoCard, "班主任", classInfo == null ? "未设置" : classInfo.optString("head_teacher", "未设置"));
-        addKeyValue(infoCard, "学校", classInfo == null ? "未设置" : classInfo.optString("school_name", "未设置"));
+        TextView headTeacher = addKeyValue(infoCard, "班主任", classInfo == null ? "未设置" : classInfo.optString("head_teacher", "未设置"));
+        TextView schoolName = addKeyValue(infoCard, "学校", classInfo == null ? "未设置" : classInfo.optString("school_name", "未设置"));
+        if (classInfo != null && (isUnset(headTeacher) || isUnset(schoolName)))
+            loadClassIdentity(classInfo.optInt("id"), headTeacher, schoolName);
         JSONObject quote = data.optJSONObject("quote");
         if (quote != null) infoCard.addView(quoteCard(quote));
         addDashboardCard(infoCard);
@@ -182,22 +187,45 @@ public class MainActivity extends BaseActivity {
         summary.addView(card, params);
     }
 
-    private TextView todoItem(JSONObject row) {
+    private LinearLayout todoItem(JSONObject row) {
         String deadline = row == null ? "" : row.optString("deadline");
         if (!deadline.isEmpty() && !"null".equals(deadline)) {
             deadline = deadline.replace('T', ' ');
             if (deadline.length() > 16) deadline = deadline.substring(0, 16);
         }
-        TextView item = Ui.text(this, (row == null ? "" : row.optString("title")) + (deadline.isEmpty() ? "" : "\n" + deadline));
         int priority = row == null ? 3 : row.optInt("priority", 3);
         int accent = priority == 1 ? 0xffdc3545 : priority == 2 ? 0xfff57c00 : getColor(R.color.primary);
-        item.setBackground(Ui.rounded(this, 0xfff8f9fa, accent, 8));
-        item.setPadding(Ui.dp(this, 12), Ui.dp(this, 9), Ui.dp(this, 12), Ui.dp(this, 9));
-        item.setOnClickListener(view -> openSection("待办事项"));
+        int fill = priority == 1 ? 0xfffff1f2 : priority == 2 ? 0xfffff7ed : 0xfff8fafc;
+        LinearLayout item = new LinearLayout(this);
+        item.setOrientation(LinearLayout.HORIZONTAL);
+        item.setGravity(Gravity.CENTER_VERTICAL);
+        item.setBackground(Ui.rounded(this, fill, accent, 8));
+        item.setPadding(Ui.dp(this, 7), Ui.dp(this, 6), Ui.dp(this, 10), Ui.dp(this, 6));
+        CheckBox check = new CheckBox(this);
+        check.setFocusable(false);
+        check.setChecked(row != null && row.optBoolean("is_completed"));
+        check.setContentDescription("标记为已完成");
+        check.setOnClickListener(view -> toggleDashboardTodo(row, check.isChecked()));
+        item.addView(check);
+        TextView text = Ui.text(this, (row == null ? "" : row.optString("title")) + (deadline.isEmpty() ? "" : "\n" + deadline));
+        text.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        if (row != null && row.optBoolean("is_completed")) text.setPaintFlags(text.getPaintFlags() | Paint.STRIKE_THRU_TEXT_FLAG);
+        text.setOnClickListener(view -> openSection("待办事项"));
+        item.addView(text, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         params.setMargins(0, Ui.dp(this, 4), 0, Ui.dp(this, 4));
         item.setLayoutParams(params);
         return item;
+    }
+
+    private void toggleDashboardTodo(JSONObject row, boolean completed) {
+        if (row == null) return;
+        JSONObject body = new JSONObject();
+        try { body.put("is_completed", completed); } catch (Exception ignored) {}
+        ApiClient.get(this).patch("resources/todos/" + row.optInt("id") + "/", body, new ApiClient.Callback() {
+            @Override public void onSuccess(JSONObject response) { NotificationScheduler.sync(MainActivity.this); loadDashboard(); }
+            @Override public void onError(String message, int statusCode) { toast(message); loadDashboard(); handleAuthError(statusCode); }
+        });
     }
 
     private LinearLayout countdownItem(JSONObject row) {
@@ -245,7 +273,7 @@ public class MainActivity extends BaseActivity {
         grid.addView(item);
     }
 
-    private void addKeyValue(LinearLayout parent, String label, String value) {
+    private TextView addKeyValue(LinearLayout parent, String label, String value) {
         LinearLayout row = new LinearLayout(this);
         row.setOrientation(LinearLayout.HORIZONTAL);
         TextView key = Ui.text(this, label);
@@ -255,6 +283,26 @@ public class MainActivity extends BaseActivity {
         content.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
         row.addView(content, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
         parent.addView(row);
+        return content;
+    }
+
+    private boolean isUnset(TextView view) {
+        return "未设置".contentEquals(view.getText());
+    }
+
+    private void loadClassIdentity(int classId, TextView headTeacher, TextView schoolName) {
+        if (classId <= 0) return;
+        ApiClient.get(this).get("resources/classes/" + classId + "/", new ApiClient.Callback() {
+            @Override public void onSuccess(JSONObject response) {
+                JSONObject row = response.optJSONObject("data");
+                if (row == null) return;
+                String teacher = row.optString("head_teacher");
+                String school = row.optString("school_name");
+                if (!teacher.isEmpty() && !"null".equals(teacher)) headTeacher.setText(teacher);
+                if (!school.isEmpty() && !"null".equals(school)) schoolName.setText(school);
+            }
+            @Override public void onError(String message, int statusCode) { handleAuthError(statusCode); }
+        });
     }
 
     private TextView quoteCard(JSONObject quote) {

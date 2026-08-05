@@ -39,4 +39,25 @@ public class FeatureCatalogTest {
         assertTrue(StructuredReportRenderer.supports("seating/"));
         assertTrue(StructuredReportRenderer.supports("duty-roster/"));
     }
+
+    @Test
+    public void dormitoryAndScoreSectionsExposeOnlyRequestedFunctions() {
+        assertEquals(
+                java.util.Arrays.asList("查询舍长及床位分配", "录入卫生检查", "录入宿舍纪律"),
+                FeatureCatalog.sections().get("宿舍管理").stream().map(item -> item.title).collect(java.util.stream.Collectors.toList())
+        );
+        for (FeatureCatalog.Entry item : FeatureCatalog.sections().get("成绩分析"))
+            assertTrue(!FeatureCatalog.RESOURCE.equals(item.kind));
+        assertEquals(FeatureCatalog.RANKING, FeatureCatalog.sections().get("积分排名").get(0).kind);
+    }
+
+    @Test
+    public void scoreAnalysisPagesHaveDedicatedTableRenderers() {
+        assertTrue(StructuredReportRenderer.supports("score-analysis/"));
+        assertTrue(StructuredReportRenderer.supports("student-score-analysis/"));
+        assertTrue(StructuredReportRenderer.supports("score-comparison/"));
+        assertTrue(StructuredReportRenderer.supports("student-profile/"));
+        assertTrue(StructuredReportRenderer.supports("growth/"));
+        assertTrue(StructuredReportRenderer.supports("warnings/"));
+    }
 }

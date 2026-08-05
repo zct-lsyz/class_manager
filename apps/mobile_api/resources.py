@@ -60,7 +60,7 @@ def _specs():
             ("academic_year",), ("-academic_year", "semester_type"), "account", "semesters", allow_delete=False),
         ResourceSpec("students", "学生花名册", Student,
             ("school_class", "student_id", "name", "gender", "birth_date", "height", "vision", "seat_requirement", "class_position", "home_address", "is_league_member", "is_boarder", "dormitory", "bed_number", "primary_contact", "primary_phone", "secondary_contact", "secondary_phone", "remarks", "sort_order"),
-            ("school_class", "student_id", "name", "gender", "birth_date", "height", "vision", "seat_requirement", "class_position", "home_address", "is_league_member", "is_boarder", "dormitory", "bed_number", "primary_contact", "primary_phone", "secondary_contact", "secondary_phone", "remarks", "sort_order"),
+            ("school_class", "student_id", "name", "gender", "birth_date", "height", "vision", "seat_requirement", "home_address", "is_league_member", "is_boarder", "dormitory", "bed_number", "primary_contact", "primary_phone", "secondary_contact", "secondary_phone", "remarks"),
             ("student_id", "name", "primary_contact", "primary_phone"), ("sort_order", "student_id"), "current", "students", "student"),
         ResourceSpec("guardians", "家长联系方式", Guardian,
             ("student", "father_name", "father_phone", "mother_name", "mother_phone", "other_guardian", "primary_contact", "home_address", "remarks"),
@@ -98,7 +98,7 @@ def _specs():
             ("title", "content", "subject__name"), ("-assigned_date", "-pk"), "current", "homework"),
         ResourceSpec("homework_records", "作业检查记录", HomeworkRecord,
             ("task", "student", "status", "submission_date", "correction_deadline", "correction_result", "remark"),
-            ("task", "student", "status", "submission_date", "correction_deadline", "correction_result", "remark"),
+            ("task", "student", "status", "submission_date", "correction_deadline", "remark"),
             ("student__name", "task__title", "remark"), ("-task__assigned_date", "student__student_id"), "current", "homework"),
         ResourceSpec("discipline_items", "纪律条目", ConfigurableItem,
             ("name", "module", "category", "default_severity", "default_points", "needs_follow_up", "is_active", "sort_order", "description"),
@@ -129,7 +129,7 @@ def _specs():
             ("name",), ("sort_order", "name"), "current", "dormitory"),
         ResourceSpec("hygiene_checks", "宿舍卫生", DormHygieneCheck,
             ("room", "date", "check_time", "inspector", "total_score", "grade", "rectification", "rectification_deadline", "rectification_result", "needs_follow_up", "follow_up_date", "photo", "remarks"),
-            ("room", "date", "check_time", "inspector", "total_score", "grade", "rectification", "rectification_deadline", "rectification_result", "needs_follow_up", "follow_up_date", "photo", "remarks"),
+            ("room", "date", "check_time", "inspector", "rectification", "rectification_deadline", "needs_follow_up", "follow_up_date", "remarks"),
             ("room__room_number", "inspector", "rectification"), ("-date", "-pk"), "current", "dormitory", "hygienecheck"),
         ResourceSpec("hygiene_photos", "宿舍卫生现场照片", DormHygienePhoto,
             ("check_record", "image", "original_name", "original_size", "stored_size"),
@@ -192,7 +192,7 @@ def _specs():
             ("plan__student__name", "content", "effect"), ("-date",), "current", "scores"),
         ResourceSpec("conversations", "学生谈话", StudentConversation,
             ("student", "exam", "date", "location", "reason", "main_content", "student_feedback", "follow_up_actions", "follow_up_date", "is_private"),
-            ("student", "exam", "date", "location", "reason", "main_content", "student_feedback", "follow_up_actions", "follow_up_date", "is_private"),
+            ("student", "date", "location", "reason", "main_content", "student_feedback", "follow_up_actions", "follow_up_date", "is_private"),
             ("student__name", "reason", "main_content"), ("-date", "-pk"), "current", "communications", "conversation"),
         ResourceSpec("home_school_contacts", "家校沟通", HomeSchoolContact,
             ("student", "contact_date", "contact_person", "contact_method", "reason", "summary", "parent_feedback", "follow_up_items", "follow_up_date", "is_private"),
@@ -289,7 +289,7 @@ def _relation_queryset(spec, field, user, data=None):
     if model is Subject:
         return model.objects.filter(Q(created_by=user) | Q(created_by__isnull=True), is_active=True)
     if model is ConfigurableItem:
-        qs = model.objects.filter(school_class=current)
+        qs = model.objects.filter(school_class=current, is_active=True)
         if spec.key == "classroom_discipline":
             qs = qs.filter(module="classroom_discipline")
         elif spec.key == "dorm_discipline":
@@ -318,6 +318,27 @@ def _relation_queryset(spec, field, user, data=None):
     if model is SupportPlan:
         return model.objects.filter(school_class=current)
     return model.objects.none()
+
+
+def _dorm_student_options(user, include_all=False):
+    from apps.dormitory.models import DormAssignment
+    current = get_current_class(user)
+    rows = DormAssignment.objects.filter(
+        room__building__school_class=current, student__is_deleted=False, is_current=True,
+    ).select_related("student", "room", "bed").order_by("room__room_number", "bed__bed_number", "student__name")
+    options = []
+    room_ids = set()
+    for row in rows:
+        if include_all and row.room_id not in room_ids:
+            options.append({"value": "all", "label": "所有学生", "room_id": row.room_id, "bed_number": ""})
+            room_ids.add(row.room_id)
+        bed_number = row.bed.bed_number if row.bed else ""
+        options.append({
+            "value": row.student_id,
+            "label": f"{row.student.name}（{bed_number}号床）" if bed_number else row.student.name,
+            "room_id": row.room_id, "bed_number": bed_number,
+        })
+    return options
 
 
 def _convert(field, value, spec, user, data):
@@ -374,6 +395,12 @@ def _apply_data(instance, spec, data, request):
                 setattr(instance, name, uploaded)
             continue
         setattr(instance, name, _convert(field, data.get(name), spec, request.mobile_user, data))
+    if spec.key == "dorm_discipline" and instance.student_id and instance.dorm_room_id:
+        from apps.dormitory.models import DormAssignment
+        if not DormAssignment.objects.filter(
+            student_id=instance.student_id, room_id=instance.dorm_room_id, is_current=True,
+        ).exists():
+            raise ValidationError({"student": ["所选学生不属于该宿舍。"]})
 
 
 def _force_scope(instance, spec, user, creating=True):
@@ -420,6 +447,8 @@ def _after_save(instance, spec, user):
     elif spec.key == "attendance":
         from apps.attendance.views import _sync_attendance_points
         from apps.todos.services import sync_follow_up_todo
+        instance.points_deducted = -abs(instance.points_deducted or 0)
+        instance.save(update_fields=["points_deducted", "updated_at"])
         _sync_attendance_points(instance)
         sync_follow_up_todo(instance, user)
     elif spec.key == "homework_tasks":
@@ -531,8 +560,26 @@ def _schema(spec, user):
     fields = []
     for name in spec.fields:
         field = spec.model._meta.get_field(name)
+        if spec.key in {"classroom_discipline", "dorm_discipline"} and name == "points_deducted":
+            fields.append({
+                "name": "points_sign", "label": "加分/扣分", "type": "text", "required": True,
+                "read_only": False, "choices": [{"value": "add", "label": "加分"}, {"value": "deduct", "label": "扣分"}],
+            })
         item = field_schema(field, required=name in editable and not field.blank and not field.null)
         item["read_only"] = name not in editable
+        if name == "points_deducted" and spec.key in {"classroom_discipline", "dorm_discipline"}:
+            item["label"] = "分值（填正数）"
+        if name == "points_deducted" and spec.key == "attendance":
+            item.update({"label": "扣分", "min": 0, "step": 1})
+        if name == "points" and spec.key == "rewards":
+            item["label"] = "分值（加分/扣分由奖惩类型决定）"
+        if spec.key == "attendance" and name == "status":
+            item["choices"] = [choice for choice in item["choices"] if choice["value"] != "normal"]
+        if spec.key == "guardians" and name == "primary_contact":
+            item["choices"] = [
+                {"value": "father", "label": "父亲"}, {"value": "mother", "label": "母亲"},
+                {"value": "other", "label": "其他监护人"},
+            ]
         if spec.key == "homework_point_rules" and name == "status":
             from apps.homework.models import HomeworkRecord, HomeworkStatus
             item["choices"] = [
@@ -543,15 +590,42 @@ def _schema(spec, user):
             ]
         if isinstance(field, (models.ForeignKey, models.OneToOneField)) and name in editable:
             item["options"] = [
-                {"value": obj.pk, "label": str(obj)}
+                {
+                    "value": obj.pk,
+                    "label": obj.name if obj.__class__.__name__ == "Student" else
+                             f"{obj.get_item_type_display()}｜{obj.name}" if spec.key == "rewards" and name == "item" else str(obj),
+                }
                 for obj in _relation_queryset(spec, field, user)[:500]
             ]
+            if spec.key in {"classroom_discipline", "dorm_discipline"} and name == "item":
+                item["options"] = [{
+                    "value": obj.pk, "label": obj.name,
+                    "severity": obj.default_severity,
+                    "points_deducted": abs(obj.default_points),
+                    "points_sign": "add" if obj.default_points < 0 else "deduct",
+                } for obj in _relation_queryset(spec, field, user)[:500]]
+            if spec.key == "dorm_discipline" and name == "student":
+                item["options"] = _dorm_student_options(user)
         fields.append(item)
-    return {
+        if spec.key == "hygiene_checks" and name == "room":
+            fields.append({
+                "name": "student", "label": "选择学生", "type": "relation", "required": True,
+                "read_only": False, "multiple": True, "options": _dorm_student_options(user, include_all=True),
+            })
+    schema = {
         "key": spec.key, "title": spec.title, "fields": fields,
         "allow_create": True, "allow_edit": bool(spec.editable),
         "allow_delete": spec.allow_delete,
     }
+    if spec.key == "hygiene_checks":
+        from apps.dormitory.models import DormHygieneItem
+        schema["hygiene_items"] = [{
+            "item_id": row.pk, "name": row.name, "full_score": row.full_score,
+            "default_score": max(0, row.full_score - row.default_deduction),
+        } for row in DormHygieneItem.objects.filter(
+            school_class=get_current_class(user), is_active=True,
+        ).order_by("sort_order", "name")]
+    return schema
 
 
 @mobile_api(["GET"])

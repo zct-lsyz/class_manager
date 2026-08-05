@@ -13,8 +13,8 @@ android {
         applicationId "com.classmanager.app"
         minSdk 26
         targetSdk 34
-        versionCode 5
-        versionName "2.3.0"
+        versionCode 6
+        versionName "2.4.0"
         buildConfigField "String", "API_BASE_URL", '"https://120.27.231.112/api/v1/"'
         buildConfigField "String", "XIAOMI_APP_ID", '"' + xiaomiAppId + '"'
         buildConfigField "String", "XIAOMI_APP_KEY", '"' + xiaomiAppKey + '"'

@@ -36,10 +36,11 @@ public class SectionActivity extends BaseActivity {
                 View view = super.getView(position, convertView, parent);
                 TextView text = view.findViewById(android.R.id.text1);
                 text.setText(getString(R.string.module_navigation_item, labels[position]));
-                text.setTextColor(getColor(R.color.text_primary));
+                text.setTextColor(getColor(R.color.primary));
                 text.setTextSize(16);
                 text.setPadding(Ui.dp(SectionActivity.this, 16), Ui.dp(SectionActivity.this, 14), Ui.dp(SectionActivity.this, 16), Ui.dp(SectionActivity.this, 14));
-                text.setBackgroundResource(R.drawable.bg_card);
+                int[] colors = {0xffe8f0fe, 0xffe8f5e9, 0xfffff3e0, 0xfffce4ec, 0xffede7f6, 0xffe0f7fa};
+                text.setBackground(Ui.rounded(SectionActivity.this, colors[position % colors.length], 0, 12));
                 return view;
             }
         });
@@ -69,6 +70,8 @@ public class SectionActivity extends BaseActivity {
             intent = new Intent(context, DormitoryActivity.class);
         } else if (FeatureCatalog.PAPER_AI.equals(entry.kind)) {
             intent = new Intent(context, ExamPaperAnalysisActivity.class);
+        } else if (FeatureCatalog.RANKING.equals(entry.kind)) {
+            intent = new Intent(context, RankingActivity.class);
         } else {
             intent = new Intent(context, AccountActivity.class);
         }

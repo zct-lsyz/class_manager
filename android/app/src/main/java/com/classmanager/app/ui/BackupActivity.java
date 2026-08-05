@@ -120,6 +120,7 @@ public class BackupActivity extends BaseActivity {
 
     private void restore(int id) {
         EditText password = new EditText(this);
+        Ui.styleInput(this, password);
         password.setHint("管理员密码");
         password.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
         new AlertDialog.Builder(this).setTitle("确认恢复备份")

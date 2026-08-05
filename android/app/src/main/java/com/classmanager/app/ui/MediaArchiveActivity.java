@@ -100,6 +100,7 @@ public class MediaArchiveActivity extends BaseActivity {
         LinearLayout form = Ui.vertical(this);
         EditText confirmation = new EditText(this); confirmation.setHint("输入：确认清除");
         EditText password = new EditText(this); password.setHint("管理员密码");
+        Ui.styleInput(this, confirmation); Ui.styleInput(this, password);
         password.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
         form.addView(confirmation); form.addView(password);
         new AlertDialog.Builder(this).setTitle("清除服务器媒体")

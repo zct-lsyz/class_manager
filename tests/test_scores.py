@@ -12,7 +12,7 @@ from openpyxl import Workbook
 from apps.classes.models import SchoolClass, Semester
 from apps.homework.models import Subject
 from apps.students.models import Student
-from apps.scores.models import Exam, ExamSubject, Score
+from apps.scores.models import Exam, ExamSubject, ExternalClass, ExternalScore, Score
 
 
 class ScoreCalculationTests(TestCase):
@@ -253,3 +253,52 @@ class ExamTotalTests(TestCase):
         self.assertContains(response, "630")
         # chart_data JSON 中总分级部排名应为 15
         self.assertIn(b"15", response.content)
+
+
+class MultiClassComparisonTests(TestCase):
+
+    def setUp(self):
+        self.user = get_user_model().objects.create_user(username="comparison-user", password="pass")
+        self.client.force_login(self.user)
+        self.cls = SchoolClass.objects.create(created_by=self.user, name="本班", is_current=True)
+        self.sem = Semester.objects.create(
+            school_class=self.cls, academic_year="2026-2027", semester_type="first", is_current=True,
+        )
+        self.exam = Exam.objects.create(
+            school_class=self.cls, semester=self.sem, name="联考", date="2026-08-01",
+        )
+        subject = Subject.objects.create(name="数学")
+        self.exam_subject = ExamSubject.objects.create(exam=self.exam, subject=subject, full_score=100)
+
+    def test_external_class_name_and_statistics_are_rendered(self):
+        external_class = ExternalClass.objects.create(
+            pk=123456, school_class=self.cls, name="124567班",
+        )
+        ExternalScore.objects.create(
+            external_class=external_class, exam=self.exam, exam_subject=self.exam_subject,
+            student_label="A", score=80,
+        )
+        ExternalScore.objects.create(
+            external_class=external_class, exam=self.exam, exam_subject=self.exam_subject,
+            student_label="B", score=90,
+        )
+
+        response = self.client.get(reverse("scores:comparison"), {"exam_id": self.exam.pk})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["comparison_classes"][1]["name"], "124567班")
+        self.assertEqual(response.context["comparison_classes"][1]["key"], "ext_123456")
+        self.assertContains(response, "<td>85.0</td>", html=True)
+        self.assertContains(response, "<td>25.0</td>", html=True)
+        self.assertContains(response, "<td>90.0</td>", html=True)
+        self.assertContains(response, "<td>80.0</td>", html=True)
+
+    def test_zero_statistics_are_not_rendered_as_missing(self):
+        from django.template.loader import render_to_string
+
+        rendered = render_to_string("scores/_comparison_cells.html", {
+            "stats": {"count": 2, "avg": 0.0, "variance": 0.0, "max": 0.0, "min": 0.0},
+        })
+
+        self.assertNotIn("—", rendered)
+        self.assertEqual(rendered.count("<td>0.0</td>"), 4)

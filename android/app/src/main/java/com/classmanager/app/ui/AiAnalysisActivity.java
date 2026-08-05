@@ -122,18 +122,21 @@ public class AiAnalysisActivity extends BaseActivity {
 
     private EditText input(String hint, String value) {
         EditText input = new EditText(this);
+        Ui.styleInput(this, input);
         input.setHint(hint); input.setText(value); input.setSingleLine(true);
         return input;
     }
 
     private Spinner spinner(String[] values) {
         Spinner spinner = new Spinner(this);
+        Ui.styleSpinner(this, spinner);
         spinner.setAdapter(new ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item, values));
         return spinner;
     }
 
     private <T> Spinner spinner(List<T> values) {
         Spinner spinner = new Spinner(this);
+        Ui.styleSpinner(this, spinner);
         spinner.setAdapter(new ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item, values));
         return spinner;
     }

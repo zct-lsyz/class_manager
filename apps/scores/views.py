@@ -1016,9 +1016,9 @@ def comparison(request):
         ext_classes, comparison_table, comparison_chart = build_comparison_data(
             exam, exam_subjects, current_class,
         )
-        comparison_classes = [{"id": None, "name": "本班", "school_name": ""}]
+        comparison_classes = [{"id": None, "key": "own", "name": "本班", "school_name": ""}]
         comparison_classes.extend(
-            {"id": ec.pk, "name": ec.name, "school_name": ec.school_name}
+            {"id": ec.pk, "key": f"ext_{ec.pk}", "name": ec.name, "school_name": ec.school_name}
             for ec in ext_classes
         )
 
