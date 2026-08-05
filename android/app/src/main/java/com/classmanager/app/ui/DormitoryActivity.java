@@ -104,9 +104,11 @@ public class DormitoryActivity extends BaseActivity {
                 block.setGravity(android.view.Gravity.CENTER);
                 block.setTextSize(13);
                 block.setBackground(Ui.rounded(this, bed.optString("student_name").isEmpty() ? 0xfff8fafc : 0xffe8f0fe, 0xffcbd5e1, 8));
-                block.setPadding(Ui.dp(this, 3), Ui.dp(this, 7), Ui.dp(this, 3), Ui.dp(this, 7));
+                block.setPadding(Ui.dp(this, 3), Ui.dp(this, 4), Ui.dp(this, 3), Ui.dp(this, 4));
                 GridLayout.LayoutParams blockParams = new GridLayout.LayoutParams();
-                blockParams.width = ViewGroup.LayoutParams.WRAP_CONTENT;
+                blockParams.width = 0;
+                blockParams.height = ViewGroup.LayoutParams.WRAP_CONTENT;
+                blockParams.columnSpec = GridLayout.spec(GridLayout.UNDEFINED, 1, 1f);
                 blockParams.setMargins(Ui.dp(this, 2), Ui.dp(this, 2), Ui.dp(this, 2), Ui.dp(this, 2));
                 bedGrid.addView(block, blockParams);
             }

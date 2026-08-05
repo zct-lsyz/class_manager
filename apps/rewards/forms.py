@@ -122,7 +122,7 @@ class BatchRewardRecordForm(forms.ModelForm):
         if current_class:
             students = students.filter(school_class=current_class)
             items = items.filter(school_class=current_class)
-        self.fields["students"].queryset = students.order_by("student_id")
+        self.fields["students"].queryset = students.order_by("name", "student_id")
         self.fields["item"].queryset = items
         self.fields["item"].required = False
         self.fields["item"].label = "奖励条目（可选）"

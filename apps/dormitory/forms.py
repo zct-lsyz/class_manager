@@ -62,11 +62,12 @@ class DormAssignmentForm(forms.ModelForm):
 class DormHygieneItemForm(forms.ModelForm):
     class Meta:
         model = DormHygieneItem
-        fields = ["name", "full_score", "default_deduction", "is_active", "sort_order"]
+        fields = ["name", "full_score", "default_deduction", "default_severity", "is_active", "sort_order"]
         widgets = {
             "name": forms.TextInput(attrs={"class": "form-control"}),
             "full_score": forms.NumberInput(attrs={"class": "form-control"}),
             "default_deduction": forms.NumberInput(attrs={"class": "form-control"}),
+            "default_severity": forms.Select(attrs={"class": "form-select"}),
             "is_active": forms.CheckboxInput(attrs={"class": "form-check-input"}),
             "sort_order": forms.NumberInput(attrs={"class": "form-control"}),
         }

@@ -572,7 +572,7 @@ def _batch_create_hygiene(request, spec, data):
         score_rows.append((item, score, str(value.get("deduction_reason", ""))))
         total += score
         deduction += max(0, item.full_score - score)
-    full = sum(item.full_score for item in items.values())
+    full = sum(item.full_score for item, _score, _reason in score_rows)
     ratio = total / full if full else 0
     instance.total_score = total
     instance.grade = "excellent" if ratio >= .9 else "good" if ratio >= .8 else "fair" if ratio >= .6 else "poor"
@@ -584,8 +584,11 @@ def _batch_create_hygiene(request, spec, data):
             )
         _after_save(instance, spec, request.mobile_user)
         students = Student.objects.filter(pk__in=selected_ids, school_class=current, is_deleted=False)
+        severity_order = {"mild": 0, "moderate": 1, "serious": 2, "critical": 3}
+        severity = max((item.default_severity for item, _score, _reason in score_rows), key=lambda value: severity_order.get(value, 1), default="moderate")
+        item_name = "、".join(item.name for item, _score, _reason in score_rows) or "卫生检查不达标"
         deducted_count = _create_hygiene_deductions(
-            current, instance.semester, instance, students, deduction,
+            current, instance.semester, instance, students, deduction, severity, item_name,
         ) if deduction else 0
     return api_ok({
         "count": 1, "records": [serialize_instance(instance, spec.fields)],

@@ -61,7 +61,7 @@ def _specs():
         ResourceSpec("students", "学生花名册", Student,
             ("school_class", "student_id", "name", "gender", "birth_date", "height", "vision", "seat_requirement", "class_position", "home_address", "is_league_member", "is_boarder", "dormitory", "bed_number", "primary_contact", "primary_phone", "secondary_contact", "secondary_phone", "remarks", "sort_order"),
             ("school_class", "student_id", "name", "gender", "birth_date", "height", "vision", "seat_requirement", "home_address", "is_league_member", "is_boarder", "dormitory", "bed_number", "primary_contact", "primary_phone", "secondary_contact", "secondary_phone", "remarks"),
-            ("student_id", "name", "primary_contact", "primary_phone"), ("sort_order", "student_id"), "current", "students", "student"),
+            ("student_id", "name", "primary_contact", "primary_phone"), ("name", "student_id"), "current", "students", "student"),
         ResourceSpec("guardians", "家长联系方式", Guardian,
             ("student", "father_name", "father_phone", "mother_name", "mother_phone", "other_guardian", "primary_contact", "home_address", "remarks"),
             ("student", "father_name", "father_phone", "mother_name", "mother_phone", "other_guardian", "primary_contact", "home_address", "remarks"),
@@ -124,8 +124,8 @@ def _specs():
             ("student", "room", "bed", "is_current", "end_date"),
             ("student__name", "room__room_number", "bed__bed_number"), ("room__room_number", "bed__bed_number"), "current", "dormitory", allow_delete=False),
         ResourceSpec("hygiene_items", "卫生检查项", DormHygieneItem,
-            ("name", "full_score", "default_deduction", "is_active", "sort_order"),
-            ("name", "full_score", "default_deduction", "is_active", "sort_order"),
+            ("name", "full_score", "default_deduction", "default_severity", "is_active", "sort_order"),
+            ("name", "full_score", "default_deduction", "default_severity", "is_active", "sort_order"),
             ("name",), ("sort_order", "name"), "current", "dormitory"),
         ResourceSpec("hygiene_checks", "宿舍卫生", DormHygieneCheck,
             ("room", "date", "check_time", "inspector", "total_score", "grade", "rectification", "rectification_deadline", "rectification_result", "needs_follow_up", "follow_up_date", "photo", "remarks"),
@@ -284,8 +284,8 @@ def _relation_queryset(spec, field, user, data=None):
         return model.objects.filter(school_class__created_by=user)
     if model is Student:
         if spec.key == "todos":
-            return model.objects.filter(school_class__created_by=user, is_deleted=False)
-        return model.objects.filter(school_class=current, is_deleted=False)
+            return model.objects.filter(school_class__created_by=user, is_deleted=False).order_by("name", "student_id")
+        return model.objects.filter(school_class=current, is_deleted=False).order_by("name", "student_id")
     if model is Subject:
         return model.objects.filter(Q(created_by=user) | Q(created_by__isnull=True), is_active=True)
     if model is ConfigurableItem:
@@ -604,6 +604,8 @@ def _schema(spec, user):
                     "points_deducted": abs(obj.default_points),
                     "points_sign": "add" if obj.default_points < 0 else "deduct",
                 } for obj in _relation_queryset(spec, field, user)[:500]]
+                if spec.key == "dorm_discipline":
+                    item["required"] = True
             if spec.key == "dorm_discipline" and name == "student":
                 item["options"] = _dorm_student_options(user)
         fields.append(item)
@@ -622,6 +624,8 @@ def _schema(spec, user):
         schema["hygiene_items"] = [{
             "item_id": row.pk, "name": row.name, "full_score": row.full_score,
             "default_score": max(0, row.full_score - row.default_deduction),
+            "severity": row.default_severity, "severity_label": row.get_default_severity_display(),
+            "points_deducted": max(0, row.default_deduction),
         } for row in DormHygieneItem.objects.filter(
             school_class=get_current_class(user), is_active=True,
         ).order_by("sort_order", "name")]

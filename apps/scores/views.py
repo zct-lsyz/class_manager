@@ -831,7 +831,7 @@ def analysis(request):
         "band_chart_data": {name: data["bands"] for name, data in analysis_data.items()},
         "student_list": Student.objects.filter(
             school_class=current_class, is_deleted=False
-        ).order_by("student_id") if current_class else [],
+        ).order_by("name", "student_id") if current_class else [],
         # 优生筛选
         "filter_dimension": filter_dimension,
         "filter_field": filter_field,

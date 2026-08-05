@@ -214,7 +214,7 @@ def committee_list(request):
         "roles": roles, "members": members,
         "all_students": Student.objects.filter(
             Q(school_class=current_class) | Q(school_class__isnull=True), is_deleted=False
-        ).order_by("student_id") if current_class else [],
+        ).order_by("name", "student_id") if current_class else [],
     })
 
 
@@ -318,7 +318,7 @@ def study_groups(request):
         "groups": groups, "ungrouped": ungrouped,
         "all_students": Student.objects.filter(
             school_class=current_class, is_deleted=False
-        ).order_by("student_id") if current_class else [],
+        ).order_by("name", "student_id") if current_class else [],
     })
 
 

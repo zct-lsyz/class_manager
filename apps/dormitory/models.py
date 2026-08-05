@@ -123,6 +123,13 @@ class DormAssignment(BaseModel):
 
 class DormHygieneItem(BaseModel):
     """卫生检查项目（可配置）"""
+    SEVERITY_CHOICES = [
+        ("mild", "轻微"),
+        ("moderate", "一般"),
+        ("serious", "严重"),
+        ("critical", "非常严重"),
+    ]
+
     school_class = models.ForeignKey(
         SchoolClass, on_delete=models.CASCADE,
         related_name="hygiene_items", verbose_name="班级",
@@ -130,6 +137,9 @@ class DormHygieneItem(BaseModel):
     name = models.CharField("项目名称", max_length=100)
     full_score = models.IntegerField("满分", default=10)
     default_deduction = models.IntegerField("默认扣分", default=0)
+    default_severity = models.CharField(
+        "默认严重程度", max_length=20, choices=SEVERITY_CHOICES, default="moderate",
+    )
     is_active = models.BooleanField("启用", default=True)
     sort_order = models.IntegerField("排序", default=0)
 

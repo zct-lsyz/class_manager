@@ -77,7 +77,7 @@ class Student(BaseModel):
     class Meta:
         verbose_name = "学生"
         verbose_name_plural = "学生"
-        ordering = ["sort_order", "student_id"]
+        ordering = ["name", "student_id"]
 
     def __str__(self):
         return f"{self.name} ({self.student_id})" if self.student_id else self.name

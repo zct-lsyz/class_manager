@@ -411,7 +411,6 @@ final class StructuredReportRenderer {
             tableRow.addView(cell(context, String.valueOf(rowNumber + 1), -28, HEADER, true, 44));
             table.addView(tableRow);
         }
-        equalizeRows(table);
         LinearLayout area = vertical(context);
         area.addView(table);
         TextView podium = cell(context, "讲台（教师视角）", Math.max(220, 56 + cols * 56 + aisles.size() * 12), Color.rgb(248, 250, 252), true, 40);

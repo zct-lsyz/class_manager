@@ -425,6 +425,7 @@ public class ResourceActivity extends BaseActivity {
             JSONObject field = fields.optJSONObject(i);
             if (field == null || field.optBoolean("read_only")) continue;
             String name = field.optString("name");
+            if ("dorm_discipline".equals(resource) && "custom_content".equals(name)) continue;
             TextView label = Ui.text(this, field.optString("label") + (field.optBoolean("required") ? " *" : ""));
             label.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
             label.setTextColor(0xff475569);
@@ -590,31 +591,59 @@ public class ResourceActivity extends BaseActivity {
         List<String> selectedIds = new ArrayList<>();
         JSONArray studentOptions = studentField.optJSONArray("options");
 
-        Map<String, EditText> hygieneScores = new LinkedHashMap<>();
+        Spinner[] hygieneItemInput = {null};
+        Spinner[] hygieneSeverityInput = {null};
+        EditText[] hygienePointsInput = {null};
         if ("hygiene_checks".equals(resource)) {
             JSONArray items = schema.optJSONArray("hygiene_items");
             if (items != null && items.length() > 0) {
-                TextView heading = Ui.text(this, "卫生检查项目得分");
+                TextView heading = Ui.text(this, "卫生条目 *");
                 heading.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
                 heading.setPadding(0, Ui.dp(this, 12), 0, Ui.dp(this, 4));
                 form.addView(heading);
+                hygieneItemInput[0] = new Spinner(this);
+                Ui.styleSpinner(this, hygieneItemInput[0]);
+                List<Option> hygieneItems = new ArrayList<>();
                 for (int i = 0; i < items.length(); i++) {
                     JSONObject item = items.optJSONObject(i);
                     if (item == null) continue;
-                    TextView label = Ui.text(this, item.optString("name") + "（满分 " + item.optInt("full_score") + "）");
-                    EditText score = new EditText(this);
-                    Ui.styleInput(this, score);
-                    score.setInputType(InputType.TYPE_CLASS_NUMBER);
-                    score.setText(String.valueOf(item.optInt("default_score", item.optInt("full_score"))));
-                    form.addView(label);
-                    form.addView(score);
-                    hygieneScores.put(String.valueOf(item.optInt("item_id", item.optInt("id"))), score);
+                    hygieneItems.add(new Option(String.valueOf(item.optInt("item_id", item.optInt("id"))), item.optString("name"), item));
                 }
+                hygieneItemInput[0].setAdapter(new ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item, hygieneItems));
+                form.addView(hygieneItemInput[0]);
+                TextView severityLabel = Ui.text(this, "严重程度");
+                severityLabel.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+                form.addView(severityLabel);
+                hygieneSeverityInput[0] = new Spinner(this);
+                Ui.styleSpinner(this, hygieneSeverityInput[0]);
+                hygieneSeverityInput[0].setAdapter(new ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item, new Option[]{
+                        new Option("mild", "轻微"), new Option("moderate", "一般"),
+                        new Option("serious", "严重"), new Option("critical", "非常严重")
+                }));
+                hygieneSeverityInput[0].setEnabled(false);
+                form.addView(hygieneSeverityInput[0]);
+                TextView pointsLabel = Ui.text(this, "分值（扣分）");
+                pointsLabel.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+                form.addView(pointsLabel);
+                hygienePointsInput[0] = new EditText(this);
+                Ui.styleInput(this, hygienePointsInput[0]);
+                hygienePointsInput[0].setInputType(InputType.TYPE_CLASS_NUMBER);
+                form.addView(hygienePointsInput[0]);
+                hygieneItemInput[0].setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+                    @Override public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
+                        Option option = (Option) hygieneItemInput[0].getSelectedItem();
+                        if (option == null || option.metadata == null) return;
+                        setSpinnerValue(hygieneSeverityInput[0], option.metadata.optString("severity"));
+                        hygienePointsInput[0].setText(String.valueOf(option.metadata.optInt("points_deducted")));
+                    }
+                    @Override public void onNothingSelected(AdapterView<?> parent) {}
+                });
             }
         }
         for (int i = 0; fields != null && i < fields.length(); i++) {
             JSONObject field = fields.optJSONObject(i);
             if (field == null || field.optBoolean("read_only") || roomName.equals(field.optString("name")) || "student".equals(field.optString("name"))) continue;
+            if ("dorm_discipline".equals(resource) && "custom_content".equals(field.optString("name"))) continue;
             addBatchField(form, field, inputs, definitions, fieldLabels);
         }
         applyConditionalFields(inputs, fieldLabels);
@@ -676,15 +705,23 @@ public class ResourceActivity extends BaseActivity {
             try {
                 body.put("student_ids", ids);
                 if ("hygiene_checks".equals(resource)) {
+                    if (hygieneItemInput[0] == null || hygieneItemInput[0].getSelectedItem() == null) {
+                        toast("暂无可用卫生条目，请先配置卫生项目。");
+                        return;
+                    }
                     body.put("student_mode", allStudents[0] ? "all" : "selected");
                     JSONArray scores = new JSONArray();
-                    for (Map.Entry<String, EditText> item : hygieneScores.entrySet()) {
-                        if (item.getValue().getText().toString().trim().isEmpty()) continue;
-                        JSONObject score = new JSONObject();
-                        score.put("item_id", Integer.parseInt(item.getKey()));
-                        score.put("score", Integer.parseInt(item.getValue().getText().toString().trim()));
-                        scores.put(score);
+                    Option selectedItem = (Option) hygieneItemInput[0].getSelectedItem();
+                    int deduction = Integer.parseInt(hygienePointsInput[0].getText().toString().trim());
+                    int fullScore = selectedItem.metadata.optInt("full_score");
+                    if (deduction < 0 || deduction > fullScore) {
+                        toast("卫生扣分必须在 0 到 " + fullScore + " 之间。");
+                        return;
                     }
+                    JSONObject score = new JSONObject();
+                    score.put("item_id", Integer.parseInt(selectedItem.value));
+                    score.put("score", fullScore - deduction);
+                    scores.put(score);
                     body.put("scores", scores);
                 }
             } catch (Exception exception) {
@@ -771,12 +808,13 @@ public class ResourceActivity extends BaseActivity {
             });
             return button;
         }
-        if ((options != null && options.length() > 0) || (choices != null && choices.length() > 0)) {
-            JSONArray values = options != null && options.length() > 0 ? options : choices;
+        if ("relation".equals(type) || options != null || choices != null) {
+            JSONArray values = options != null ? options : choices != null ? choices : new JSONArray();
             Spinner spinner = new Spinner(this);
             Ui.styleSpinner(this, spinner);
             List<Option> items = new ArrayList<>();
-            if (!field.optBoolean("required")) items.add(new Option("", "未选择"));
+            if (values.length() == 0) items.add(new Option("", "暂无可选项"));
+            else if (!field.optBoolean("required")) items.add(new Option("", "未选择"));
             for (int i = 0; i < values.length(); i++) {
                 JSONObject option = values.optJSONObject(i);
                 if (option != null) items.add(new Option(

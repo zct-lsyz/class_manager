@@ -59,6 +59,24 @@ class DormitoryFormOptionsTests(TestCase):
         entry = next(x for x in data[self.room.pk] if x["id"] == s2.pk)
         self.assertEqual(entry["bed"], "")
 
+    def test_build_room_students_orders_by_bed(self):
+        late_name = Student.objects.create(
+            school_class=self.cls, student_id=STUDENT_ID, name="A同学", gender="male",
+        )
+        early_name = Student.objects.create(
+            school_class=self.cls, student_id="2026010100000000002", name="B同学", gender="male",
+        )
+        DormAssignment.objects.create(
+            student=late_name, room=self.room, bed=DormBed.objects.get(room=self.room, bed_number="08"),
+            is_current=True, semester=self.sem,
+        )
+        DormAssignment.objects.create(
+            student=early_name, room=self.room, bed=DormBed.objects.get(room=self.room, bed_number="01"),
+            is_current=True, semester=self.sem,
+        )
+        data = _build_room_students(self.cls)
+        self.assertEqual([entry["bed"] for entry in data[self.room.pk]], ["01", "08"])
+
     def test_hygiene_form_context_has_bed(self):
         """卫生检查录入页的学生选项数据含床位号。"""
         student = Student.objects.create(

@@ -189,7 +189,7 @@ def group_edit(request, pk):
     assignments = {item.student_id: item for item in DutyMemberTask.objects.filter(group=group)}
     return render(request, "duty/group_form.html", {
         "form": form, "title": "修改值日小组", "group": group,
-        "members_for_tasks": group.members.all().order_by("student_id"),
+        "members_for_tasks": group.members.all().order_by("name", "student_id"),
         "tasks_for_assignment": group.tasks.all(), "assignments": assignments,
     })
 

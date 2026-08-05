@@ -128,6 +128,7 @@ class MobileApiTests(TestCase):
         fields = {row["name"]: row for row in schemas["dorm_discipline"]["fields"]}
         option = next(row for row in fields["item"]["options"] if row["value"] == item.pk)
         self.assertEqual((option["severity"], option["points_deducted"], option["points_sign"]), ("serious", 3, "deduct"))
+        self.assertTrue(fields["item"]["required"])
         classroom_fields = {row["name"]: row for row in schemas["classroom_discipline"]["fields"]}
         classroom_option = next(row for row in classroom_fields["item"]["options"] if row["value"] == classroom_item.pk)
         self.assertEqual((classroom_option["severity"], classroom_option["points_deducted"]), ("mild", 1))
@@ -146,7 +147,7 @@ class MobileApiTests(TestCase):
         DormAssignment.objects.create(student=self.student, room=room, bed=bed, semester=self.semester)
         DormAssignment.objects.create(student=other_student, room=other_room, bed=other_bed, semester=self.semester)
         item = DormHygieneItem.objects.create(
-            school_class=self.school_class, name="地面", full_score=10, default_deduction=1,
+            school_class=self.school_class, name="地面", full_score=10, default_deduction=1, default_severity="serious",
         )
         response = self.client.get(reverse("mobile_api:schemas"), **self.auth)
         hygiene = next(row for row in response.json()["data"] if row["key"] == "hygiene_checks")
@@ -154,6 +155,7 @@ class MobileApiTests(TestCase):
         room_options = [row for row in student_field["options"] if row["room_id"] == room.pk]
         self.assertEqual([row["label"] for row in room_options], ["所有学生", f"{self.student.name}（01号床）"])
         self.assertEqual(hygiene["hygiene_items"][0]["default_score"], 9)
+        self.assertEqual((hygiene["hygiene_items"][0]["severity"], hygiene["hygiene_items"][0]["points_deducted"]), ("serious", 1))
         url = reverse("mobile_api:batch_create", args=["hygiene_checks"])
         invalid = self.request_json("post", url, {
             "room": room.pk, "date": "2026-08-04", "student_mode": "selected",
@@ -170,6 +172,7 @@ class MobileApiTests(TestCase):
         self.assertEqual(DormHygieneItemScore.objects.get(check_record=check).score, 8)
         discipline = DormDisciplineRecord.objects.get(student=self.student, dorm_room=room)
         self.assertEqual(discipline.points_deducted, 2)
+        self.assertEqual((discipline.custom_content, discipline.severity), ("地面", "serious"))
         self.assertEqual(PointRecord.objects.get(source_type="dorm_discipline", source_id=discipline.pk).points, -2)
 
     def test_course_schedule_is_read_only_and_scoped(self):
@@ -195,9 +198,13 @@ class MobileApiTests(TestCase):
         self.assertEqual(seat["student_gender"], "male")
 
     def test_relation_options_hide_student_number_and_ranking_accepts_sources(self):
+        Student.objects.create(school_class=self.school_class, student_id="Z999", name="A同学", gender="male")
+        Student.objects.create(school_class=self.school_class, student_id="A000", name="B同学", gender="female")
+        roster = self.client.get(reverse("mobile_api:resource_list", args=["students"]), **self.auth)
+        self.assertEqual([row["name"] for row in roster.json()["data"]["results"][:2]], ["A同学", "B同学"])
         response = self.client.get(reverse("mobile_api:resource_list", args=["todos"]), **self.auth)
         student_field = next(item for item in response.json()["data"]["schema"]["fields"] if item["name"] == "student")
-        self.assertEqual(student_field["options"][0]["label"], self.student.name)
+        self.assertEqual([row["label"] for row in student_field["options"][:2]], ["A同学", "B同学"])
         todo = TodoItem.objects.create(created_by=self.user, student=self.student, title="不显示学号")
         response = self.client.get(reverse("mobile_api:resource_list", args=["todos"]), **self.auth)
         self.assertEqual(next(row for row in response.json()["data"]["results"] if row["id"] == todo.pk)["student_label"], self.student.name)

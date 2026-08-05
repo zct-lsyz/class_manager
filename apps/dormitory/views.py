@@ -228,6 +228,9 @@ def hygiene_items(request):
         name = request.POST.get("name", "").strip()
         full_score = request.POST.get("full_score", "10")
         default_deduction = request.POST.get("default_deduction", "0")
+        default_severity = request.POST.get("default_severity", "moderate")
+        if default_severity not in dict(DormHygieneItem.SEVERITY_CHOICES):
+            default_severity = "moderate"
         if name:
             try:
                 full_score = int(full_score)
@@ -237,6 +240,7 @@ def hygiene_items(request):
             DormHygieneItem.objects.create(
                 school_class=current_class, name=name,
                 full_score=full_score, default_deduction=default_deduction,
+                default_severity=default_severity,
             )
             messages.success(request, f"卫生项目「{name}」已添加。")
         else:
@@ -286,7 +290,7 @@ def hygiene_item_edit(request, pk):
     )
 
 
-def _create_hygiene_deductions(current_class, current_semester, check, students, deduction):
+def _create_hygiene_deductions(current_class, current_semester, check, students, deduction, severity="moderate", item_name="卫生检查不达标"):
     """卫生检查不达标时，为选中学生各创建一条宿舍纪律扣分记录并同步积分。"""
     from apps.discipline.models import DormDisciplineRecord
     from apps.rewards.services import sync_source_point
@@ -301,8 +305,8 @@ def _create_hygiene_deductions(current_class, current_semester, check, students,
                 date=check.date,
                 time=check.check_time,
                 item=None,
-                custom_content="卫生检查不达标",
-                severity="moderate",
+                custom_content=item_name,
+                severity=severity,
                 description=f"卫生检查扣分：{check.room}，扣 {deduction} 分",
                 action_taken=check.rectification,
                 points_deducted=deduction,
@@ -642,7 +646,7 @@ def _build_room_students(current_class):
         return data
     assignments = DormAssignment.objects.filter(
         room__building__school_class=current_class, is_current=True,
-    ).select_related("room", "student", "bed")
+    ).select_related("room", "student", "bed").order_by("room_id", "bed__bed_number", "student__name")
     for a in assignments:
         data.setdefault(a.room_id, []).append({
             "id": a.student_id,

@@ -405,7 +405,7 @@ def growth(request):
     current_class = get_current_class(request.user)
     students = Student.objects.filter(
         school_class=current_class, is_deleted=False,
-    ).order_by("sort_order", "student_id") if current_class else []
+    ).order_by("name", "student_id") if current_class else []
 
     student_id = request.GET.get("student_id", "")
     selected = None

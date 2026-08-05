@@ -78,7 +78,7 @@ def create(request):
     students_json = [
         {"id": s.pk, "name": s.name} for s in Student.objects.filter(
             school_class=current_class, is_deleted=False,
-        ).order_by("student_id")
+        ).order_by("name", "student_id")
     ] if current_class else []
     return render(request, "comments/form.html", {"form": form, "students_json": students_json})
 

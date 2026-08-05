@@ -54,6 +54,20 @@ class CorePageSmokeTests(TestCase):
         response = self.client.get(reverse("exports:full_export"))
         self.assertIn(response.status_code, (200, 302))
 
+    def test_student_roster_and_choices_order_by_name(self):
+        Student.objects.create(
+            school_class=self.school_class, student_id="Z999", name="A同学", gender="male",
+        )
+        Student.objects.create(
+            school_class=self.school_class, student_id="A000", name="B同学", gender="female",
+        )
+        roster = self.client.get(reverse("students:list"))
+        self.assertEqual([s.name for s in roster.context["page_obj"].object_list[:2]], ["A同学", "B同学"])
+        attendance = self.client.get(reverse("attendance:create"))
+        self.assertEqual([s["name"] for s in attendance.context["students_json"][:2]], ["A同学", "B同学"])
+        analysis = self.client.get(reverse("scores:analysis"))
+        self.assertEqual([s.name for s in analysis.context["student_list"][:2]], ["A同学", "B同学"])
+
 
 class ExamCreateGuardTests(TestCase):
     def setUp(self):
