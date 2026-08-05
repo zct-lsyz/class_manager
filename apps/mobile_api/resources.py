@@ -672,6 +672,14 @@ def resource_list(request, resource):
                 qs = qs.filter(**{name: value})
             except (FieldDoesNotExist, ValueError):
                 pass
+    if spec.key == "point_records":
+        if request.GET.get("date_from"):
+            qs = qs.filter(date__gte=request.GET["date_from"])
+        if request.GET.get("date_to"):
+            qs = qs.filter(date__lte=request.GET["date_to"])
+        sources = [value for value in request.GET.get("sources", "").split(",") if value]
+        if sources:
+            qs = qs.filter(source_type__in=sources)
     qs = qs.order_by(*spec.order)
     try:
         size = min(100, max(1, int(request.GET.get("page_size", 30))))

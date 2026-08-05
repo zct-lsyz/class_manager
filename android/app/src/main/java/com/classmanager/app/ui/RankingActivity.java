@@ -27,6 +27,11 @@ import java.util.Map;
 public class RankingActivity extends BaseActivity {
     private LinearLayout root;
     private final Map<String, CheckBox> sourceBoxes = new LinkedHashMap<>();
+    private EditText dateFromInput;
+    private EditText dateToInput;
+    private String dateFrom = "";
+    private String dateTo = "";
+    private String selectedSourceKeys = "";
 
     @Override
     protected void onCreate(Bundle state) {
@@ -41,7 +46,7 @@ public class RankingActivity extends BaseActivity {
 
     private void load(boolean saveSources) {
         if (root.getChildCount() == 0) root.addView(Ui.text(this, "正在加载积分排名…"));
-        String path = "ranking/";
+        String path = "ranking/" + dateQuery();
         ApiClient.Callback callback = new ApiClient.Callback() {
             @Override public void onSuccess(JSONObject response) {
                 JSONObject data = response.optJSONObject("data");
@@ -84,8 +89,20 @@ public class RankingActivity extends BaseActivity {
             sourceBoxes.put(source.optString("key"), box);
         }
         filters.addView(grid);
+        TextView dateHeading = Ui.text(this, "积分日期范围");
+        dateHeading.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        filters.addView(dateHeading);
+        dateFromInput = Ui.temporalInput(this, "date", dateFrom);
+        dateFromInput.setHint("选择开始日期（可留空）");
+        filters.addView(dateFromInput);
+        dateToInput = Ui.temporalInput(this, "date", dateTo);
+        dateToInput.setHint("选择结束日期（可留空）");
+        filters.addView(dateToInput);
+        Button dateFilter = Ui.outlineButton(this, "按日期筛选");
+        dateFilter.setOnClickListener(view -> { if (captureDates()) load(false); });
+        filters.addView(dateFilter);
         Button apply = Ui.button(this, "保存选择并重新排名");
-        apply.setOnClickListener(view -> load(true));
+        apply.setOnClickListener(view -> { if (captureDates()) load(true); });
         filters.addView(apply);
         root.addView(filters, cardParams());
 
@@ -93,6 +110,7 @@ public class RankingActivity extends BaseActivity {
         table.setPadding(0, Ui.dp(this, 6), 0, Ui.dp(this, 6));
         table.addView(row("名次", "姓名", "分数", true, null));
         JSONArray ranking = data.optJSONArray("ranking");
+        selectedSourceKeys = join(data.optJSONArray("selected_sources"));
         for (int i = 0; ranking != null && i < ranking.length(); i++) {
             JSONObject item = ranking.optJSONObject(i);
             View row = row(String.valueOf(item.optInt("rank")), item.optString("student_name"), signed(item.optInt("total")), false, item);
@@ -130,7 +148,9 @@ public class RankingActivity extends BaseActivity {
     }
 
     private void showDetails(JSONObject student) {
-        ApiClient.get(this).get("resources/point_records/?page_size=100&student=" + student.optInt("student_id"), new ApiClient.Callback() {
+        ApiClient.get(this).get("resources/point_records/?page_size=100&student=" + student.optInt("student_id") +
+                "&date_from=" + android.net.Uri.encode(dateFrom) + "&date_to=" + android.net.Uri.encode(dateTo) +
+                "&sources=" + android.net.Uri.encode(selectedSourceKeys.isEmpty() ? "__none__" : selectedSourceKeys), new ApiClient.Callback() {
             @Override public void onSuccess(JSONObject response) {
                 JSONObject data = response.optJSONObject("data");
                 JSONArray records = data == null ? null : data.optJSONArray("results");
@@ -174,6 +194,30 @@ public class RankingActivity extends BaseActivity {
     private boolean contains(JSONArray values, String key) {
         for (int i = 0; values != null && i < values.length(); i++) if (key.equals(values.optString(i))) return true;
         return false;
+    }
+
+    private boolean captureDates() {
+        dateFrom = dateFromInput == null ? "" : dateFromInput.getText().toString().trim();
+        dateTo = dateToInput == null ? "" : dateToInput.getText().toString().trim();
+        if (!dateFrom.isEmpty() && !dateTo.isEmpty() && dateFrom.compareTo(dateTo) > 0) {
+            toast("开始日期不能晚于结束日期。");
+            return false;
+        }
+        return true;
+    }
+
+    private String dateQuery() {
+        if (dateFrom.isEmpty() && dateTo.isEmpty()) return "";
+        return "?date_from=" + android.net.Uri.encode(dateFrom) + "&date_to=" + android.net.Uri.encode(dateTo);
+    }
+
+    private String join(JSONArray values) {
+        StringBuilder result = new StringBuilder();
+        for (int i = 0; values != null && i < values.length(); i++) {
+            if (result.length() > 0) result.append(',');
+            result.append(values.optString(i));
+        }
+        return result.toString();
     }
 
     private String signed(int value) { return value > 0 ? "+" + value : String.valueOf(value); }

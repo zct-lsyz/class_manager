@@ -164,7 +164,7 @@ class MobileApiTests(TestCase):
         self.assertEqual(invalid.status_code, 400)
         response = self.request_json("post", url, {
             "room": room.pk, "date": "2026-08-04", "student_mode": "all",
-            "student_ids": [], "scores": [{"item_id": item.pk, "score": 8}],
+            "student_ids": [], "severity": "非常严重", "scores": [{"item_id": item.pk, "score": 8}],
         })
         self.assertEqual(response.status_code, 201, response.content)
         check = DormHygieneCheck.objects.get(room=room)
@@ -172,7 +172,7 @@ class MobileApiTests(TestCase):
         self.assertEqual(DormHygieneItemScore.objects.get(check_record=check).score, 8)
         discipline = DormDisciplineRecord.objects.get(student=self.student, dorm_room=room)
         self.assertEqual(discipline.points_deducted, 2)
-        self.assertEqual((discipline.custom_content, discipline.severity), ("地面", "serious"))
+        self.assertEqual((discipline.custom_content, discipline.severity), ("地面", "critical"))
         self.assertEqual(PointRecord.objects.get(source_type="dorm_discipline", source_id=discipline.pk).points, -2)
 
     def test_course_schedule_is_read_only_and_scoped(self):
@@ -215,6 +215,13 @@ class MobileApiTests(TestCase):
         self.assertEqual(response.json()["data"]["selected_sources"], ["attendance"])
         response = self.request_json("post", reverse("mobile_api:ranking"), {"sources": []})
         self.assertEqual(response.json()["data"]["selected_sources"], [])
+        PointRecord.objects.create(school_class=self.school_class, student=self.student, date="2026-08-01", points=2, reason="范围外", source_type="reward")
+        PointRecord.objects.create(school_class=self.school_class, student=self.student, date="2026-08-05", points=5, reason="范围内", source_type="reward")
+        response = self.client.get(reverse("mobile_api:ranking") + "?sources=reward&date_from=2026-08-04&date_to=2026-08-06", **self.auth)
+        self.assertEqual(next(row for row in response.json()["data"]["ranking"] if row["student_id"] == self.student.pk)["total"], 5)
+        self.assertEqual((response.json()["data"]["date_from"], response.json()["data"]["date_to"]), ("2026-08-04", "2026-08-06"))
+        response = self.client.get(reverse("mobile_api:resource_list", args=["point_records"]) + f"?student={self.student.pk}&sources=reward&date_from=2026-08-04&date_to=2026-08-06", **self.auth)
+        self.assertEqual([row["reason"] for row in response.json()["data"]["results"]], ["范围内"])
 
     def test_unauthenticated_resource_request_is_rejected(self):
         response = self.client.get(reverse("mobile_api:resource_list", args=["students"]))

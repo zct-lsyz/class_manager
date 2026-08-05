@@ -425,7 +425,6 @@ public class ResourceActivity extends BaseActivity {
             JSONObject field = fields.optJSONObject(i);
             if (field == null || field.optBoolean("read_only")) continue;
             String name = field.optString("name");
-            if ("dorm_discipline".equals(resource) && "custom_content".equals(name)) continue;
             TextView label = Ui.text(this, field.optString("label") + (field.optBoolean("required") ? " *" : ""));
             label.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
             label.setTextColor(0xff475569);
@@ -444,7 +443,7 @@ public class ResourceActivity extends BaseActivity {
             labels.put(name, label);
         }
         applyConditionalFields(inputs, labels);
-        if (record == null) bindDisciplineItemDefaults(inputs);
+        if (record == null) bindDisciplineItemDefaults(inputs, definitions);
         ScrollView scroll = new ScrollView(this);
         scroll.addView(form);
         AlertDialog dialog = new AlertDialog.Builder(this)
@@ -505,7 +504,7 @@ public class ResourceActivity extends BaseActivity {
             fieldLabels.put(field.optString("name"), fieldLabel);
         }
         applyConditionalFields(inputs, fieldLabels);
-        bindDisciplineItemDefaults(inputs);
+        bindDisciplineItemDefaults(inputs, definitions);
         if (studentField == null || studentField.optJSONArray("options") == null) {
             toast("无法加载学生列表。");
             return;
@@ -592,7 +591,7 @@ public class ResourceActivity extends BaseActivity {
         JSONArray studentOptions = studentField.optJSONArray("options");
 
         Spinner[] hygieneItemInput = {null};
-        Spinner[] hygieneSeverityInput = {null};
+        EditText[] hygieneSeverityInput = {null};
         EditText[] hygienePointsInput = {null};
         if ("hygiene_checks".equals(resource)) {
             JSONArray items = schema.optJSONArray("hygiene_items");
@@ -614,13 +613,8 @@ public class ResourceActivity extends BaseActivity {
                 TextView severityLabel = Ui.text(this, "严重程度");
                 severityLabel.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
                 form.addView(severityLabel);
-                hygieneSeverityInput[0] = new Spinner(this);
-                Ui.styleSpinner(this, hygieneSeverityInput[0]);
-                hygieneSeverityInput[0].setAdapter(new ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item, new Option[]{
-                        new Option("mild", "轻微"), new Option("moderate", "一般"),
-                        new Option("serious", "严重"), new Option("critical", "非常严重")
-                }));
-                hygieneSeverityInput[0].setEnabled(false);
+                hygieneSeverityInput[0] = new EditText(this);
+                Ui.styleInput(this, hygieneSeverityInput[0]);
                 form.addView(hygieneSeverityInput[0]);
                 TextView pointsLabel = Ui.text(this, "分值（扣分）");
                 pointsLabel.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
@@ -633,7 +627,7 @@ public class ResourceActivity extends BaseActivity {
                     @Override public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
                         Option option = (Option) hygieneItemInput[0].getSelectedItem();
                         if (option == null || option.metadata == null) return;
-                        setSpinnerValue(hygieneSeverityInput[0], option.metadata.optString("severity"));
+                        hygieneSeverityInput[0].setText(option.metadata.optString("severity_label"));
                         hygienePointsInput[0].setText(String.valueOf(option.metadata.optInt("points_deducted")));
                     }
                     @Override public void onNothingSelected(AdapterView<?> parent) {}
@@ -643,11 +637,10 @@ public class ResourceActivity extends BaseActivity {
         for (int i = 0; fields != null && i < fields.length(); i++) {
             JSONObject field = fields.optJSONObject(i);
             if (field == null || field.optBoolean("read_only") || roomName.equals(field.optString("name")) || "student".equals(field.optString("name"))) continue;
-            if ("dorm_discipline".equals(resource) && "custom_content".equals(field.optString("name"))) continue;
             addBatchField(form, field, inputs, definitions, fieldLabels);
         }
         applyConditionalFields(inputs, fieldLabels);
-        bindDisciplineItemDefaults(inputs);
+        bindDisciplineItemDefaults(inputs, definitions);
 
         Spinner roomInput = (Spinner) inputs.get(roomName);
         Runnable resetStudents = () -> {
@@ -710,6 +703,7 @@ public class ResourceActivity extends BaseActivity {
                         return;
                     }
                     body.put("student_mode", allStudents[0] ? "all" : "selected");
+                    body.put("severity", hygieneSeverityInput[0].getText().toString().trim());
                     JSONArray scores = new JSONArray();
                     Option selectedItem = (Option) hygieneItemInput[0].getSelectedItem();
                     int deduction = Integer.parseInt(hygienePointsInput[0].getText().toString().trim());
@@ -775,10 +769,12 @@ public class ResourceActivity extends BaseActivity {
         String name = field.optString("name");
         String type = field.optString("type");
         Object current = record == null ? null : record.opt(name);
-        if (record == null && "date".equals(type) && ("date".equals(name) || "assigned_date".equals(name) || "contact_date".equals(name)))
+        if (record == null && "date".equals(type))
             current = java.time.LocalDate.now().toString();
-        if (record == null && "time".equals(type) && "check_time".equals(name))
+        if (record == null && "time".equals(type))
             current = java.time.LocalTime.now().format(DateTimeFormatter.ofPattern("HH:mm"));
+        if (record == null && "datetime".equals(type))
+            current = java.time.LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm"));
         if ("points_sign".equals(name) && record != null) {
             int points = record.optInt("points_deducted");
             current = "attendance".equals(resource) ? (points >= 0 ? "add" : "deduct") : (points < 0 ? "add" : "deduct");
@@ -807,6 +803,12 @@ public class ResourceActivity extends BaseActivity {
                 startActivityForResult(intent, 4201);
             });
             return button;
+        }
+        if (editableChoiceField(name) && choices != null) {
+            EditText input = new EditText(this);
+            Ui.styleInput(this, input);
+            input.setText(choiceLabel(choices, current == null || current == JSONObject.NULL ? "" : String.valueOf(current)));
+            return input;
         }
         if ("relation".equals(type) || options != null || choices != null) {
             JSONArray values = options != null ? options : choices != null ? choices : new JSONArray();
@@ -847,7 +849,7 @@ public class ResourceActivity extends BaseActivity {
         bindVisibility(inputs, labels, "needs_follow_up", "follow_up_date");
     }
 
-    private void bindDisciplineItemDefaults(Map<String, View> inputs) {
+    private void bindDisciplineItemDefaults(Map<String, View> inputs, Map<String, JSONObject> definitions) {
         if (!("classroom_discipline".equals(resource) || "dorm_discipline".equals(resource))) return;
         if (!(inputs.get("item") instanceof Spinner)) return;
         Spinner item = (Spinner) inputs.get("item");
@@ -855,13 +857,40 @@ public class ResourceActivity extends BaseActivity {
             @Override public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
                 Option option = (Option) item.getSelectedItem();
                 if (option == null || option.metadata == null) return;
-                setSpinnerValue(inputs.get("severity"), option.metadata.optString("severity"));
-                setSpinnerValue(inputs.get("points_sign"), option.metadata.optString("points_sign"));
+                setChoiceValue(inputs.get("severity"), definitions.get("severity"), option.metadata.optString("severity"));
+                setChoiceValue(inputs.get("points_sign"), definitions.get("points_sign"), option.metadata.optString("points_sign"));
                 if (inputs.get("points_deducted") instanceof EditText && option.metadata.has("points_deducted"))
                     ((EditText) inputs.get("points_deducted")).setText(String.valueOf(option.metadata.optInt("points_deducted")));
             }
             @Override public void onNothingSelected(AdapterView<?> parent) {}
         });
+    }
+
+    private boolean editableChoiceField(String name) {
+        return ("classroom_discipline".equals(resource) || "dorm_discipline".equals(resource)) &&
+                ("severity".equals(name) || "points_sign".equals(name));
+    }
+
+    private String choiceLabel(JSONArray choices, String value) {
+        for (int i = 0; choices != null && i < choices.length(); i++) {
+            JSONObject choice = choices.optJSONObject(i);
+            if (choice != null && value.equals(String.valueOf(choice.opt("value")))) return choice.optString("label");
+        }
+        return value;
+    }
+
+    private String choiceValue(JSONArray choices, String label) {
+        for (int i = 0; choices != null && i < choices.length(); i++) {
+            JSONObject choice = choices.optJSONObject(i);
+            if (choice != null && (label.equals(choice.optString("label")) || label.equals(String.valueOf(choice.opt("value")))))
+                return String.valueOf(choice.opt("value"));
+        }
+        return "";
+    }
+
+    private void setChoiceValue(View view, JSONObject definition, String value) {
+        if (view instanceof EditText) ((EditText) view).setText(choiceLabel(definition == null ? null : definition.optJSONArray("choices"), value));
+        else setSpinnerValue(view, value);
     }
 
     private void setSpinnerValue(View view, String value) {
@@ -905,6 +934,14 @@ public class ResourceActivity extends BaseActivity {
                 else if (view instanceof Spinner) value = ((Option) ((Spinner) view).getSelectedItem()).value;
                 else if (view instanceof FileButton) continue;
                 else value = ((EditText) view).getText().toString().trim();
+                if (view instanceof EditText && editableChoiceField(item.getKey())) {
+                    String entered = String.valueOf(value);
+                    value = choiceValue(definition.optJSONArray("choices"), entered);
+                    if (String.valueOf(value).isEmpty() && !entered.isEmpty()) {
+                        toast(definition.optString("label") + "填写内容不在允许范围内。");
+                        return null;
+                    }
+                }
                 if (definition.optBoolean("required") && String.valueOf(value).isEmpty()) {
                     toast(definition.optString("label") + "不能为空。");
                     return null;
@@ -926,7 +963,9 @@ public class ResourceActivity extends BaseActivity {
                 if (!"points_sign".equals(item.getKey())) body.put(item.getKey(), value);
             }
             if (inputs.containsKey("points_sign") && body.has("points_deducted")) {
-                String sign = ((Option) ((Spinner) inputs.get("points_sign")).getSelectedItem()).value;
+                View signInput = inputs.get("points_sign");
+                String sign = signInput instanceof Spinner ? ((Option) ((Spinner) signInput).getSelectedItem()).value :
+                        choiceValue(definitions.get("points_sign").optJSONArray("choices"), ((EditText) signInput).getText().toString().trim());
                 int points = Math.abs(body.optInt("points_deducted"));
                 body.put("points_deducted", "attendance".equals(resource) ? ("add".equals(sign) ? points : -points) : ("add".equals(sign) ? -points : points));
             }

@@ -70,6 +70,14 @@ class PointsSignTests(TestCase):
         record = ClassroomDisciplineRecord.objects.get(student=self.student)
         self.assertEqual(record.points_deducted, -3)
 
+    def test_web_ranking_filters_totals_and_details_by_date_range(self):
+        from apps.rewards.models import PointRecord
+        PointRecord.objects.create(school_class=self.cls, student=self.student, date=date(2026, 8, 1), points=2, reason="范围外", source_type="reward")
+        PointRecord.objects.create(school_class=self.cls, student=self.student, date=date(2026, 8, 5), points=5, reason="范围内", source_type="reward")
+        response = self.client.get(reverse("rewards:points"), {"date_from": "2026-08-04", "date_to": "2026-08-06"})
+        self.assertEqual(response.context["student_points"][0]["total"], 5)
+        self.assertEqual([row.reason for row in response.context["page_obj"]], ["范围内"])
+
 
 class HomeworkPointRuleTests(TestCase):
     """作业优秀/未交等状态的自定义加减分规则。"""

@@ -403,9 +403,8 @@ final class StructuredReportRenderer {
             for (int col = 0; col < cols; col++) {
                 JSONObject assignment = assignments.get(rowNumber + "_" + col);
                 String name = assignment == null ? "空座" : assignment.optString("student_name");
-                String meta = assignment == null ? "" : seatMeta(assignment);
                 int background = assignment == null ? Color.rgb(248, 250, 252) : genderColor(assignment.optString("student_gender"));
-                tableRow.addView(cell(context, name + (meta.isEmpty() ? "" : "\n" + meta), -52, background, assignment != null, 44));
+                tableRow.addView(cell(context, name, -52, background, assignment != null, 44));
                 if (aisles.contains(col + 1)) tableRow.addView(spacer(context, 12));
             }
             tableRow.addView(cell(context, String.valueOf(rowNumber + 1), -28, HEADER, true, 44));

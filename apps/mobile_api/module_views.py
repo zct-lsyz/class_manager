@@ -373,6 +373,7 @@ def ranking(request):
     return api_ok({
         "sources": sources, "selected_sources": enabled_types,
         "enabled_labels": [item["label"] for item in sources if item["key"] in enabled_types],
+        "date_from": request.GET.get("date_from", ""), "date_to": request.GET.get("date_to", ""),
         "ranking": rows,
     })
 
@@ -586,6 +587,11 @@ def _batch_create_hygiene(request, spec, data):
         students = Student.objects.filter(pk__in=selected_ids, school_class=current, is_deleted=False)
         severity_order = {"mild": 0, "moderate": 1, "serious": 2, "critical": 3}
         severity = max((item.default_severity for item, _score, _reason in score_rows), key=lambda value: severity_order.get(value, 1), default="moderate")
+        requested_severity = {"轻微": "mild", "一般": "moderate", "严重": "serious", "非常严重": "critical"}.get(str(data.get("severity", "")).strip(), str(data.get("severity", "")).strip())
+        if requested_severity:
+            if requested_severity not in severity_order:
+                raise ValidationError({"severity": ["严重程度只能填写轻微、一般、严重或非常严重。"]})
+            severity = requested_severity
         item_name = "、".join(item.name for item, _score, _reason in score_rows) or "卫生检查不达标"
         deducted_count = _create_hygiene_deductions(
             current, instance.semester, instance, students, deduction, severity, item_name,

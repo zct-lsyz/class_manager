@@ -32,7 +32,7 @@ public class StructuredReportRendererTest {
 
     @Test
     public void seatingRendersSeatGridWithoutCoordinateOrLockFields() throws Exception {
-        JSONObject data = new JSONObject("{\"plan\":{\"id\":2,\"version\":\"3\",\"reason\":\"月度调整\",\"layout\":{\"rows\":1,\"cols\":1,\"aisle_positions\":[],\"podium_position\":\"front\"}},\"assignments\":[{\"id\":8,\"row\":0,\"col\":0,\"student_id\":6,\"student_name\":\"张三\",\"student_gender\":\"male\",\"locked\":true}]} ");
+        JSONObject data = new JSONObject("{\"plan\":{\"id\":2,\"version\":\"3\",\"reason\":\"月度调整\",\"layout\":{\"rows\":1,\"cols\":1,\"aisle_positions\":[],\"podium_position\":\"front\"}},\"assignments\":[{\"id\":8,\"row\":0,\"col\":0,\"student_id\":6,\"student_name\":\"张三\",\"student_gender\":\"male\",\"student_dormitory\":\"101宿舍\",\"student_height\":175,\"seat_requirement\":\"靠前\",\"locked\":true}]} ");
         String text = visibleText(StructuredReportRenderer.render(context, "seating/", data));
         assertTrue(text.contains("张三"));
         assertTrue(text.contains("讲台"));
@@ -40,6 +40,9 @@ public class StructuredReportRendererTest {
         assertFalse(text.contains("locked"));
         assertFalse(text.contains("row"));
         assertFalse(text.contains("col"));
+        assertFalse(text.contains("101宿舍"));
+        assertFalse(text.contains("175cm"));
+        assertFalse(text.contains("★"));
     }
 
     @Test
