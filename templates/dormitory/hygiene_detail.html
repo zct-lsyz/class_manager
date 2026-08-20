@@ -28,11 +28,11 @@
             <div class="card-header">项目得分</div>
             <div class="card-body p-0 table-responsive">
                 <table class="table mb-0">
-                    <thead><tr><th>项目</th><th>得分</th><th>满分</th><th>扣分原因</th></tr></thead>
+                    <thead><tr><th>项目</th><th>得分</th><th>满分</th><th>扣分</th><th>扣分原因</th></tr></thead>
                     <tbody>
                     {% for s in scores %}
-                    <tr><td>{{ s.item.name }}</td><td>{{ s.score }}</td><td>{{ s.item.full_score }}</td><td>{{ s.deduction_reason|default:"-" }}</td></tr>
-                    {% empty %}<tr><td colspan="4" class="text-muted text-center">无项目得分</td></tr>
+                    <tr><td>{{ s.item.name }}</td><td>{{ s.score }}</td><td>{{ s.item.full_score }}</td><td>{{ s.deduction }}</td><td>{{ s.deduction_reason|default:"-" }}</td></tr>
+                    {% empty %}<tr><td colspan="5" class="text-muted text-center">无项目得分</td></tr>
                     {% endfor %}
                     </tbody>
                 </table>

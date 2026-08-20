@@ -33,15 +33,20 @@
     </div>
 
     {% if items %}
-    <div class="card-header">项目得分</div>
+    <div class="card-header">扣分原因与扣分分数</div>
     <div class="card-body">
+        <div class="form-text mb-3">勾选扣分原因后，扣分分数会自动填入该项目的默认扣分，可手动修改；未勾选的项目不扣分。</div>
         <div class="row g-3">
             {% for item in items %}
             <div class="col-md-3">
-                <label class="form-label small">{{ item.name }}（满分 {{ item.full_score }}{% if item.default_deduction %}，默认扣 {{ item.default_deduction }} 分{% endif %}）</label>
-                <input type="number" name="item_{{ item.pk }}" class="form-control"
-                    min="0" max="{{ item.full_score }}" value="{{ item.default_score }}"
-                    placeholder="0-{{ item.full_score }}">
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" name="deduct_items" value="{{ item.pk }}"
+                        id="deductItem{{ item.pk }}" data-deduction="{{ item.default_deduction }}">
+                    <label class="form-check-label small" for="deductItem{{ item.pk }}">{{ item.name }}（满分 {{ item.full_score }}）</label>
+                </div>
+                <input type="number" name="deduct_{{ item.pk }}" id="deduct_{{ item.pk }}" class="form-control form-control-sm mt-1"
+                    min="0" max="{{ item.full_score }}" placeholder="扣分分数">
+                <div class="form-text small text-muted">默认扣 {{ item.default_deduction }} 分</div>
             </div>
             {% endfor %}
         </div>
@@ -60,6 +65,16 @@
 <script src="{% static 'js/student-checkbox-select.js' %}"></script>
 <script>
 const ROOM_STUDENTS = JSON.parse(document.getElementById('room-students-data').textContent);
+(function() {
+    // 勾选扣分原因 → 自动填入该项目的默认扣分分数
+    document.querySelectorAll('input[name="deduct_items"]').forEach(function(cb) {
+        cb.addEventListener('change', function() {
+            var input = document.getElementById('deduct_' + cb.value);
+            if (!input) return;
+            input.value = cb.checked ? cb.dataset.deduction : '';
+        });
+    });
+})();
 (function() {
     // 宿舍→学生 复选框下拉多选
     initStudentCheckboxSelect({

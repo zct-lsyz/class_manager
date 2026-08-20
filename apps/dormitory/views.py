@@ -441,22 +441,28 @@ def hygiene_create(request):
                     photo.stored_size = image_file.size
                     photo.save()
 
-                # 保存父记录后再写项目得分
+                # 保存父记录后再写项目得分：勾选扣分原因（复选框）→
+                # 扣分分数（填空，默认跟随项目默认扣分）→ 得分 = 满分 - 扣分
                 total = 0
                 deduction = 0
+                checked_ids = [
+                    int(x) for x in request.POST.getlist("deduct_items") if x.isdigit()
+                ]
                 for item in items:
-                    score_val = request.POST.get(f"item_{item.pk}", "")
-                    if score_val == "":
+                    if item.pk not in checked_ids:
                         continue
+                    raw = request.POST.get(f"deduct_{item.pk}", "").strip()
                     try:
-                        score = int(score_val)
+                        deduct = int(raw) if raw else item.default_deduction
                     except (ValueError, TypeError):
-                        score = 0
-                    score = max(0, min(score, item.full_score))
+                        deduct = item.default_deduction
+                    deduct = max(0, min(deduct, item.full_score))
+                    score = item.full_score - deduct
                     total += score
-                    deduction += max(0, item.full_score - score)
+                    deduction += deduct
                     DormHygieneItemScore.objects.create(
                         check_record=check, item=item, score=score,
+                        deduction_reason=f"{item.name}扣{deduct}分" if deduct else "",
                     )
                 check.total_score = total
                 if items:
@@ -508,10 +514,6 @@ def hygiene_create(request):
 
     form.fields["room"].queryset = rooms
 
-    # 每个卫生项目的默认实际得分 = 满分 - 默认扣分（新建时自动预填）
-    for item in items:
-        item.default_score = max(0, item.full_score - item.default_deduction)
-
     return render(request, "dormitory/hygiene_form.html", {
         "form": form, "items": items, "rooms": rooms,
         "dorm_room_students": dorm_room_students,
@@ -527,6 +529,8 @@ def hygiene_detail(request, pk):
         pk=pk, school_class=current_class, is_deleted=False,
     )
     scores = DormHygieneItemScore.objects.filter(check_record=check).select_related("item")
+    for s in scores:
+        s.deduction = (s.item.full_score - s.score) if s.item else 0
     return render(request, "dormitory/hygiene_detail.html", {"check": check, "scores": scores})
 
 
