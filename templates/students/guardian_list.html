@@ -8,9 +8,6 @@
     <h4 class="mb-0">
         <i class="bi bi-telephone-fill me-2 text-primary"></i>家长联系方式
     </h4>
-    <small class="text-muted">
-        <i class="bi bi-shield-lock me-1"></i>手机号列表默认脱敏
-    </small>
 </div>
 
 <div class="filter-bar">
@@ -50,17 +47,9 @@
                             </a>
                         </td>
                         <td>{{ row.contact_relation|default:"-" }}</td>
-                        <td>
-                            {% if row.contact_phone %}
-                            {{ row.contact_phone|slice:":3" }}****{{ row.contact_phone|slice:"-4:" }}
-                            {% else %}-{% endif %}
-                        </td>
+                        <td>{{ row.contact_phone|default:"-" }}</td>
                         <td>{{ row.backup_relation|default:"-" }}</td>
-                        <td>
-                            {% if row.backup_phone %}
-                            {{ row.backup_phone|slice:":3" }}****{{ row.backup_phone|slice:"-4:" }}
-                            {% else %}-{% endif %}
-                        </td>
+                        <td>{{ row.backup_phone|default:"-" }}</td>
                         <td>
                             {% if row.guardian %}
                             <a href="{% url 'students:guardian_edit' row.guardian.pk %}" class="btn btn-sm btn-outline-primary">

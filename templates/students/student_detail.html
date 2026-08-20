@@ -94,11 +94,11 @@
                 {% if guardian %}
                 <table class="table table-borderless">
                     <tr><td class="text-muted" style="width:120px">联系人关系</td><td>{{ guardian.display_contact_relation|default:"未填写" }}</td></tr>
-                    <tr><td class="text-muted">联系人电话</td><td>{% if guardian.display_contact_phone %}{{ guardian.display_contact_phone|slice:":3" }}****{{ guardian.display_contact_phone|slice:"-4:" }}{% else %}未填写{% endif %}</td></tr>
+                    <tr><td class="text-muted">联系人电话</td><td>{{ guardian.display_contact_phone|default:"未填写" }}</td></tr>
                     <tr><td class="text-muted">备用联系人关系</td><td>{{ guardian.display_backup_relation|default:"未填写" }}</td></tr>
-                    <tr><td class="text-muted">备用联系人电话</td><td>{% if guardian.display_backup_phone %}{{ guardian.display_backup_phone|slice:":3" }}****{{ guardian.display_backup_phone|slice:"-4:" }}{% else %}未填写{% endif %}</td></tr>
-                    <tr><td class="text-muted">父亲</td><td>{{ guardian.father_name|default:"未填写" }} {% if guardian.father_phone %}({{ guardian.father_phone|slice:":3" }}****{{ guardian.father_phone|slice:"-4:" }}){% endif %}</td></tr>
-                    <tr><td class="text-muted">母亲</td><td>{{ guardian.mother_name|default:"未填写" }} {% if guardian.mother_phone %}({{ guardian.mother_phone|slice:":3" }}****{{ guardian.mother_phone|slice:"-4:" }}){% endif %}</td></tr>
+                    <tr><td class="text-muted">备用联系人电话</td><td>{{ guardian.display_backup_phone|default:"未填写" }}</td></tr>
+                    <tr><td class="text-muted">父亲</td><td>{{ guardian.father_name|default:"未填写" }} {% if guardian.father_phone %}({{ guardian.father_phone }}){% endif %}</td></tr>
+                    <tr><td class="text-muted">母亲</td><td>{{ guardian.mother_name|default:"未填写" }} {% if guardian.mother_phone %}({{ guardian.mother_phone }}){% endif %}</td></tr>
                     <tr><td class="text-muted">其他监护人</td><td>{{ guardian.other_guardian|default:"无" }}</td></tr>
                     <tr><td class="text-muted">主要联系人</td><td>{{ guardian.get_primary_contact_display|default:"未设置" }}</td></tr>
                     <tr><td class="text-muted">家庭地址</td><td>{{ guardian.home_address|default:"未填写" }}</td></tr>
@@ -109,9 +109,9 @@
                 {% elif student.primary_contact or student.primary_phone or student.secondary_contact or student.secondary_phone %}
                 <table class="table table-borderless">
                     <tr><td class="text-muted" style="width:120px">联系人关系</td><td>{{ student.primary_contact|default:"未填写" }}</td></tr>
-                    <tr><td class="text-muted">联系人电话</td><td>{% if student.primary_phone %}{{ student.primary_phone|slice:":3" }}****{{ student.primary_phone|slice:"-4:" }}{% else %}未填写{% endif %}</td></tr>
+                    <tr><td class="text-muted">联系人电话</td><td>{{ student.primary_phone|default:"未填写" }}</td></tr>
                     <tr><td class="text-muted">备用联系人关系</td><td>{{ student.secondary_contact|default:"未填写" }}</td></tr>
-                    <tr><td class="text-muted">备用联系人电话</td><td>{% if student.secondary_phone %}{{ student.secondary_phone|slice:":3" }}****{{ student.secondary_phone|slice:"-4:" }}{% else %}未填写{% endif %}</td></tr>
+                    <tr><td class="text-muted">备用联系人电话</td><td>{{ student.secondary_phone|default:"未填写" }}</td></tr>
                 </table>
                 <a href="{% url 'students:guardian_create' student.pk %}" class="btn btn-outline-primary btn-sm">
                     <i class="bi bi-plus-lg me-1"></i>完善家长信息
