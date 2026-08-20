@@ -198,6 +198,7 @@ class DutyRosterEntry(BaseModel):
     )
     day_index = models.PositiveSmallIntegerField("第几天")
     sort_order = models.IntegerField("组内排序", default=0)
+    is_leader = models.BooleanField("当天小组组长", default=False)
 
     class Meta:
         verbose_name = "方案分配记录"
@@ -206,3 +207,46 @@ class DutyRosterEntry(BaseModel):
 
     def __str__(self):
         return f"{self.roster.name} D{self.day_index} {self.task.name} - {self.student.name}"
+
+
+class DutyAbsenceRecord(BaseModel):
+    """值日缺勤记录（扣分默认 1 分，可修改，同步积分与预警）"""
+    school_class = models.ForeignKey(
+        SchoolClass, on_delete=models.CASCADE,
+        related_name="duty_absence_records", verbose_name="班级",
+    )
+    semester = models.ForeignKey(
+        Semester, on_delete=models.SET_NULL,
+        null=True, blank=True, verbose_name="学期",
+    )
+    roster = models.ForeignKey(
+        DutyRoster, on_delete=models.SET_NULL,
+        null=True, blank=True, related_name="absence_records", verbose_name="值日方案",
+    )
+    date = models.DateField("缺勤日期", db_index=True)
+    task = models.ForeignKey(
+        DutyTask, on_delete=models.SET_NULL,
+        null=True, blank=True, related_name="absence_records", verbose_name="当天负责的工作",
+    )
+    task_name = models.CharField("工作名称", max_length=100, blank=True, default="")
+    group_name = models.CharField("小组", max_length=100, blank=True, default="")
+    student = models.ForeignKey(
+        Student, on_delete=models.CASCADE,
+        related_name="duty_absence_records", verbose_name="缺勤学生",
+    )
+    leader = models.ForeignKey(
+        Student, on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name="led_duty_absences", verbose_name="所在组组长",
+    )
+    leader_name = models.CharField("组长姓名", max_length=50, blank=True, default="")
+    points = models.PositiveSmallIntegerField("扣分", default=1)
+    remark = models.TextField("备注", blank=True, default="")
+
+    class Meta:
+        verbose_name = "值日缺勤记录"
+        verbose_name_plural = "值日缺勤记录"
+        ordering = ["-date", "-created_at"]
+
+    def __str__(self):
+        return f"{self.student.name} {self.date} 缺勤 -{self.points}分"

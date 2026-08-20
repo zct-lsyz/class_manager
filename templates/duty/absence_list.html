@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+{% block title %}值日缺勤记录{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mt-3 mb-4">
+    <h4 class="mb-0"><i class="bi bi-person-x me-2 text-danger"></i>值日缺勤记录</h4>
+    <a href="{% url 'duty:index' %}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left me-1"></i>返回值日生表</a>
+</div>
+
+<div class="card mb-3">
+    <div class="card-header"><i class="bi bi-plus-circle me-2"></i>添加缺勤记录</div>
+    <div class="card-body">
+        <form method="post" action="{% url 'duty:absence_add' %}" class="row g-2 align-items-end">
+            {% csrf_token %}
+            <div class="col-md-2">
+                <label class="form-label small">缺勤日期</label>
+                <input type="date" name="date" class="form-control form-control-sm" value="{{ today|date:'Y-m-d' }}">
+            </div>
+            <div class="col-md-3">
+                <label class="form-label small">缺勤学生</label>
+                <select name="student_id" class="form-select form-select-sm" required>
+                    {% for s in students %}<option value="{{ s.pk }}">{{ s.name }}</option>{% endfor %}
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label small">当天负责的工作</label>
+                <select name="task_id" class="form-select form-select-sm">
+                    <option value="">— 选择任务 —</option>
+                    {% for t in tasks %}<option value="{{ t.pk }}">{{ t.name }}</option>{% endfor %}
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label small">扣分（默认1分）</label>
+                <input type="number" name="points" value="1" min="1" class="form-control form-control-sm">
+            </div>
+            <div class="col-md-2">
+                <button class="btn btn-danger btn-sm w-100"><i class="bi bi-plus-lg"></i> 添加</button>
+            </div>
+        </form>
+        <div class="form-text mt-2">扣分自动同步到积分排名；累计缺勤达到预警规则阈值时，会在工作台「预警管理」中提示。</div>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-body p-0 table-responsive">
+        <table class="table table-hover mb-0">
+            <thead>
+                <tr>
+                    <th>缺勤日期</th>
+                    <th>当天负责的工作</th>
+                    <th>小组</th>
+                    <th>所在组组长</th>
+                    <th>缺勤学生</th>
+                    <th>扣分</th>
+                    <th>操作</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for r in page_obj %}
+                <tr>
+                    <td>{{ r.date }}</td>
+                    <td>{{ r.task_name|default:"-" }}</td>
+                    <td>{{ r.group_name|default:"-" }}</td>
+                    <td>{{ r.leader_name|default:"-" }}</td>
+                    <td><strong>{{ r.student.name }}</strong></td>
+                    <td>
+                        <form method="post" action="{% url 'duty:absence_update_points' r.pk %}" class="d-flex gap-1">
+                            {% csrf_token %}
+                            <input type="number" name="points" value="{{ r.points }}" min="1" class="form-control form-control-sm" style="width:70px">
+                            <button class="btn btn-sm btn-outline-primary">保存</button>
+                        </form>
+                    </td>
+                    <td>
+                        <form method="post" action="{% url 'duty:absence_delete' r.pk %}" class="d-inline" onsubmit="return confirm('确认删除该缺勤记录？对应积分将同步撤销。')">
+                            {% csrf_token %}
+                            <button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
+                        </form>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="7" class="text-center text-muted py-4"><i class="bi bi-person-check d-block fs-3 mb-2"></i>暂无缺勤记录</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% if page_obj.paginator.num_pages > 1 %}
+    <div class="card-footer d-flex justify-content-between align-items-center">
+        <small class="text-muted">共 {{ page_obj.paginator.count }} 条记录，第 {{ page_obj.number }}/{{ page_obj.paginator.num_pages }} 页</small>
+        <nav>
+            <ul class="pagination pagination-sm mb-0">
+                {% if page_obj.has_previous %}
+                <li class="page-item"><a class="page-link" href="?page=1">首页</a></li>
+                <li class="page-item"><a class="page-link" href="?page={{ page_obj.previous_page_number }}">上一页</a></li>
+                {% endif %}
+                <li class="page-item active"><span class="page-link">{{ page_obj.number }}</span></li>
+                {% if page_obj.has_next %}
+                <li class="page-item"><a class="page-link" href="?page={{ page_obj.next_page_number }}">下一页</a></li>
+                <li class="page-item"><a class="page-link" href="?page={{ page_obj.paginator.num_pages }}">末页</a></li>
+                {% endif %}
+            </ul>
+        </nav>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

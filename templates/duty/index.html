@@ -15,6 +15,75 @@
     使用「智能值日」可自定义任务与人数，一键公平轮值生成整周排班，并支持拖拽微调、打印和分享到家长群。
 </div>
 
+{% if roster %}
+<div class="card mb-3">
+    <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2 py-2">
+        <span><i class="bi bi-calendar-week me-1"></i><strong>当前值日方案：{{ roster.name }}</strong>
+            <small class="text-muted ms-2">{{ roster.date_start }} 至 {{ roster.date_end }} · {{ roster.day_count }} 天</small></span>
+        <span class="text-nowrap">
+            <a href="{% url 'duty:absence_list' %}" class="btn btn-sm btn-danger"><i class="bi bi-person-x me-1"></i>缺勤记录</a>
+            <a href="{% url 'duty:smart_duty_finalize' roster.pk %}" class="btn btn-sm btn-outline-primary"><i class="bi bi-eye me-1"></i>查看方案</a>
+        </span>
+    </div>
+    <div class="card-body">
+        <div class="row g-3">
+        {% for g in roster_groups %}
+        <div class="col-md-6">
+            <div class="card h-100 border-secondary-subtle">
+                <div class="card-header py-2 d-flex justify-content-between align-items-center">
+                    <strong><i class="bi bi-people me-1"></i>{{ g.group_name }}</strong>
+                    <span class="text-muted small">组长：{% if g.leader %}{{ g.leader.name }}{% else %}未设置{% endif %}</span>
+                </div>
+                <div class="card-body py-2 small">
+                    {% for t in g.tasks %}
+                    <div class="mb-2">
+                        <span class="badge bg-light text-dark border me-1">{{ t.task.name }}</span>
+                        {% for s in t.students %}
+                        <span class="d-inline-block me-2">
+                            {{ s.name }}{% if g.leader and g.leader.pk == s.pk %}<span class="text-warning" title="组长"> ★</span>{% endif %}
+                            <form method="post" action="{% url 'duty:absence_add' %}" class="d-inline">
+                                {% csrf_token %}
+                                <input type="hidden" name="student_id" value="{{ s.pk }}">
+                                <input type="hidden" name="date" value="{{ g.date|date:'Y-m-d' }}">
+                                <input type="hidden" name="task_id" value="{{ t.task.pk }}">
+                                <input type="hidden" name="group_name" value="{{ g.group_name }}">
+                                {% if g.leader %}<input type="hidden" name="leader_id" value="{{ g.leader.pk }}">{% endif %}
+                                <input type="hidden" name="points" value="1">
+                                <input type="hidden" name="roster_id" value="{{ roster.pk }}">
+                                <input type="hidden" name="next" value="{% url 'duty:index' %}">
+                                <button class="btn btn-sm btn-outline-danger py-0 px-1" title="记录缺勤（默认扣1分）"><i class="bi bi-x-circle"></i></button>
+                            </form>
+                        </span>
+                        {% empty %}<span class="text-muted">—</span>{% endfor %}
+                    </div>
+                    {% empty %}<div class="text-muted">暂无任务安排</div>{% endfor %}
+                </div>
+                <div class="card-footer py-1 small d-flex justify-content-between align-items-center">
+                    <span class="text-muted">共 {{ g.member_count }} 人</span>
+                    <form method="post" action="{% url 'duty:set_leader' roster.pk %}" class="d-inline-flex align-items-center gap-1">
+                        {% csrf_token %}
+                        <input type="hidden" name="day_index" value="{{ g.day_index }}">
+                        <select name="student_id" class="form-select form-select-sm" style="width:auto" onchange="this.form.submit()">
+                            {% for t in g.tasks %}{% for s in t.students %}
+                            <option value="{{ s.pk }}" {% if g.leader and g.leader.pk == s.pk %}selected{% endif %}>{{ s.name }}</option>
+                            {% endfor %}{% endfor %}
+                        </select>
+                        <button class="btn btn-sm btn-outline-secondary py-0 px-1">设组长</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+        </div>
+    </div>
+</div>
+{% else %}
+<div class="alert alert-warning py-2">
+    <i class="bi bi-exclamation-triangle me-1"></i>
+    尚未启用智能值日方案。请先到「智能值日」生成并激活方案，值日生表将自动显示当周各个值日小组。
+</div>
+{% endif %}
+
 {% for g in groups %}
 <div class="card mb-2">
     <div class="card-header py-2 d-flex justify-content-between align-items-center">

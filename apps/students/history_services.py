@@ -96,13 +96,22 @@ def get_student_events(student, module, date_from=None, date_to=None):
             if record.status in negative or record.status.startswith("custom:"):
                 events.append({"date": record.submission_date or record.task.assigned_date, "created_at": record.created_at, "item": f"{record.task.title}：{record.status_display}", "code": record.status, "points": 0, "note": record.remark, "adverse": True})
     elif module == "duty":
-        from apps.duty.models import DutyRecord
+        from apps.duty.models import DutyRecord, DutyAbsenceRecord
         records = _apply_dates(DutyRecord.objects.filter(student=student).select_related("group"), "date", date_from, date_to)
         for record in records:
             adverse = record.is_absent or not record.is_completed or record.evaluation == "poor"
             if adverse:
                 label = "缺岗" if record.is_absent else ("未完成" if not record.is_completed else "评价差")
                 events.append({"date": record.date, "created_at": record.created_at, "item": f"{record.group.name}：{label}", "code": label, "points": 0, "note": record.remark, "adverse": True})
+        # 值日缺勤记录（扣分已同步积分，供预警与成长足迹）
+        absences = _apply_dates(DutyAbsenceRecord.objects.filter(student=student), "date", date_from, date_to)
+        for record in absences:
+            events.append({
+                "date": record.date, "created_at": record.created_at,
+                "item": f"{record.group_name or record.task_name or '值日'}：缺勤",
+                "code": "absent", "points": -record.points,
+                "note": record.remark, "adverse": True,
+            })
     elif module == "evaluation":
         from apps.evaluation.models import EvaluationResult
         records = EvaluationResult.objects.filter(student=student).select_related("project").order_by("-created_at")

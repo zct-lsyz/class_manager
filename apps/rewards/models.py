@@ -126,6 +126,7 @@ class PointRecord(BaseModel):
             ("hygiene", "卫生扣分/加分"),
             ("attendance", "考勤扣分/加分"),
             ("homework", "作业检查"),
+            ("duty", "值日缺勤扣分"),
             ("manual", "手工调整"),
         ],
         default="manual",

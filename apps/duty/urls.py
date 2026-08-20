@@ -21,4 +21,11 @@ urlpatterns = [
     path("smart/<int:pk>/print/", views.smart_duty_print, name="smart_duty_print"),
     path("smart/<int:pk>/export/", views.smart_duty_export, name="smart_duty_export"),
     path("smart/history/", views.smart_duty_history, name="smart_duty_history"),
+    # 缺勤记录
+    path("absence/", views.duty_absence_list, name="absence_list"),
+    path("absence/add/", views.duty_absence_add, name="absence_add"),
+    path("absence/<int:pk>/points/", views.duty_absence_update_points, name="absence_update_points"),
+    path("absence/<int:pk>/delete/", views.duty_absence_delete, name="absence_delete"),
+    # 方案小组组长
+    path("roster/<int:pk>/set-leader/", views.duty_set_leader, name="set_leader"),
 ]

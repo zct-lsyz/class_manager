@@ -1,4 +1,4 @@
-﻿import io
+import io
 from collections import defaultdict
 
 from django.contrib import messages
@@ -16,6 +16,7 @@ from apps.audit.models import OperationLog
 from apps.classes.decorators import require_current_class
 from apps.classes.utils import get_current_class
 from apps.classes.models import SchoolClass, Semester
+from apps.students.models import Student
 from apps.duty.forms import DutyTaskForm, DutyGroupForm, DutyRecordForm
 from apps.duty.models import (
     DutyTask,
@@ -25,6 +26,7 @@ from apps.duty.models import (
     DutyRoster,
     DutyRosterTask,
     DutyRosterEntry,
+    DutyAbsenceRecord,
 )
 from apps.duty.services import (
     generate_duty_roster,
@@ -40,7 +42,7 @@ def get_client_ip(request):
 
 @login_required
 def index(request):
-    """值日管理首页"""
+    """值日管理首页：手动小组 + 当前生效方案的当周值日小组"""
     current_class = get_current_class(request.user)
     groups = DutyGroup.objects.filter(
         school_class=current_class, is_active=True
@@ -50,8 +52,66 @@ def index(request):
         school_class=current_class, is_active=True
     ) if current_class else []
 
-    context = {"groups": groups, "tasks": tasks}
+    # 当前生效的智能值日方案 → 按天展示当周各个值日小组
+    roster = None
+    roster_groups = []
+    if current_class:
+        roster = DutyRoster.objects.filter(
+            school_class=current_class, is_current=True, status="active",
+        ).first()
+        if roster:
+            roster_groups = _roster_day_groups(roster)
+
+    context = {
+        "groups": groups, "tasks": tasks,
+        "roster": roster, "roster_groups": roster_groups,
+    }
     return render(request, "duty/index.html", context)
+
+
+def _roster_day_groups(roster):
+    """把生效方案按天构造成小组：日期、组长（is_leader）、按任务的成员。"""
+    roster_tasks = list(
+        DutyRosterTask.objects.filter(roster=roster)
+        .select_related("task").order_by("sort_order", "pk")
+    )
+    entries = list(
+        DutyRosterEntry.objects.filter(roster=roster)
+        .select_related("student", "task")
+        .order_by("day_index", "task__sort_order", "sort_order")
+    )
+    cell_map = defaultdict(list)
+    leaders = {}
+    for entry in entries:
+        cell_map[(entry.day_index, entry.task_id)].append(entry)
+        if entry.is_leader:
+            leaders.setdefault(entry.day_index, entry)
+    dates = get_day_dates(roster.date_start, roster.day_count)
+    weekdays = ["一", "二", "三", "四", "五", "六", "日"]
+    groups = []
+    for day in range(roster.day_count):
+        date_obj = dates[day] if day < len(dates) else None
+        date_label = ""
+        if date_obj:
+            date_label = f"{date_obj.month}月{date_obj.day}日 周{weekdays[date_obj.weekday()]}"
+        tasks = []
+        for rt in roster_tasks:
+            cell_entries = cell_map.get((day, rt.task_id), [])
+            tasks.append({
+                "task": rt.task,
+                "students": [e.student for e in cell_entries],
+            })
+        leader_entry = leaders.get(day)
+        groups.append({
+            "day_index": day,
+            "date": date_obj,
+            "date_label": date_label,
+            "group_name": f"{date_label or f'第{day + 1}天'}值日组",
+            "leader": leader_entry.student if leader_entry else None,
+            "tasks": tasks,
+            "member_count": sum(len(t["students"]) for t in tasks),
+        })
+    return groups
 
 
 @login_required
@@ -542,6 +602,17 @@ def smart_duty_activate(request, pk):
         roster.status = "active"
         roster.is_current = True
         roster.save(update_fields=["status", "is_current", "updated_at"])
+        # 每天小组自动指定第一位学生为组长（可在值日生表页调整）
+        for day in range(roster.day_count):
+            DutyRosterEntry.objects.filter(
+                roster=roster, day_index=day,
+            ).update(is_leader=False)
+            first = DutyRosterEntry.objects.filter(
+                roster=roster, day_index=day,
+            ).order_by("task__sort_order", "sort_order").first()
+            if first:
+                first.is_leader = True
+                first.save(update_fields=["is_leader"])
         messages.success(request, f"「{roster.name}」已设为当前生效方案。")
         _log_operation(request, "edit", roster.name, "设为当前生效值日方案")
     return redirect("duty:smart_duty_finalize", pk=roster.pk)
@@ -634,3 +705,170 @@ def smart_duty_export(request, pk):
     response["Content-Disposition"] = f"attachment; filename*=UTF-8''{quote(filename)}"
     _log_operation(request, "export", roster.name, "导出值日方案 Excel")
     return response
+
+
+# ============ 值日缺勤记录 ============
+
+
+def _sync_absence_points(record):
+    """缺勤记录 → 统一积分明细（source_type=duty），修改扣分时自动更新。"""
+    from apps.rewards.services import sync_source_point
+    sync_source_point(
+        student=record.student,
+        school_class=record.school_class,
+        semester=record.semester,
+        date=record.date,
+        points=-record.points,
+        reason=f"值日缺勤：{record.group_name or record.task_name or '值日'}",
+        source_type="duty",
+        source_id=record.pk,
+    )
+
+
+@login_required
+def duty_absence_list(request):
+    """缺勤记录列表：日期 / 工作 / 小组 / 组长 / 扣分（可修改）"""
+    current_class = get_current_class(request.user)
+    records = DutyAbsenceRecord.objects.filter(
+        school_class=current_class,
+    ).select_related("student", "leader", "task").order_by("-date", "-created_at") if current_class else DutyAbsenceRecord.objects.none()
+
+    paginator = Paginator(records, 20)
+    page = request.GET.get("page", 1)
+    page_obj = paginator.get_page(page)
+
+    students = Student.objects.filter(
+        school_class=current_class, is_deleted=False,
+    ).order_by("name_pinyin", "name") if current_class else []
+    tasks = DutyTask.objects.filter(
+        school_class=current_class, is_active=True,
+    ) if current_class else []
+
+    return render(request, "duty/absence_list.html", {
+        "page_obj": page_obj, "students": students, "tasks": tasks,
+        "today": timezone.localdate(),
+    })
+
+
+@login_required
+@require_current_class
+def duty_absence_add(request):
+    """添加缺勤记录（小组快捷按钮或列表页表单），扣分默认 1 分。"""
+    current_class = get_current_class(request.user)
+    if request.method != "POST":
+        return redirect("duty:absence_list")
+
+    student = get_object_or_404(
+        Student, pk=request.POST.get("student_id", ""),
+        school_class=current_class, is_deleted=False,
+    )
+    date_raw = request.POST.get("date", "") or str(timezone.localdate())
+    from datetime import date as _date
+    try:
+        date = _date.fromisoformat(str(date_raw).strip())
+    except ValueError:
+        messages.error(request, "日期格式不正确。")
+        return redirect(request.META.get("HTTP_REFERER") or "duty:index")
+
+    try:
+        points = max(1, int(request.POST.get("points", "1") or "1"))
+    except (ValueError, TypeError):
+        points = 1
+
+    task = None
+    task_id = request.POST.get("task_id", "")
+    if task_id.isdigit():
+        task = DutyTask.objects.filter(pk=task_id, school_class=current_class).first()
+
+    leader = None
+    leader_id = request.POST.get("leader_id", "")
+    if leader_id.isdigit():
+        leader = Student.objects.filter(pk=leader_id, school_class=current_class).first()
+
+    roster = None
+    roster_id = request.POST.get("roster_id", "")
+    if roster_id.isdigit():
+        roster = DutyRoster.objects.filter(pk=roster_id, school_class=current_class).first()
+
+    record = DutyAbsenceRecord.objects.create(
+        school_class=current_class,
+        semester=Semester.objects.filter(
+            school_class=current_class, is_current=True,
+        ).first(),
+        roster=roster,
+        date=date,
+        task=task,
+        task_name=(task.name if task else request.POST.get("task_name", "")).strip(),
+        group_name=request.POST.get("group_name", "").strip(),
+        student=student,
+        leader=leader,
+        leader_name=(leader.name if leader else request.POST.get("leader_name", "")).strip(),
+        points=points,
+        remark=request.POST.get("remark", "").strip(),
+    )
+    _sync_absence_points(record)
+    OperationLog.objects.create(
+        user=request.user, action="create", module="duty",
+        object_repr=f"{student.name} {date} 缺勤",
+        detail=f"值日缺勤：{record.group_name or record.task_name or '值日'}，扣 {points} 分",
+        ip_address=get_client_ip(request), success=True,
+    )
+    messages.success(request, f"已记录 {student.name} {date} 值日缺勤，扣 {points} 分。")
+    next_url = request.POST.get("next", "")
+    if next_url:
+        return redirect(next_url)
+    return redirect("duty:absence_list")
+
+
+@login_required
+def duty_absence_update_points(request, pk):
+    """修改缺勤扣分（同步更新积分）。"""
+    current_class = get_current_class(request.user)
+    record = get_object_or_404(DutyAbsenceRecord, pk=pk, school_class=current_class)
+    if request.method == "POST":
+        try:
+            points = max(1, int(request.POST.get("points", record.points) or record.points))
+        except (ValueError, TypeError):
+            points = record.points
+        record.points = points
+        record.save(update_fields=["points", "updated_at"])
+        _sync_absence_points(record)
+        messages.success(request, f"{record.student.name} 缺勤扣分已改为 {points} 分。")
+    return redirect("duty:absence_list")
+
+
+@login_required
+def duty_absence_delete(request, pk):
+    """删除缺勤记录（同步撤销积分）。"""
+    current_class = get_current_class(request.user)
+    record = get_object_or_404(DutyAbsenceRecord, pk=pk, school_class=current_class)
+    if request.method == "POST":
+        from apps.rewards.services import unsync_source_point
+        unsync_source_point("duty", record.pk)
+        student_name = record.student.name
+        record.delete()
+        messages.info(request, f"{student_name} 的缺勤记录已删除，积分已撤销。")
+    return redirect("duty:absence_list")
+
+
+@login_required
+@require_current_class
+def duty_set_leader(request, pk):
+    """把某天值日小组的某位学生设为组长。"""
+    current_class = get_current_class(request.user)
+    roster = get_object_or_404(DutyRoster, pk=pk, school_class=current_class)
+    if request.method == "POST":
+        day_index = request.POST.get("day_index", "")
+        student_id = request.POST.get("student_id", "")
+        if day_index.isdigit() and student_id.isdigit():
+            DutyRosterEntry.objects.filter(
+                roster=roster, day_index=int(day_index),
+            ).update(is_leader=False)
+            updated = DutyRosterEntry.objects.filter(
+                roster=roster, day_index=int(day_index), student_id=int(student_id),
+            ).update(is_leader=True)
+            if updated:
+                messages.success(request, "组长已更新。")
+            else:
+                messages.error(request, "该学生不在当天小组中。")
+    return redirect("duty:index")
