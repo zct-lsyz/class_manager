@@ -31,9 +31,9 @@ class StudentForm(forms.ModelForm):
             "dormitory": forms.TextInput(attrs={"class": "form-control"}),
             "bed_number": forms.TextInput(attrs={"class": "form-control"}),
             "primary_contact": forms.TextInput(attrs={"class": "form-control"}),
-            "primary_phone": forms.TextInput(attrs={"class": "form-control", "placeholder": "13800138000", "inputmode": "numeric", "pattern": "[0-9]{11}", "maxlength": "11"}),
+            "primary_phone": forms.TextInput(attrs={"class": "form-control", "placeholder": "请输入11位手机号", "inputmode": "numeric", "pattern": "[0-9]{11}", "maxlength": "11"}),
             "secondary_contact": forms.TextInput(attrs={"class": "form-control"}),
-            "secondary_phone": forms.TextInput(attrs={"class": "form-control", "placeholder": "备用联系电话", "inputmode": "numeric", "pattern": "[0-9]{11}", "maxlength": "11"}),
+            "secondary_phone": forms.TextInput(attrs={"class": "form-control", "placeholder": "请输入11位手机号", "inputmode": "numeric", "pattern": "[0-9]{11}", "maxlength": "11"}),
             "remarks": forms.Textarea(attrs={"class": "form-control", "rows": 3}),
             "sort_order": forms.NumberInput(attrs={"class": "form-control"}),
         }
@@ -89,9 +89,9 @@ class GuardianForm(forms.ModelForm):
         ]
         widgets = {
             "contact_relation": forms.TextInput(attrs={"class": "form-control", "placeholder": "如：母亲"}),
-            "contact_phone": forms.TextInput(attrs={"class": "form-control", "placeholder": "13800138000", "inputmode": "numeric", "pattern": "[0-9]{11}", "maxlength": "11"}),
+            "contact_phone": forms.TextInput(attrs={"class": "form-control", "placeholder": "请输入11位手机号", "inputmode": "numeric", "pattern": "[0-9]{11}", "maxlength": "11"}),
             "backup_relation": forms.TextInput(attrs={"class": "form-control", "placeholder": "如：父亲"}),
-            "backup_phone": forms.TextInput(attrs={"class": "form-control", "placeholder": "13800138000", "inputmode": "numeric", "pattern": "[0-9]{11}", "maxlength": "11"}),
+            "backup_phone": forms.TextInput(attrs={"class": "form-control", "placeholder": "请输入11位手机号", "inputmode": "numeric", "pattern": "[0-9]{11}", "maxlength": "11"}),
             "home_address": forms.Textarea(attrs={"class": "form-control", "rows": 2}),
             "remarks": forms.Textarea(attrs={"class": "form-control", "rows": 2}),
         }
