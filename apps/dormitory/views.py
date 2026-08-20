@@ -402,7 +402,7 @@ def _create_hygiene_deductions(current_class, current_semester, check, students,
             sync_source_point(
                 student=st, school_class=current_class,
                 semester=current_semester, date=record.date,
-                points=-deduction, reason=f"卫生检查：{check.room} 卫生不达标",
+                points=-deduction, reason=item_name,
                 source_type="dorm_discipline", source_id=record.pk,
             )
             created += 1
@@ -441,39 +441,39 @@ def hygiene_create(request):
                     photo.stored_size = image_file.size
                     photo.save()
 
-                # 保存父记录后再写项目得分：勾选扣分原因（复选框）→
-                # 扣分分数（填空，默认跟随项目默认扣分）→ 得分 = 满分 - 扣分
+                # 保存父记录后写项目得分：扣分事项（下拉）→ 扣分分数 → 得分 = 满分 - 扣分
                 total = 0
                 deduction = 0
-                checked_ids = [
-                    int(x) for x in request.POST.getlist("deduct_items") if x.isdigit()
-                ]
-                for item in items:
-                    if item.pk not in checked_ids:
-                        continue
-                    raw = request.POST.get(f"deduct_{item.pk}", "").strip()
+                checked_item = None
+                item_id = request.POST.get("deduct_item", "")
+                if item_id.isdigit():
+                    checked_item = next(
+                        (i for i in items if i.pk == int(item_id)), None,
+                    )
+                if checked_item:
+                    raw = request.POST.get("deduct_points", "").strip()
                     try:
-                        deduct = int(raw) if raw else item.default_deduction
+                        deduct = int(raw) if raw else checked_item.default_deduction
                     except (ValueError, TypeError):
-                        deduct = item.default_deduction
-                    deduct = max(0, min(deduct, item.full_score))
-                    score = item.full_score - deduct
-                    total += score
-                    deduction += deduct
+                        deduct = checked_item.default_deduction
+                    deduct = max(0, min(deduct, checked_item.full_score))
+                    score = checked_item.full_score - deduct
+                    total = score
+                    deduction = deduct
                     DormHygieneItemScore.objects.create(
-                        check_record=check, item=item, score=score,
-                        deduction_reason=f"{item.name}扣{deduct}分" if deduct else "",
+                        check_record=check, item=checked_item, score=score,
+                        deduction_reason=f"{checked_item.name}扣{deduct}分" if deduct else "",
                     )
                 check.total_score = total
                 if items:
                     full = sum(item.full_score for item in items)
                     if full > 0:
-                        ratio = total / full
-                        if ratio >= 0.9:
+                        deduct_ratio = deduction / full
+                        if deduct_ratio == 0:
                             check.grade = "excellent"
-                        elif ratio >= 0.8:
+                        elif deduct_ratio <= 0.1:
                             check.grade = "good"
-                        elif ratio >= 0.6:
+                        elif deduct_ratio <= 0.2:
                             check.grade = "fair"
                         else:
                             check.grade = "poor"
@@ -494,8 +494,10 @@ def hygiene_create(request):
                 else:
                     students = Student.objects.none()
                 if students.exists():
+                    item_name = f"{checked_item.name}不合格" if checked_item else "卫生检查不达标"
                     deducted_count = _create_hygiene_deductions(
                         current_class, current_semester, check, students, deduction,
+                        item_name=item_name,
                     )
                     OperationLog.objects.create(
                         user=request.user, action="create", module="dormitory",

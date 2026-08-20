@@ -26,6 +26,7 @@ urlpatterns = [
     path("absence/add/", views.duty_absence_add, name="absence_add"),
     path("absence/<int:pk>/points/", views.duty_absence_update_points, name="absence_update_points"),
     path("absence/<int:pk>/delete/", views.duty_absence_delete, name="absence_delete"),
-    # 方案小组组长
+    # 方案小组组长 / 修改当天小组
     path("roster/<int:pk>/set-leader/", views.duty_set_leader, name="set_leader"),
+    path("roster/<int:pk>/update-day/", views.duty_update_day, name="update_day"),
 ]

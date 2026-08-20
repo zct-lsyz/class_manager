@@ -33,22 +33,23 @@
     </div>
 
     {% if items %}
-    <div class="card-header">扣分原因与扣分分数</div>
+    <div class="card-header">扣分事项</div>
     <div class="card-body">
-        <div class="form-text mb-3">勾选扣分原因后，扣分分数会自动填入该项目的默认扣分，可手动修改；未勾选的项目不扣分。</div>
         <div class="row g-3">
-            {% for item in items %}
-            <div class="col-md-3">
-                <div class="form-check">
-                    <input class="form-check-input" type="checkbox" name="deduct_items" value="{{ item.pk }}"
-                        id="deductItem{{ item.pk }}" data-deduction="{{ item.default_deduction }}">
-                    <label class="form-check-label small" for="deductItem{{ item.pk }}">{{ item.name }}（满分 {{ item.full_score }}）</label>
-                </div>
-                <input type="number" name="deduct_{{ item.pk }}" id="deduct_{{ item.pk }}" class="form-control form-control-sm mt-1"
-                    min="0" max="{{ item.full_score }}" placeholder="扣分分数">
-                <div class="form-text small text-muted">默认扣 {{ item.default_deduction }} 分</div>
+            <div class="col-md-4">
+                <label class="form-label small">扣分事项</label>
+                <select name="deduct_item" id="deductItemSelect" class="form-select">
+                    <option value="">— 不扣分 —</option>
+                    {% for item in items %}
+                    <option value="{{ item.pk }}" data-deduction="{{ item.default_deduction }}">{{ item.name }}（满分 {{ item.full_score }}，默认扣 {{ item.default_deduction }} 分）</option>
+                    {% endfor %}
+                </select>
             </div>
-            {% endfor %}
+            <div class="col-md-3">
+                <label class="form-label small">扣分分数</label>
+                <input type="number" name="deduct_points" id="deductPoints" class="form-control" min="1" placeholder="选择事项后自动填入">
+            </div>
+            <div class="col-12 form-text">选择扣分事项后，扣分分数自动填入该事项的默认扣分，可手动修改；不选择事项则不扣分。扣分将以具体事项（如「床铺不合格」）同步到积分排名与纪律记录。</div>
         </div>
     </div>
     {% endif %}
@@ -66,13 +67,13 @@
 <script>
 const ROOM_STUDENTS = JSON.parse(document.getElementById('room-students-data').textContent);
 (function() {
-    // 勾选扣分原因 → 自动填入该项目的默认扣分分数
-    document.querySelectorAll('input[name="deduct_items"]').forEach(function(cb) {
-        cb.addEventListener('change', function() {
-            var input = document.getElementById('deduct_' + cb.value);
-            if (!input) return;
-            input.value = cb.checked ? cb.dataset.deduction : '';
-        });
+    // 选择扣分事项 → 自动填入该事项的默认扣分分数
+    var sel = document.getElementById('deductItemSelect');
+    var input = document.getElementById('deductPoints');
+    if (!sel || !input) return;
+    sel.addEventListener('change', function() {
+        var opt = sel.options[sel.selectedIndex];
+        input.value = opt && opt.value ? opt.dataset.deduction : '';
     });
 })();
 (function() {

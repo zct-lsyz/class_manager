@@ -11,32 +11,28 @@
     <div class="card-body">
         <form method="post" action="{% url 'duty:absence_add' %}" class="row g-2 align-items-end">
             {% csrf_token %}
-            <div class="col-md-2">
+            <div class="col-md-3">
                 <label class="form-label small">缺勤日期</label>
                 <input type="date" name="date" class="form-control form-control-sm" value="{{ today|date:'Y-m-d' }}">
             </div>
-            <div class="col-md-3">
+            <div class="col-md-4">
                 <label class="form-label small">缺勤学生</label>
                 <select name="student_id" class="form-select form-select-sm" required>
                     {% for s in students %}<option value="{{ s.pk }}">{{ s.name }}</option>{% endfor %}
-                </select>
-            </div>
-            <div class="col-md-3">
-                <label class="form-label small">当天负责的工作</label>
-                <select name="task_id" class="form-select form-select-sm">
-                    <option value="">— 选择任务 —</option>
-                    {% for t in tasks %}<option value="{{ t.pk }}">{{ t.name }}</option>{% endfor %}
                 </select>
             </div>
             <div class="col-md-2">
                 <label class="form-label small">扣分（默认1分）</label>
                 <input type="number" name="points" value="1" min="1" class="form-control form-control-sm">
             </div>
-            <div class="col-md-2">
+            <div class="col-md-3">
                 <button class="btn btn-danger btn-sm w-100"><i class="bi bi-plus-lg"></i> 添加</button>
             </div>
+            <div class="col-12 form-text">
+                系统会根据当前生效的值日方案、缺勤日期和缺勤学生，自动匹配其当天负责的工作、所在小组和组长，无需手动选择。
+                扣分自动同步到积分排名；累计缺勤达到预警规则阈值时会在工作台「预警管理」中提示。
+            </div>
         </form>
-        <div class="form-text mt-2">扣分自动同步到积分排名；累计缺勤达到预警规则阈值时，会在工作台「预警管理」中提示。</div>
     </div>
 </div>
 
@@ -62,17 +58,11 @@
                     <td>{{ r.group_name|default:"-" }}</td>
                     <td>{{ r.leader_name|default:"-" }}</td>
                     <td><strong>{{ r.student.name }}</strong></td>
-                    <td>
-                        <form method="post" action="{% url 'duty:absence_update_points' r.pk %}" class="d-flex gap-1">
-                            {% csrf_token %}
-                            <input type="number" name="points" value="{{ r.points }}" min="1" class="form-control form-control-sm" style="width:70px">
-                            <button class="btn btn-sm btn-outline-primary">保存</button>
-                        </form>
-                    </td>
+                    <td><span class="badge bg-danger">-{{ r.points }}</span></td>
                     <td>
                         <form method="post" action="{% url 'duty:absence_delete' r.pk %}" class="d-inline" onsubmit="return confirm('确认删除该缺勤记录？对应积分将同步撤销。')">
                             {% csrf_token %}
-                            <button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
+                            <button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i> 删除</button>
                         </form>
                     </td>
                 </tr>

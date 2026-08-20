@@ -30,6 +30,14 @@
                         <i class="bi bi-people me-1"></i>班级 {{ student_count }} 人
                     </span>
                 </div>
+                <div class="col-12">
+                    <label class="form-label small">是否使用已分配小组</label>
+                    <select name="use_groups" class="form-select" style="max-width:360px">
+                        <option value="0">否（随机公平轮值）</option>
+                        <option value="1">是（同组尽量同一天值日）</option>
+                    </select>
+                    <div class="form-text">选「是」：同组同学尽量安排在同一天值日；若组员人数超过每天所需人数，优先安排上周方案中未值日的同学。</div>
+                </div>
             </div>
 
             <label class="form-label small">值日任务（点击标签旁的 × 可移除；「+」可添加自定义任务）</label>
