@@ -398,6 +398,7 @@ def _create_hygiene_deductions(current_class, current_semester, check, students,
                 points_deducted=deduction,
                 needs_follow_up=False,
                 remarks="",
+                source_check=check,
             )
             sync_source_point(
                 student=st, school_class=current_class,
@@ -543,13 +544,26 @@ def hygiene_delete(request, pk):
         DormHygieneCheck, pk=pk, school_class=current_class, is_deleted=False,
     )
     if request.method == "POST":
+        # 同步处理的纪律扣分记录：撤销积分并一并软删除
+        from apps.discipline.models import DormDisciplineRecord
+        from apps.audit.services import _linked_discipline_records
+        for record in _linked_discipline_records(check):
+            from apps.rewards.services import unsync_source_point
+            unsync_source_point("dorm_discipline", record.pk)
+            if not record.is_deleted:
+                soft_delete(
+                    record,
+                    user=request.user,
+                    module="dormitory",
+                    model_name="dormdiscipline",
+                )
         soft_delete(
             check,
             user=request.user,
             module="dormitory",
             model_name="hygienecheck",
         )
-        messages.info(request, "卫生检查已移入回收站。")
+        messages.info(request, "卫生检查已移入回收站，关联扣分与积分已同步撤销。")
     return redirect("dormitory:hygiene")
 
 

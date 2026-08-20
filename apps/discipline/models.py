@@ -149,6 +149,12 @@ class DormDisciplineRecord(BaseModel):
     follow_up_result = models.TextField("整改结果", blank=True, default="")
     remarks = models.TextField("备注", blank=True, default="")
     is_deleted = models.BooleanField("已删除", default=False)
+    # 卫生检查同步产生的扣分记录关联（用于删除检查时联动撤销纪律与积分）
+    source_check = models.ForeignKey(
+        "dormitory.DormHygieneCheck", on_delete=models.SET_NULL,
+        null=True, blank=True, related_name="discipline_records",
+        verbose_name="来源卫生检查",
+    )
 
     class Meta:
         verbose_name = "宿舍纪律"

@@ -528,8 +528,22 @@ def _delete(instance, spec, user, confirmation=""):
         return
     if spec.key == "homework_tasks":
         from apps.todos.services import remove_follow_up_todo
+        from apps.rewards.services import unsync_source_point
         remove_follow_up_todo(instance)
+        for record in instance.records.all():
+            unsync_source_point("homework", record.pk)
         instance.delete()
+        return
+    if spec.key == "hygiene_checks":
+        # 卫生检查删除：撤销关联纪律扣分的积分
+        from apps.dormitory.models import DormDisciplineRecord
+        from apps.audit.services import _linked_discipline_records
+        from apps.rewards.services import unsync_source_point
+        for record in _linked_discipline_records(instance):
+            unsync_source_point("dorm_discipline", record.pk)
+            record.is_deleted = True
+            record.save(update_fields=["is_deleted", "updated_at"])
+        instance.soft_delete()
         return
     if spec.key == "homework_records":
         from apps.rewards.services import unsync_source_point

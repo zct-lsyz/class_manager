@@ -104,6 +104,10 @@ def task_delete(request, pk):
     if request.method == "POST":
         title = task.title
         record_count = task.records.count()
+        # 撤销该作业所有完成记录对应的积分
+        from apps.rewards.services import unsync_source_point
+        for record in task.records.all():
+            unsync_source_point("homework", record.pk)
         task.delete()
         remove_follow_up_todo(task)
         from apps.audit.models import OperationLog
