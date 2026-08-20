@@ -16,40 +16,9 @@
                     {% csrf_token %}
                     <div class="row">
                         <div class="col-md-6 mb-3">
-                            <label class="form-label small">{{ form.father_name.label }}</label>
-                            {{ form.father_name }}
-                        </div>
-                        <div class="col-md-6 mb-3">
-                            <label class="form-label small">{{ form.father_phone.label }}</label>
-                            {{ form.father_phone }}
-                            {% if form.father_phone.errors %}<div class="text-danger small">{{ form.father_phone.errors.0 }}</div>{% endif %}
-                        </div>
-                    </div>
-                    <div class="row">
-                        <div class="col-md-6 mb-3">
-                            <label class="form-label small">{{ form.mother_name.label }}</label>
-                            {{ form.mother_name }}
-                        </div>
-                        <div class="col-md-6 mb-3">
-                            <label class="form-label small">{{ form.mother_phone.label }}</label>
-                            {{ form.mother_phone }}
-                            {% if form.mother_phone.errors %}<div class="text-danger small">{{ form.mother_phone.errors.0 }}</div>{% endif %}
-                        </div>
-                    </div>
-                    <div class="row">
-                        <div class="col-md-6 mb-3">
-                            <label class="form-label small">{{ form.other_guardian.label }}</label>
-                            {{ form.other_guardian }}
-                        </div>
-                        <div class="col-md-6 mb-3">
-                            <label class="form-label small">{{ form.primary_contact.label }}</label>
-                            {{ form.primary_contact }}
-                        </div>
-                    </div>
-                    <div class="row">
-                        <div class="col-md-6 mb-3">
                             <label class="form-label small">{{ form.contact_relation.label }}</label>
                             {{ form.contact_relation }}
+                            {% if form.contact_relation.errors %}<div class="text-danger small">{{ form.contact_relation.errors.0 }}</div>{% endif %}
                         </div>
                         <div class="col-md-6 mb-3">
                             <label class="form-label small">{{ form.contact_phone.label }}</label>
@@ -61,6 +30,7 @@
                         <div class="col-md-6 mb-3">
                             <label class="form-label small">{{ form.backup_relation.label }}</label>
                             {{ form.backup_relation }}
+                            {% if form.backup_relation.errors %}<div class="text-danger small">{{ form.backup_relation.errors.0 }}</div>{% endif %}
                         </div>
                         <div class="col-md-6 mb-3">
                             <label class="form-label small">{{ form.backup_phone.label }}</label>

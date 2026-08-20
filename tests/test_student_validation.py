@@ -30,9 +30,9 @@ class StudentValidationTests(TestCase):
         self.assertIn("primary_phone", form.errors)
 
     def test_guardian_form_rejects_invalid_phone(self):
-        form = GuardianForm(data={"father_phone": "1234567890"})
+        form = GuardianForm(data={"contact_phone": "1234567890"})
         self.assertFalse(form.is_valid())
-        self.assertIn("father_phone", form.errors)
+        self.assertIn("contact_phone", form.errors)
 
     def test_student_import_rejects_invalid_formats(self):
         valid_rows, errors = validate_students([{

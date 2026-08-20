@@ -563,6 +563,17 @@ def guardian_edit(request, pk):
             return redirect("students:guardian_list")
     else:
         form = GuardianForm(instance=guardian)
+        # 旧数据/未填写时，回填学生表里已导入的联系人信息
+        student = guardian.student
+        initial = form.initial
+        if not initial.get("contact_relation"):
+            initial["contact_relation"] = student.primary_contact
+        if not initial.get("contact_phone"):
+            initial["contact_phone"] = student.primary_phone
+        if not initial.get("backup_relation"):
+            initial["backup_relation"] = student.secondary_contact
+        if not initial.get("backup_phone"):
+            initial["backup_phone"] = student.secondary_phone
     return render(request, "students/guardian_form.html", {
         "form": form, "guardian": guardian,
     })
@@ -570,7 +581,7 @@ def guardian_edit(request, pk):
 
 @login_required
 def guardian_create(request, student_pk):
-    """为指定学生创建家长联系方式"""
+    """为指定学生创建家长联系方式（自动回填学生表已导入的联系人信息）"""
     current_class = get_current_class(request.user)
     student = get_object_or_404(Student, pk=student_pk, school_class=current_class)
     if request.method == "POST":
@@ -583,7 +594,12 @@ def guardian_create(request, student_pk):
             messages.success(request, f"{student.name} 的家长信息已添加。")
             return redirect("students:detail", pk=student.pk)
     else:
-        form = GuardianForm()
+        form = GuardianForm(initial={
+            "contact_relation": student.primary_contact,
+            "contact_phone": student.primary_phone,
+            "backup_relation": student.secondary_contact,
+            "backup_phone": student.secondary_phone,
+        })
     return render(request, "students/guardian_form.html", {
         "form": form, "student": student,
     })
