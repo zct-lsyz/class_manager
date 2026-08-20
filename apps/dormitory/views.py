@@ -91,25 +91,31 @@ def building_edit(request, pk):
 
 @login_required
 def building_delete(request, pk):
-    """删除宿舍楼（楼内还有学生住宿时拒绝）"""
+    """删除宿舍楼。
+
+    楼内还有学生住宿时，先自动释放这些学生的床位
+    （清空其 dormitory/bed_number 字段），再删除整栋楼。
+    """
     current_class = get_current_class(request.user)
     building = get_object_or_404(DormBuilding, pk=pk, school_class=current_class)
     if request.method == "POST":
-        active = DormAssignment.objects.filter(
+        # 释放楼内当前住宿的学生：清空宿舍/床位字段
+        active_assignments = list(DormAssignment.objects.filter(
             room__building=building, is_current=True,
-        ).exists()
-        if active:
-            messages.error(
-                request,
-                f"宿舍楼「{building.name}」下还有学生住宿，请先清空该楼全部床位再删除。",
+        ).select_related("student"))
+        student_ids = [a.student_id for a in active_assignments]
+        if student_ids:
+            Student.objects.filter(pk__in=student_ids).update(
+                dormitory="", bed_number="", updated_at=timezone.now(),
             )
-        else:
-            room_count = DormRoom.objects.filter(building=building).count()
-            building.delete()  # 级联删除楼下的宿舍、床位及历史分配
-            messages.success(
-                request,
-                f"宿舍楼「{building.name}」已删除（含 {room_count} 间宿舍）。",
-            )
+        room_count = DormRoom.objects.filter(building=building).count()
+        building.delete()  # 级联删除楼下的宿舍、床位及分配记录
+        released = len(student_ids)
+        messages.success(
+            request,
+            f"宿舍楼「{building.name}」已删除（含 {room_count} 间宿舍）"
+            + (f"，已释放 {released} 名学生的床位。" if released else "。"),
+        )
     return redirect("dormitory:index")
 
 

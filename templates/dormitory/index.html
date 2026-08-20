@@ -24,7 +24,7 @@
         <span><i class="bi bi-building me-1"></i>{{ b.name }}（{{ b.floors }}层）</span>
         <span class="text-nowrap">
             <a href="{% url 'dormitory:building_edit' b.pk %}" class="btn btn-sm btn-outline-primary"><i class="bi bi-pencil"></i> 修改楼栋</a>
-            <form method="post" action="{% url 'dormitory:building_delete' b.pk %}" class="d-inline" onsubmit="return confirm('确认删除宿舍楼「{{ b.name }}」及其全部宿舍/床位？楼内有学生住宿时将无法删除。')">
+            <form method="post" action="{% url 'dormitory:building_delete' b.pk %}" class="d-inline" onsubmit="return confirm('确认删除宿舍楼「{{ b.name }}」及其全部宿舍/床位？楼内学生的住宿信息将一并清除。')">
                 {% csrf_token %}
                 <button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i> 删除</button>
             </form>
