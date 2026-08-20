@@ -42,36 +42,42 @@
                     </tr>
                 </thead>
                 <tbody>
-                    {% for guardian in page_obj %}
+                    {% for row in page_obj %}
                     <tr>
                         <td>
-                            <a href="{% url 'students:detail' guardian.student.pk %}" class="text-decoration-none">
-                                {{ guardian.student.name }}
+                            <a href="{% url 'students:detail' row.student.pk %}" class="text-decoration-none">
+                                {{ row.student.name }}
                             </a>
                         </td>
-                        <td>{{ guardian.display_contact_relation|default:"-" }}</td>
+                        <td>{{ row.contact_relation|default:"-" }}</td>
                         <td>
-                            {% if guardian.display_contact_phone %}
-                            {{ guardian.display_contact_phone|slice:":3" }}****{{ guardian.display_contact_phone|slice:"-4:" }}
+                            {% if row.contact_phone %}
+                            {{ row.contact_phone|slice:":3" }}****{{ row.contact_phone|slice:"-4:" }}
                             {% else %}-{% endif %}
                         </td>
-                        <td>{{ guardian.display_backup_relation|default:"-" }}</td>
+                        <td>{{ row.backup_relation|default:"-" }}</td>
                         <td>
-                            {% if guardian.display_backup_phone %}
-                            {{ guardian.display_backup_phone|slice:":3" }}****{{ guardian.display_backup_phone|slice:"-4:" }}
+                            {% if row.backup_phone %}
+                            {{ row.backup_phone|slice:":3" }}****{{ row.backup_phone|slice:"-4:" }}
                             {% else %}-{% endif %}
                         </td>
                         <td>
-                            <a href="{% url 'students:guardian_edit' guardian.pk %}" class="btn btn-sm btn-outline-primary">
-                                <i class="bi bi-pencil"></i> 编辑
+                            {% if row.guardian %}
+                            <a href="{% url 'students:guardian_edit' row.guardian.pk %}" class="btn btn-sm btn-outline-primary">
+                                <i class="bi bi-pencil"></i> 修改
                             </a>
+                            {% else %}
+                            <a href="{% url 'students:guardian_create' row.student.pk %}" class="btn btn-sm btn-outline-secondary">
+                                <i class="bi bi-plus-lg"></i> 添加
+                            </a>
+                            {% endif %}
                         </td>
                     </tr>
                     {% empty %}
                     <tr>
                         <td colspan="6" class="text-center text-muted py-4">
                             <i class="bi bi-telephone d-block fs-3 mb-2"></i>
-                            暂无家长联系方式数据。
+                            暂无学生数据。
                         </td>
                     </tr>
                     {% endfor %}

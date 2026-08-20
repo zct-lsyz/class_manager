@@ -106,6 +106,16 @@
                 <a href="{% url 'students:guardian_edit' guardian.pk %}" class="btn btn-outline-primary btn-sm">
                     <i class="bi bi-pencil me-1"></i>编辑
                 </a>
+                {% elif student.primary_contact or student.primary_phone or student.secondary_contact or student.secondary_phone %}
+                <table class="table table-borderless">
+                    <tr><td class="text-muted" style="width:120px">联系人关系</td><td>{{ student.primary_contact|default:"未填写" }}</td></tr>
+                    <tr><td class="text-muted">联系人电话</td><td>{% if student.primary_phone %}{{ student.primary_phone|slice:":3" }}****{{ student.primary_phone|slice:"-4:" }}{% else %}未填写{% endif %}</td></tr>
+                    <tr><td class="text-muted">备用联系人关系</td><td>{{ student.secondary_contact|default:"未填写" }}</td></tr>
+                    <tr><td class="text-muted">备用联系人电话</td><td>{% if student.secondary_phone %}{{ student.secondary_phone|slice:":3" }}****{{ student.secondary_phone|slice:"-4:" }}{% else %}未填写{% endif %}</td></tr>
+                </table>
+                <a href="{% url 'students:guardian_create' student.pk %}" class="btn btn-outline-primary btn-sm">
+                    <i class="bi bi-plus-lg me-1"></i>完善家长信息
+                </a>
                 {% else %}
                 <div class="text-center py-4 text-muted">
                     <i class="bi bi-telephone d-block fs-1 mb-2"></i>

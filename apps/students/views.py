@@ -497,20 +497,47 @@ def history_detail(request, module, pk):
 
 @login_required
 def guardian_list(request):
-    """家长联系方式列表（仅本班）"""
+    """家长联系方式列表（仅本班）。
+
+    每个学生一行：优先显示家长记录，没有家长记录时回退到学生表
+    的联系人字段（旧版导入只写入了学生表），字段为空显示 -。
+    """
     current_class = get_current_class(request.user)
-    guardians = Guardian.objects.select_related("student").filter(
-        student__school_class=current_class,
-    ).order_by("student__name_pinyin", "student__name", "student__student_id")
+    students = Student.objects.filter(
+        school_class=current_class, is_deleted=False,
+    ).order_by("name_pinyin", "name", "student_id")
 
     search = request.GET.get("search", "")
     if search:
-        guardians = guardians.filter(
-            Q(student__name__icontains=search) |
-            Q(student__student_id__icontains=search)
+        students = students.filter(
+            Q(name__icontains=search) | Q(student_id__icontains=search)
         )
 
-    paginator = Paginator(guardians, 20)
+    guardian_map = {
+        g.student_id: g
+        for g in Guardian.objects.filter(student__in=students, is_deleted=False)
+    }
+    rows = []
+    for s in students:
+        g = guardian_map.get(s.pk)
+        if g:
+            rel = g.display_contact_relation
+            phone = g.display_contact_phone
+            brel = g.display_backup_relation
+            bphone = g.display_backup_phone
+        else:
+            rel, phone = s.primary_contact, s.primary_phone
+            brel, bphone = s.secondary_contact, s.secondary_phone
+        rows.append({
+            "student": s,
+            "guardian": g,
+            "contact_relation": "" if rel == "未设置" else (rel or ""),
+            "contact_phone": phone or "",
+            "backup_relation": brel or "",
+            "backup_phone": bphone or "",
+        })
+
+    paginator = Paginator(rows, 20)
     page = request.GET.get("page", 1)
     page_obj = paginator.get_page(page)
 
