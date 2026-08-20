@@ -29,12 +29,10 @@ class DormBuildingForm(forms.ModelForm):
 class DormRoomForm(forms.ModelForm):
     class Meta:
         model = DormRoom
-        fields = ["building", "room_number", "floor", "room_type", "bed_count", "monitor", "is_active", "remarks"]
+        fields = ["building", "room_number", "bed_count", "monitor", "is_active", "remarks"]
         widgets = {
             "building": forms.Select(attrs={"class": "form-select"}),
             "room_number": forms.TextInput(attrs={"class": "form-control"}),
-            "floor": forms.NumberInput(attrs={"class": "form-control"}),
-            "room_type": forms.Select(attrs={"class": "form-select"}),
             "bed_count": forms.NumberInput(attrs={"class": "form-control"}),
             "monitor": forms.Select(attrs={"class": "form-select"}),
             "is_active": forms.CheckboxInput(attrs={"class": "form-check-input"}),

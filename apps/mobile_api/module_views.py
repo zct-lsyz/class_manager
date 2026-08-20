@@ -703,8 +703,8 @@ def dorm_overview(request):
         }
         room_rows.append({
             "id": room.pk, "building_id": room.building_id, "building": room.building.name,
-            "room_number": room.room_number, "floor": room.floor,
-            "room_type": room.room_type, "bed_count": room.bed_count,
+            "room_number": room.room_number,
+            "bed_count": room.bed_count,
             "monitor_id": room.monitor_id, "monitor_name": room.monitor.name if room.monitor else "",
             "active": room.is_active, "remarks": room.remarks,
             "beds": [{

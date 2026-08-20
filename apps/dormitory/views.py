@@ -1,4 +1,4 @@
-﻿from django.contrib import messages
+from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.shortcuts import render, redirect, get_object_or_404
 from django.core.paginator import Paginator
@@ -74,6 +74,47 @@ def building_create(request):
 
 @login_required
 @require_current_class
+def building_edit(request, pk):
+    """修改宿舍楼信息（楼栋名称、层数、排序）"""
+    current_class = get_current_class(request.user)
+    building = get_object_or_404(DormBuilding, pk=pk, school_class=current_class)
+    if request.method == "POST":
+        form = DormBuildingForm(request.POST, instance=building)
+        if form.is_valid():
+            form.save()
+            messages.success(request, f"宿舍楼「{building.name}」已更新。")
+            return redirect("dormitory:index")
+    else:
+        form = DormBuildingForm(instance=building)
+    return render(request, "dormitory/building_form.html", {"form": form, "building": building})
+
+
+@login_required
+def building_delete(request, pk):
+    """删除宿舍楼（楼内还有学生住宿时拒绝）"""
+    current_class = get_current_class(request.user)
+    building = get_object_or_404(DormBuilding, pk=pk, school_class=current_class)
+    if request.method == "POST":
+        active = DormAssignment.objects.filter(
+            room__building=building, is_current=True,
+        ).exists()
+        if active:
+            messages.error(
+                request,
+                f"宿舍楼「{building.name}」下还有学生住宿，请先清空该楼全部床位再删除。",
+            )
+        else:
+            room_count = DormRoom.objects.filter(building=building).count()
+            building.delete()  # 级联删除楼下的宿舍、床位及历史分配
+            messages.success(
+                request,
+                f"宿舍楼「{building.name}」已删除（含 {room_count} 间宿舍）。",
+            )
+    return redirect("dormitory:index")
+
+
+@login_required
+@require_current_class
 def room_create(request):
     """新建宿舍（并自动生成床位）"""
     current_class = get_current_class(request.user)
@@ -89,6 +130,45 @@ def room_create(request):
         form = DormRoomForm()
         form.fields["building"].queryset = DormBuilding.objects.filter(school_class=current_class)
     return render(request, "dormitory/room_form.html", {"form": form})
+
+
+@login_required
+@transaction.atomic
+def room_edit(request, pk):
+    """修改宿舍（房间号、床位数、宿舍长、启用、备注）。
+
+    床位数减少时，超出部分床位若未被占用则删除；若被占用则拒绝减少。
+    """
+    current_class = get_current_class(request.user)
+    room = get_object_or_404(DormRoom, pk=pk, building__school_class=current_class)
+    if request.method == "POST":
+        form = DormRoomForm(request.POST, instance=room)
+        # 注意：必须在 form.is_valid() 之前记录旧床位数——
+        # ModelForm 校验时会把表单数据写入实例，之后再读会拿到新值
+        old_bed_count = room.bed_count
+        if form.is_valid():
+            room = form.save()
+            if room.bed_count < old_bed_count:
+                excess = list(DormBed.objects.filter(room=room, is_active=True).order_by("-bed_number")[: old_bed_count - room.bed_count])
+                occupied_ids = set(DormAssignment.objects.filter(
+                    bed__in=excess, is_current=True,
+                ).values_list("bed_id", flat=True))
+                if occupied_ids:
+                    messages.error(request, "床位数不能小于已占用床位数量，请先调整学生床位后再减少。")
+                    room.bed_count = old_bed_count
+                    room.save(update_fields=["bed_count", "updated_at"])
+                else:
+                    for bed in excess:
+                        bed.delete()
+                    messages.success(request, f"宿舍 {room.room_number} 已更新（{room.bed_count} 床）。")
+            else:
+                _generate_beds(room)  # 床位数增加时自动补齐床位
+                messages.success(request, f"宿舍 {room.room_number} 已更新（{room.bed_count} 床）。")
+            return redirect("dormitory:index")
+    else:
+        form = DormRoomForm(instance=room)
+        form.fields["building"].queryset = DormBuilding.objects.filter(school_class=current_class)
+    return render(request, "dormitory/room_form.html", {"form": form, "room": room})
 
 
 def _generate_beds(room):

@@ -18,9 +18,6 @@ from apps.students.validators import PHONE_PATTERN, STUDENT_ID_PATTERN
 PHONE_RE = re.compile(PHONE_PATTERN)
 STUDENT_ID_RE = re.compile(STUDENT_ID_PATTERN)
 
-# 导入学生信息时，宿舍号中的默认宿舍楼名
-DEFAULT_DORM_BUILDING = "一栋"
-
 
 def _parse_dormitory(dormitory_str):
     """解析宿舍字符串，返回 (楼名, 房间号)。
@@ -61,9 +58,10 @@ def _sync_dormitory_assignment(student, school_class):
     if not student.dormitory:
         return
     building_name, room_number = _parse_dormitory(student.dormitory)
-    if not room_number:
+    # 楼栋和房间号都为空（或只填了房间号、解析不出楼栋）视为不住宿，
+    # 不再默认分配「一栋」，避免产生奇怪的宿舍记录
+    if not room_number or not building_name:
         return
-    building_name = building_name or DEFAULT_DORM_BUILDING
 
     from apps.dormitory.models import DormBuilding, DormRoom, DormBed, DormAssignment
 
@@ -247,8 +245,8 @@ def import_students(valid_rows, school_class):
         )
         if student_id:
             existing_ids.add(student_id)
-        # 花名册导入同样自动生成宿舍分配，避免「学生信息有宿舍/床位，宿舍管理里却没有」
-        if item.get("dormitory") or item.get("bed_number"):
+        # 花名册导入同样自动生成宿舍分配；楼栋/房间都为空视为不住宿，不分配
+        if item.get("dormitory"):
             _sync_dormitory_assignment(student, school_class)
         created += 1
     return created
@@ -424,6 +422,7 @@ def validate_student_info(data_rows, school_class=None):
             "home_address": str(row.get("家庭住址", "") or "").strip(),
             "is_league_member": is_league_member,
             "is_boarder": is_boarder,
+            "boarder_explicit": bool(boarder_raw),
             "dormitory": dormitory,
             "bed_number": bed_number,
             "primary_contact": str(row.get("联系人关系", "") or "").strip(),
@@ -477,9 +476,14 @@ def import_student_info(valid_rows, school_class):
         created += 1
         # 根据导入的联系人关系自动匹配创建家长记录
         _create_guardian_from_import(student, item)
-        # 有宿舍/床号时自动创建宿舍楼/宿舍/床位并分配
-        if item.get("dormitory") or item.get("bed_number"):
+        # 宿舍分配：只有填了宿舍（楼栋/房间号）才自动创建楼/房/床位并分配；
+        # 楼栋和房间号都为空视为不住宿，不分配任何宿舍
+        if item.get("dormitory"):
             _sync_dormitory_assignment(student, school_class)
+        elif not item.get("boarder_explicit"):
+            # 未显式填写「是否住校」且无宿舍信息 → 按不住宿处理
+            student.is_boarder = False
+            student.save(update_fields=["is_boarder", "updated_at"])
     return created
 
 

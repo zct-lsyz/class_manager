@@ -170,8 +170,8 @@ def collect_module_data(module, current_class):
             rows = []
             for room in rooms:
                 beds = "、".join(DormBed.objects.filter(room=room).values_list("bed_number", flat=True))
-                rows.append([room.building.name, room.room_number, room.floor, room.get_room_type_display(), room.bed_count, beds, room.monitor.name if room.monitor else "", room.is_active, room.remarks])
-            return _result(rows, ["宿舍楼", "房间", "楼层", "类型", "床位数", "床位编号", "宿舍长", "启用", "备注"], "宿舍与床位", "dorm_rooms.xlsx")
+                rows.append([room.building.name, room.room_number, room.bed_count, beds, room.monitor.name if room.monitor else "", room.is_active, room.remarks])
+            return _result(rows, ["宿舍楼", "房间", "床位数", "床位编号", "宿舍长", "启用", "备注"], "宿舍与床位", "dorm_rooms.xlsx")
         if module == "dorm_assignments":
             queryset = DormAssignment.objects.select_related("student", "room__building", "bed", "semester")
             if current_class:

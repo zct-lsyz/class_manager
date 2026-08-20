@@ -1,4 +1,12 @@
-{% extends "base.html" %}{% block title %}新建宿舍楼{% endblock %}
+{% extends "base.html" %}{% block title %}{% if building %}修改宿舍楼{% else %}新建宿舍楼{% endif %}{% endblock %}
 {% block content %}<div class="row justify-content-center mt-3"><div class="col-md-6">
-  <div class="card"><div class="card-header">新建宿舍楼</div><div class="card-body"><form method="post">{% csrf_token %}{% for f in form %}<div class="mb-3"><label class="form-label small">{{ f.label }}</label>{{ f }}</div>{% endfor %}<button class="btn btn-primary">创建</button></form></div></div>
+  <div class="card"><div class="card-header">{% if building %}修改宿舍楼{% else %}新建宿舍楼{% endif %}</div><div class="card-body">
+    <form method="post">{% csrf_token %}
+      {% for f in form %}<div class="mb-3"><label class="form-label small">{{ f.label }}</label>{{ f }}{% if f.errors %}<div class="text-danger small">{{ f.errors.0 }}</div>{% endif %}</div>{% endfor %}
+      <div class="d-flex justify-content-between">
+        <a href="{% url 'dormitory:index' %}" class="btn btn-outline-secondary"><i class="bi bi-arrow-left me-1"></i>返回</a>
+        <button class="btn btn-primary">{% if building %}保存{% else %}创建{% endif %}</button>
+      </div>
+    </form>
+  </div></div>
 </div></div>{% endblock %}
