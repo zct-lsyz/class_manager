@@ -1,4 +1,4 @@
-﻿import json
+import json
 from types import SimpleNamespace
 
 from django.contrib import messages
@@ -335,16 +335,20 @@ def exam_subject_create(request, pk):
     )
     if request.method == "POST":
         subject_id = request.POST.get("subject", "")
-        full_score = request.POST.get("full_score", "100")
+        full_score_raw = request.POST.get("full_score", "")
         if subject_id:
-            try:
-                full_score = int(full_score)
-            except (ValueError, TypeError):
-                full_score = 100
+            subject = get_object_or_404(Subject, pk=subject_id)
+            # 满分为空时自动使用该科目的默认分数
+            if full_score_raw in ("", None):
+                full_score = subject.default_score
+            else:
+                try:
+                    full_score = int(full_score_raw)
+                except (ValueError, TypeError):
+                    full_score = subject.default_score
             if full_score <= 0:
                 messages.error(request, "满分必须大于 0。")
                 return redirect("scores:exam_detail", pk=exam.pk)
-            subject = get_object_or_404(Subject, pk=subject_id)
             if ExamSubject.objects.filter(exam=exam, subject=subject).exists():
                 messages.warning(request, f"科目「{subject.name}」已添加。")
             else:
@@ -1404,14 +1408,21 @@ def subject_settings(request):
         name = request.POST.get("name", "")
         short_name = request.POST.get("short_name", "")
         sort_order = request.POST.get("sort_order", "0")
+        default_score = request.POST.get("default_score", "100")
         try:
             sort_order = int(sort_order)
         except (ValueError, TypeError):
             sort_order = 0
+        try:
+            default_score = int(default_score)
+        except (ValueError, TypeError):
+            default_score = 100
+        if default_score <= 0:
+            default_score = 100
         if name:
             Subject.objects.create(
                 name=name, short_name=short_name, sort_order=sort_order,
-                created_by=request.user,
+                default_score=default_score, created_by=request.user,
             )
             messages.success(request, f"科目「{name}」已添加。")
             return redirect("scores:subject_settings")
@@ -1421,17 +1432,29 @@ def subject_settings(request):
 
 @login_required
 def subject_edit(request, pk):
-    """修改科目（仅自己的）"""
-    subject = get_object_or_404(Subject, pk=pk, created_by=request.user)
+    """修改科目（自己的或系统默认科目）"""
+    subject = get_object_or_404(
+        Subject.objects.filter(
+            Q(created_by=request.user) | Q(created_by__isnull=True),
+        ),
+        pk=pk,
+    )
     if request.method == "POST":
         name = request.POST.get("name", "").strip()
         short_name = request.POST.get("short_name", "").strip()
         is_active = request.POST.get("is_active") == "on"
         sort_order = request.POST.get("sort_order", "0")
+        default_score = request.POST.get("default_score", "100")
         try:
             sort_order = int(sort_order)
         except (ValueError, TypeError):
             sort_order = 0
+        try:
+            default_score = int(default_score)
+        except (ValueError, TypeError):
+            default_score = 100
+        if default_score <= 0:
+            default_score = 100
         if not name:
             messages.error(request, "科目名称不能为空。")
         else:
@@ -1439,15 +1462,24 @@ def subject_edit(request, pk):
             subject.short_name = short_name
             subject.is_active = is_active
             subject.sort_order = sort_order
-            subject.save(update_fields=["name", "short_name", "is_active", "sort_order", "updated_at"])
+            subject.default_score = default_score
+            subject.save(update_fields=[
+                "name", "short_name", "is_active", "sort_order",
+                "default_score", "updated_at",
+            ])
             messages.success(request, f"科目「{name}」已更新。")
     return redirect("scores:subject_settings")
 
 
 @login_required
 def subject_delete(request, pk):
-    """删除/停用科目（仅自己的）"""
-    subject = get_object_or_404(Subject, pk=pk, created_by=request.user)
+    """删除/停用科目（自己的或系统默认科目）"""
+    subject = get_object_or_404(
+        Subject.objects.filter(
+            Q(created_by=request.user) | Q(created_by__isnull=True),
+        ),
+        pk=pk,
+    )
     if request.method == "POST":
         from apps.scores.models import ExamSubject
         if ExamSubject.objects.filter(subject=subject).exists():

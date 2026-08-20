@@ -402,8 +402,13 @@ def validate_student_info(data_rows, school_class=None):
             errors.append({"row": idx, "field": "是否住校", "value": boarder_raw, "error": "只能填写「是」或「否」"})
             continue
 
-        # 宿舍/床位：不住校时允许为空
-        dormitory = str(row.get("宿舍", "") or "").strip()
+        # 宿舍楼栋 + 宿舍（房间号）/床位：不住校时允许为空
+        building = str(row.get("宿舍楼栋", "") or "").strip()
+        room = str(row.get("宿舍", "") or "").strip()
+        if building and room:
+            dormitory = f"{building} {room}"
+        else:
+            dormitory = building or room
         bed_number = str(row.get("床位", "") or "").strip()
 
         valid_rows.append({
@@ -560,6 +565,10 @@ def _create_guardian_from_import(student, item):
             "mother_phone": mother_phone,
             "other_guardian": other_guardian,
             "primary_contact": primary_key,
+            "contact_relation": item.get("primary_contact", ""),
+            "contact_phone": item.get("primary_phone", ""),
+            "backup_relation": item.get("secondary_contact", ""),
+            "backup_phone": item.get("secondary_phone", ""),
             "home_address": item.get("home_address", ""),
         },
     )

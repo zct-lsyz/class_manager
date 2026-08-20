@@ -1,4 +1,5 @@
 from django.conf import settings
+from django.core.validators import MinValueValidator
 from django.db import models
 from django.utils import timezone
 
@@ -25,6 +26,9 @@ class Subject(BaseModel):
     short_name = models.CharField("简称", max_length=20, blank=True, default="")
     is_active = models.BooleanField("启用", default=True)
     sort_order = models.IntegerField("排序", default=0)
+    default_score = models.IntegerField(
+        "默认分数", default=100, validators=[MinValueValidator(1)],
+    )
 
     class Meta:
         verbose_name = "科目"

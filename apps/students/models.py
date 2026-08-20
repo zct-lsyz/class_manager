@@ -159,6 +159,20 @@ class Guardian(BaseModel):
     primary_contact = models.CharField(
         "主要联系人", max_length=50, blank=True, default=""
     )
+    contact_relation = models.CharField(
+        "联系人关系", max_length=50, blank=True, default=""
+    )
+    contact_phone = models.CharField(
+        "联系人电话", max_length=20, blank=True, default="",
+        validators=[phone_validator],
+    )
+    backup_relation = models.CharField(
+        "备用联系人关系", max_length=50, blank=True, default=""
+    )
+    backup_phone = models.CharField(
+        "备用联系人电话", max_length=20, blank=True, default="",
+        validators=[phone_validator],
+    )
     home_address = models.TextField("家庭地址", blank=True, default="")
     remarks = models.TextField("备注", blank=True, default="")
 
@@ -191,3 +205,37 @@ class Guardian(BaseModel):
         else:
             return "未设置"
         return f"{label}-{phone}" if phone else label
+
+    @property
+    def display_contact_relation(self):
+        """联系人关系：优先新字段，回退到主要联系人关系。"""
+        if self.contact_relation:
+            return self.contact_relation
+        pc = str(self.primary_contact or "").strip()
+        if pc == "father":
+            return self.father_name or "父亲"
+        if pc == "mother":
+            return self.mother_name or "母亲"
+        if pc == "other":
+            return self.other_guardian or "其他监护人"
+        return pc or "未设置"
+
+    @property
+    def display_contact_phone(self):
+        """联系人电话：优先新字段，回退到主要联系人的电话。"""
+        if self.contact_phone:
+            return self.contact_phone
+        pc = str(self.primary_contact or "").strip()
+        if pc == "father":
+            return self.father_phone
+        if pc == "mother":
+            return self.mother_phone
+        return ""
+
+    @property
+    def display_backup_relation(self):
+        return self.backup_relation or ""
+
+    @property
+    def display_backup_phone(self):
+        return self.backup_phone or ""

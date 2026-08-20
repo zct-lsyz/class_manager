@@ -9,21 +9,23 @@
     <div class="card-header">添加科目</div>
     <div class="card-body">
         <form method="post" class="row g-2 align-items-end">{% csrf_token %}
-            <div class="col-md-4"><label class="form-label small">科目名称</label><input type="text" name="name" class="form-control" required placeholder="如：语文"></div>
-            <div class="col-md-3"><label class="form-label small">简称</label><input type="text" name="short_name" class="form-control" placeholder="如：语"></div>
-            <div class="col-md-3"><label class="form-label small">排序</label><input type="number" name="sort_order" value="0" class="form-control"></div>
-            <div class="col-md-2"><button class="btn btn-primary w-100">添加</button></div>
+            <div class="col-md-3"><label class="form-label small">科目名称</label><input type="text" name="name" class="form-control" required placeholder="如：语文"></div>
+            <div class="col-md-2"><label class="form-label small">简称</label><input type="text" name="short_name" class="form-control" placeholder="如：语"></div>
+            <div class="col-md-2"><label class="form-label small">默认分数</label><input type="number" name="default_score" value="100" min="1" class="form-control"></div>
+            <div class="col-md-2"><label class="form-label small">排序</label><input type="number" name="sort_order" value="0" class="form-control"></div>
+            <div class="col-md-3"><button class="btn btn-primary w-100">添加</button></div>
         </form>
     </div>
 </div>
 
 <table class="table table-hover">
-    <thead><tr><th>名称</th><th>简称</th><th>排序</th><th>状态</th><th>操作</th></tr></thead>
+    <thead><tr><th>名称</th><th>简称</th><th>默认分数</th><th>排序</th><th>状态</th><th>操作</th></tr></thead>
     <tbody>
     {% for s in subjects %}
     <tr>
         <td><strong>{{ s.name }}</strong></td>
         <td>{{ s.short_name|default:"-" }}</td>
+        <td>{{ s.default_score }}</td>
         <td>{{ s.sort_order }}</td>
         <td>{% if s.is_active %}<span class="badge bg-success">启用{% else %}<span class="badge bg-secondary">停用{% endif %}</span></td>
         <td class="text-nowrap">
@@ -35,18 +37,19 @@
         </td>
     </tr>
     <tr class="collapse" id="editSubject{{ s.pk }}">
-        <td colspan="5" class="p-2 bg-light">
+        <td colspan="6" class="p-2 bg-light">
             <form method="post" action="{% url 'scores:subject_edit' s.pk %}" class="row g-2 align-items-end">
                 {% csrf_token %}
                 <div class="col-md-3"><label class="form-label small">科目名称</label><input type="text" name="name" value="{{ s.name }}" class="form-control form-control-sm" required></div>
-                <div class="col-md-3"><label class="form-label small">简称</label><input type="text" name="short_name" value="{{ s.short_name }}" class="form-control form-control-sm"></div>
+                <div class="col-md-2"><label class="form-label small">简称</label><input type="text" name="short_name" value="{{ s.short_name }}" class="form-control form-control-sm"></div>
+                <div class="col-md-2"><label class="form-label small">默认分数</label><input type="number" name="default_score" value="{{ s.default_score }}" min="1" class="form-control form-control-sm"></div>
                 <div class="col-md-2"><label class="form-label small">排序</label><input type="number" name="sort_order" value="{{ s.sort_order }}" class="form-control form-control-sm"></div>
-                <div class="col-md-2"><label class="form-label small">状态</label><div class="form-check form-switch"><input class="form-check-input" type="checkbox" name="is_active" {% if s.is_active %}checked{% endif %}></div></div>
+                <div class="col-md-1"><label class="form-label small">状态</label><div class="form-check form-switch"><input class="form-check-input" type="checkbox" name="is_active" {% if s.is_active %}checked{% endif %}></div></div>
                 <div class="col-md-2"><button class="btn btn-primary btn-sm w-100">保存</button></div>
             </form>
         </td>
     </tr>
-    {% empty %}<tr><td colspan="5" class="text-muted text-center">暂无科目</td></tr>{% endfor %}
+    {% empty %}<tr><td colspan="6" class="text-muted text-center">暂无科目</td></tr>{% endfor %}
     </tbody>
 </table>
 {% endblock %}

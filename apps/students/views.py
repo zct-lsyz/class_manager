@@ -1,4 +1,4 @@
-﻿from django.contrib import messages
+from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.shortcuts import render, redirect, get_object_or_404
 from django.core.paginator import Paginator
@@ -566,4 +566,12 @@ def _sync_student_contact(guardian):
     student = guardian.student
     student.primary_contact = student.display_primary_contact
     student.primary_phone = student.display_primary_phone
-    student.save(update_fields=["primary_contact", "primary_phone", "updated_at"])
+    update_fields = ["primary_contact", "primary_phone"]
+    if guardian.display_backup_relation:
+        student.secondary_contact = guardian.display_backup_relation
+        update_fields.append("secondary_contact")
+    if guardian.display_backup_phone:
+        student.secondary_phone = guardian.display_backup_phone
+        update_fields.append("secondary_phone")
+    update_fields.append("updated_at")
+    student.save(update_fields=update_fields)

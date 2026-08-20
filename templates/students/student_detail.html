@@ -93,7 +93,11 @@
             <div class="tab-pane fade" id="guardian">
                 {% if guardian %}
                 <table class="table table-borderless">
-                    <tr><td class="text-muted" style="width:120px">父亲</td><td>{{ guardian.father_name|default:"未填写" }} {% if guardian.father_phone %}({{ guardian.father_phone|slice:":3" }}****{{ guardian.father_phone|slice:"-4:" }}){% endif %}</td></tr>
+                    <tr><td class="text-muted" style="width:120px">联系人关系</td><td>{{ guardian.display_contact_relation|default:"未填写" }}</td></tr>
+                    <tr><td class="text-muted">联系人电话</td><td>{% if guardian.display_contact_phone %}{{ guardian.display_contact_phone|slice:":3" }}****{{ guardian.display_contact_phone|slice:"-4:" }}{% else %}未填写{% endif %}</td></tr>
+                    <tr><td class="text-muted">备用联系人关系</td><td>{{ guardian.display_backup_relation|default:"未填写" }}</td></tr>
+                    <tr><td class="text-muted">备用联系人电话</td><td>{% if guardian.display_backup_phone %}{{ guardian.display_backup_phone|slice:":3" }}****{{ guardian.display_backup_phone|slice:"-4:" }}{% else %}未填写{% endif %}</td></tr>
+                    <tr><td class="text-muted">父亲</td><td>{{ guardian.father_name|default:"未填写" }} {% if guardian.father_phone %}({{ guardian.father_phone|slice:":3" }}****{{ guardian.father_phone|slice:"-4:" }}){% endif %}</td></tr>
                     <tr><td class="text-muted">母亲</td><td>{{ guardian.mother_name|default:"未填写" }} {% if guardian.mother_phone %}({{ guardian.mother_phone|slice:":3" }}****{{ guardian.mother_phone|slice:"-4:" }}){% endif %}</td></tr>
                     <tr><td class="text-muted">其他监护人</td><td>{{ guardian.other_guardian|default:"无" }}</td></tr>
                     <tr><td class="text-muted">主要联系人</td><td>{{ guardian.get_primary_contact_display|default:"未设置" }}</td></tr>

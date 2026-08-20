@@ -33,11 +33,11 @@
             <table class="table table-hover mb-0">
                 <thead>
                     <tr>
-                        <th>学生</th>
-                        <th>学号</th>
-                        <th>父亲</th>
-                        <th>母亲</th>
-                        <th>主要联系人</th>
+                        <th>学生姓名</th>
+                        <th>联系人关系</th>
+                        <th>联系人电话</th>
+                        <th>备用联系人关系</th>
+                        <th>备用联系人电话</th>
                         <th>操作</th>
                     </tr>
                 </thead>
@@ -49,24 +49,18 @@
                                 {{ guardian.student.name }}
                             </a>
                         </td>
-                        <td>{{ guardian.student.student_id }}</td>
+                        <td>{{ guardian.display_contact_relation|default:"-" }}</td>
                         <td>
-                            {{ guardian.father_name|default:"-" }}
-                            {% if guardian.father_phone %}
-                            <small class="text-muted ms-1">
-                                ({{ guardian.father_phone|slice:":3" }}****{{ guardian.father_phone|slice:"-4:" }})
-                            </small>
-                            {% endif %}
+                            {% if guardian.display_contact_phone %}
+                            {{ guardian.display_contact_phone|slice:":3" }}****{{ guardian.display_contact_phone|slice:"-4:" }}
+                            {% else %}-{% endif %}
                         </td>
+                        <td>{{ guardian.display_backup_relation|default:"-" }}</td>
                         <td>
-                            {{ guardian.mother_name|default:"-" }}
-                            {% if guardian.mother_phone %}
-                            <small class="text-muted ms-1">
-                                ({{ guardian.mother_phone|slice:":3" }}****{{ guardian.mother_phone|slice:"-4:" }})
-                            </small>
-                            {% endif %}
+                            {% if guardian.display_backup_phone %}
+                            {{ guardian.display_backup_phone|slice:":3" }}****{{ guardian.display_backup_phone|slice:"-4:" }}
+                            {% else %}-{% endif %}
                         </td>
-                        <td>{{ guardian.get_primary_contact_display|default:"-" }}</td>
                         <td>
                             <a href="{% url 'students:guardian_edit' guardian.pk %}" class="btn btn-sm btn-outline-primary">
                                 <i class="bi bi-pencil"></i> 编辑

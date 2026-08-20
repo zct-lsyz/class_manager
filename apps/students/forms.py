@@ -86,6 +86,8 @@ class GuardianForm(forms.ModelForm):
             "father_name", "father_phone",
             "mother_name", "mother_phone",
             "other_guardian", "primary_contact",
+            "contact_relation", "contact_phone",
+            "backup_relation", "backup_phone",
             "home_address", "remarks",
         ]
         widgets = {
@@ -95,6 +97,10 @@ class GuardianForm(forms.ModelForm):
             "mother_phone": forms.TextInput(attrs={"class": "form-control", "placeholder": "13800138000", "inputmode": "numeric", "pattern": "[0-9]{11}", "maxlength": "11"}),
             "other_guardian": forms.TextInput(attrs={"class": "form-control"}),
             "primary_contact": forms.Select(attrs={"class": "form-select"}),
+            "contact_relation": forms.TextInput(attrs={"class": "form-control", "placeholder": "如：母亲"}),
+            "contact_phone": forms.TextInput(attrs={"class": "form-control", "placeholder": "13800138000", "inputmode": "numeric", "pattern": "[0-9]{11}", "maxlength": "11"}),
+            "backup_relation": forms.TextInput(attrs={"class": "form-control", "placeholder": "如：父亲"}),
+            "backup_phone": forms.TextInput(attrs={"class": "form-control", "placeholder": "13800138000", "inputmode": "numeric", "pattern": "[0-9]{11}", "maxlength": "11"}),
             "home_address": forms.Textarea(attrs={"class": "form-control", "rows": 2}),
             "remarks": forms.Textarea(attrs={"class": "form-control", "rows": 2}),
         }
@@ -105,6 +111,10 @@ class GuardianForm(forms.ModelForm):
             "mother_phone": "母亲电话",
             "other_guardian": "其他监护人",
             "primary_contact": "主要联系人",
+            "contact_relation": "联系人关系",
+            "contact_phone": "联系人电话",
+            "backup_relation": "备用联系人关系",
+            "backup_phone": "备用联系人电话",
             "home_address": "家庭地址",
             "remarks": "备注",
         }
