@@ -86,6 +86,7 @@ def get_student_events(student, module, date_from=None, date_to=None):
             events.append({"date": record.date, "created_at": record.created_at, "item": record.get_status_display(), "code": record.status, "points": record.points_deducted, "note": record.reason, "adverse": True})
     elif module == "homework":
         from apps.homework.models import HomeworkRecord
+        from apps.homework.services import get_status_points
         negative = {"unsubmitted", "late", "needs_correction", "poor"}
         records = HomeworkRecord.objects.filter(student=student).select_related("task")
         if date_from:
@@ -94,7 +95,8 @@ def get_student_events(student, module, date_from=None, date_to=None):
             records = records.filter(task__assigned_date__lte=date_to)
         for record in records:
             if record.status in negative or record.status.startswith("custom:"):
-                events.append({"date": record.submission_date or record.task.assigned_date, "created_at": record.created_at, "item": f"{record.task.title}：{record.status_display}", "code": record.status, "points": 0, "note": record.remark, "adverse": True})
+                points = get_status_points(record.task.school_class, record.status)
+                events.append({"date": record.submission_date or record.task.assigned_date, "created_at": record.created_at, "item": f"{record.task.title}：{record.status_display}", "code": record.status, "points": points, "note": record.remark, "adverse": True})
     elif module == "duty":
         from apps.duty.models import DutyRecord, DutyAbsenceRecord
         records = _apply_dates(DutyRecord.objects.filter(student=student).select_related("group"), "date", date_from, date_to)

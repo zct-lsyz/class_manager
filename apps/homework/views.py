@@ -1,4 +1,4 @@
-﻿from django.contrib import messages
+from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.shortcuts import render, redirect, get_object_or_404
 from django.core.paginator import Paginator
@@ -118,30 +118,14 @@ def task_delete(request, pk):
     return redirect("homework:task_detail", pk=task.pk)
 
 
-HOMEWORK_POINTS = {
-    "submitted": 1,
-    "excellent": 2,
-    "corrected": 1,
-    "unsubmitted": -1,
-    "late": -1,
-    "needs_correction": -1,
-    "poor": -2,
-    "exempted": 0,
-    "other": 0,
-}
-
-
 def _sync_homework_points(record):
     """作业完成状态同步到统一积分（source_type=homework）。
 
     优先使用该班级配置的作业积分规则（HomeworkPointRule），未配置则用内置默认。
     """
     from apps.rewards.services import sync_source_point
-    from apps.homework.models import HomeworkPointRule
-    rule = HomeworkPointRule.objects.filter(
-        school_class=record.task.school_class, status=record.status,
-    ).first()
-    points = rule.signed_points if rule else HOMEWORK_POINTS.get(record.status, 0)
+    from apps.homework.services import get_status_points
+    points = get_status_points(record.task.school_class, record.status)
     sync_source_point(
         student=record.student, school_class=record.task.school_class,
         semester=record.task.semester,
@@ -167,6 +151,39 @@ def task_detail(request, pk):
     unrecorded = Student.objects.filter(
         school_class=task.school_class, is_deleted=False
     ).exclude(id__in=recorded_ids)
+
+    # 修改「未交 / 完成差」扣分（并重新同步积分）
+    if request.method == "POST" and request.POST.get("action") == "save_points":
+        from apps.homework.models import HomeworkPointRule
+        configs = {"unsubmitted": "未交", "poor": "完成差"}
+        for status, label in configs.items():
+            raw = request.POST.get(f"points_{status}", "").strip()
+            if raw == "":
+                HomeworkPointRule.objects.filter(
+                    school_class=task.school_class, status=status,
+                ).delete()
+                continue
+            try:
+                value = abs(int(raw))
+            except (ValueError, TypeError):
+                continue
+            HomeworkPointRule.objects.update_or_create(
+                school_class=task.school_class, status=status,
+                defaults={"points": value, "is_add": False},
+            )
+        # 重新同步本班所有相关状态记录到积分管理
+        affected = HomeworkRecord.objects.filter(
+            task__school_class=task.school_class, status__in=list(configs),
+        )
+        resynced = 0
+        for record in affected:
+            _sync_homework_points(record)
+            resynced += 1
+        messages.success(
+            request,
+            f"扣分设置已更新，并重新同步 {resynced} 条作业记录到积分管理。",
+        )
+        return redirect("homework:task_detail", pk=task.pk)
 
     # 批量登记作业状态（POST record_{student_id}）
     if request.method == "POST":
@@ -229,6 +246,7 @@ def task_detail(request, pk):
     status_options = list(HomeworkRecord.STATUS_CHOICES) + [
         (f"custom:{status.pk}", status.name) for status in custom_statuses
     ]
+    from apps.homework.services import get_status_points
     context = {
         "task": task,
         "records": records,
@@ -237,6 +255,8 @@ def task_detail(request, pk):
             school_class=task.school_class, is_deleted=False,
         ).order_by("name_pinyin", "name", "student_id"),
         "status_options": status_options,
+        "unsubmitted_points": get_status_points(task.school_class, "unsubmitted"),
+        "poor_points": get_status_points(task.school_class, "poor"),
     }
     return render(request, "homework/task_detail.html", context)
 
