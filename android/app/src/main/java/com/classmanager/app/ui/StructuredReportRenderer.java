@@ -3,8 +3,11 @@ package com.classmanager.app.ui;
 import android.app.AlertDialog;
 import android.content.Context;
 import android.graphics.Color;
+import android.graphics.Paint;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
+import android.text.TextPaint;
+import android.text.TextUtils;
 import android.util.DisplayMetrics;
 import android.util.TypedValue;
 import android.view.Gravity;
@@ -396,21 +399,33 @@ final class StructuredReportRenderer {
             if (row != null) assignments.put(row.optInt("row") + "_" + row.optInt("col"), row);
         }
         Set<Integer> aisles = integerSet(layout.optJSONArray("aisle_positions"));
+        boolean reverse = "back".equals(layout.optString("podium_position"));
 
-        // 单元格宽度策略：优先压缩列宽与字号，让整张座次表在一屏内完整显示，
-        // 保证最右侧一列不再被屏幕边缘遮住；列数过多、无法清晰容纳时退化为
-        // 固定宽度并横向滑动，同时给出提示。
+        // 姓名保持单行完整显示：每列宽度按该列最长姓名计算（含字号缩放后的实际文字宽度），
+        // 整张表宽度由显式列宽精确确定，横向滚动可精确滚到最右一列，不再被屏幕边缘遮住。
         DisplayMetrics metrics = context.getResources().getDisplayMetrics();
-        int screenWidthDp = Math.round(metrics.widthPixels / metrics.density);
-        int rowNumberWidth = 26;
-        int aisleWidth = 8;
-        int bodyPadding = 32; // ReportActivity 页面左右各 16dp 内边距
-        int availableWidth = Math.max(120, screenWidthDp - bodyPadding);
-        int fittedNameWidth = (availableWidth - rowNumberWidth * 2 - aisles.size() * aisleWidth) / cols;
-        boolean fitsScreen = fittedNameWidth >= 34;
-        int nameWidth = fitsScreen ? Math.min(fittedNameWidth, 64) : 52;
-        int tableWidth = rowNumberWidth * 2 + cols * nameWidth + aisles.size() * aisleWidth;
-        boolean scrollable = !fitsScreen;
+        int rowNumberWidth = 28;
+        int aisleWidth = 12;
+        int[] columnWidths = new int[cols];
+        TextPaint namePaint = new TextPaint(Paint.ANTI_ALIAS_FLAG);
+        namePaint.setTextSize(TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_SP, 14, metrics));
+        namePaint.setTypeface(Typeface.DEFAULT_BOLD);
+        for (int col = 0; col < cols; col++) {
+            int maxTextDp = 0;
+            for (int index = 0; index < rows; index++) {
+                int rowNumber = reverse ? rows - index - 1 : index;
+                JSONObject assignment = assignments.get(rowNumber + "_" + col);
+                String name = assignment == null ? "空座" : assignment.optString("student_name");
+                int textDp = (int) Math.ceil(namePaint.measureText(name) / metrics.density);
+                maxTextDp = Math.max(maxTextDp, textDp);
+            }
+            columnWidths[col] = Math.max(52, maxTextDp + 12); // 左右各 5dp 内边距 + 2dp 余量
+        }
+        int tableWidth = rowNumberWidth * 2 + aisleWidth * aisles.size();
+        for (int width : columnWidths) tableWidth += width;
+
+        int viewportDp = Math.round(metrics.widthPixels / metrics.density) - 32; // 页面左右内边距
+        boolean scrollable = tableWidth > viewportDp;
         if (scrollable) {
             TextView hint = Ui.text(context, "左右滑动查看完整座次表");
             hint.setTextColor(MUTED);
@@ -423,7 +438,6 @@ final class StructuredReportRenderer {
         }
 
         TableLayout table = new TableLayout(context);
-        boolean reverse = "back".equals(layout.optString("podium_position"));
         for (int index = 0; index < rows; index++) {
             int rowNumber = reverse ? rows - index - 1 : index;
             TableRow tableRow = new TableRow(context);
@@ -432,7 +446,7 @@ final class StructuredReportRenderer {
                 JSONObject assignment = assignments.get(rowNumber + "_" + col);
                 String name = assignment == null ? "空座" : assignment.optString("student_name");
                 int background = assignment == null ? Color.rgb(248, 250, 252) : genderColor(assignment.optString("student_gender"));
-                tableRow.addView(seatCell(context, name, nameWidth, background, assignment != null, 44));
+                tableRow.addView(seatCell(context, name, columnWidths[col], background, assignment != null, 44));
                 if (aisles.contains(col + 1)) tableRow.addView(spacer(context, aisleWidth));
             }
             tableRow.addView(seatCell(context, String.valueOf(rowNumber + 1), rowNumberWidth, HEADER, true, 44));
@@ -861,8 +875,8 @@ final class StructuredReportRenderer {
     }
 
     /**
-     * 座次表单元格：固定宽度 + 字号自适应（9~14sp），姓名较长时自动缩小字号，
-     * 仍放不下时换行，保证姓名完整显示、整张表宽度可控。
+     * 座次表单元格：显式固定宽度，姓名单行完整显示（列宽已按最长姓名计算，
+     * 极端超长姓名兜底省略），字号保持与普通表格一致。
      */
     private static TextView seatCell(Context context, String text, int widthDp, int background, boolean strong, int minHeightDp) {
         TextView view = new TextView(context);
@@ -870,7 +884,7 @@ final class StructuredReportRenderer {
         view.setTextSize(14);
         view.setTextColor(context.getColor(R.color.text_primary));
         view.setGravity(Gravity.CENTER);
-        view.setPadding(Ui.dp(context, 3), Ui.dp(context, 5), Ui.dp(context, 3), Ui.dp(context, 5));
+        view.setPadding(Ui.dp(context, 5), Ui.dp(context, 6), Ui.dp(context, 5), Ui.dp(context, 6));
         view.setMinHeight(Ui.dp(context, minHeightDp));
         if (strong) view.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
         view.setBackground(box(background, 0));
@@ -878,8 +892,8 @@ final class StructuredReportRenderer {
                 Ui.dp(context, Math.max(1, widthDp)),
                 ViewGroup.LayoutParams.WRAP_CONTENT
         ));
-        view.setAutoSizeTextTypeUniformWithConfiguration(9, 14, 1, TypedValue.COMPLEX_UNIT_SP);
-        view.setMaxLines(2);
+        view.setMaxLines(1);
+        view.setEllipsize(TextUtils.TruncateAt.END);
         return view;
     }
 

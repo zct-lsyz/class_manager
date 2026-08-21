@@ -5,10 +5,11 @@ import static org.junit.Assert.fail;
 
 import android.app.Application;
 import android.content.Context;
-import android.util.DisplayMetrics;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.HorizontalScrollView;
+import android.widget.LinearLayout;
+import android.widget.ScrollView;
 import android.widget.TableLayout;
 import android.widget.TableRow;
 import android.widget.TextView;
@@ -24,9 +25,8 @@ import org.robolectric.annotation.Config;
 
 /**
  * 座次表布局验证：
- * 1. 常见列数（含用户实际 8 列 3 过道）时整张表应在一屏内完整显示，
- *    最右侧一列不再被屏幕边缘遮住（无需横向滚动）。
- * 2. 列数过多、无法清晰容纳时退化为横向滚动，但所有列仍完整落在表格自身宽度内。
+ * 1. 所有姓名单行完整显示（不换行、不挤成两行）。
+ * 2. 横向滚动容器能精确滚到最右一列：滚动到末尾后最右单元格完整落在可视区域内。
  */
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk = 34, qualifiers = "w411dp-h891dp-xxhdpi", application = SeatingLayoutTest.TestApp.class)
@@ -74,20 +74,33 @@ public class SeatingLayoutTest {
         return Math.round(value * context.getResources().getDisplayMetrics().density);
     }
 
+    /** 按 ReportActivity 的真实层级挂载并测量：ScrollView → 内边距 LinearLayout → 结果容器 → 渲染视图。 */
     private static LayoutResult renderAndMeasure(Context context, int rows, int cols, int[] aisles) throws Exception {
         View rendered = StructuredReportRenderer.render(context, "seating/", seatingData(rows, cols, aisles));
-        ViewGroup container = new android.widget.FrameLayout(context);
-        int widthPx = dp(context, 411);
-        int heightPx = dp(context, 1800);
-        container.addView(rendered, new ViewGroup.LayoutParams(
+
+        ScrollView scrollView = new ScrollView(context);
+        LinearLayout body = new LinearLayout(context);
+        body.setOrientation(LinearLayout.VERTICAL);
+        int pad = dp(context, 16);
+        body.setPadding(pad, pad, pad, pad);
+        scrollView.addView(body, new ViewGroup.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-        container.measure(
+        LinearLayout results = new LinearLayout(context);
+        results.setOrientation(LinearLayout.VERTICAL);
+        body.addView(results, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        results.addView(rendered, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+
+        int widthPx = dp(context, 411);
+        int heightPx = dp(context, 2400);
+        scrollView.measure(
                 View.MeasureSpec.makeMeasureSpec(widthPx, View.MeasureSpec.EXACTLY),
                 View.MeasureSpec.makeMeasureSpec(heightPx, View.MeasureSpec.AT_MOST));
-        container.layout(0, 0, container.getMeasuredWidth(), container.getMeasuredHeight());
+        scrollView.layout(0, 0, scrollView.getMeasuredWidth(), scrollView.getMeasuredHeight());
 
-        TableLayout table = findView(rendered, TableLayout.class);
-        HorizontalScrollView scroll = findView(rendered, HorizontalScrollView.class);
+        TableLayout table = findView(scrollView, TableLayout.class);
+        HorizontalScrollView scroll = findView(scrollView, HorizontalScrollView.class);
         if (table == null || scroll == null) fail("未找到座次表 TableLayout 或 HorizontalScrollView");
 
         LayoutResult result = new LayoutResult();
@@ -95,51 +108,78 @@ public class SeatingLayoutTest {
         result.contentWidth = scroll.getChildAt(0).getWidth();
         result.tableWidth = table.getWidth();
         result.maxCellRight = 0;
+        int lineCountOk = 0;
+        int lineCountBad = 0;
         for (int r = 0; r < table.getChildCount(); r++) {
             View rowView = table.getChildAt(r);
             if (!(rowView instanceof TableRow)) continue;
             TableRow row = (TableRow) rowView;
             for (int c = 0; c < row.getChildCount(); c++) {
-                result.maxCellRight = Math.max(result.maxCellRight, row.getChildAt(c).getRight());
+                View cell = row.getChildAt(c);
+                result.maxCellRight = Math.max(result.maxCellRight, cell.getRight());
+                TextView tv = textViewInside(cell);
+                if (tv != null) {
+                    if (tv.getLineCount() > 1) lineCountBad++;
+                    else lineCountOk++;
+                }
             }
         }
-        // 最右单元格（右侧排号列）
+        result.lineCountBad = lineCountBad;
+        result.lineCountOk = lineCountOk;
+
+        // 最后一行的最右单元格（右侧排号列）
         View lastRow = table.getChildAt(table.getChildCount() - 1);
         if (lastRow instanceof TableRow) {
             TableRow row = (TableRow) lastRow;
-            View last = row.getChildAt(row.getChildCount() - 1);
-            result.lastCellRight = last.getRight();
+            result.lastCellRight = row.getChildAt(row.getChildCount() - 1).getRight();
         }
+
+        // 模拟滚动到最右端
+        result.maxScroll = Math.max(0, result.contentWidth - result.viewport);
+        scroll.scrollTo(result.maxScroll, 0);
+        result.lastCellRightAtMaxScroll = result.lastCellRight - scroll.getScrollX();
         return result;
     }
 
     @Test
-    public void typicalEightColumnLayoutFitsScreenWithoutClipping() throws Exception {
+    public void eightColumnLayoutShowsSingleLineNamesAndScrollsToLastColumn() throws Exception {
         Context context = ApplicationProvider.getApplicationContext();
         LayoutResult r = renderAndMeasure(context, 7, 8, new int[]{2, 4, 6});
         System.out.println("[SeatingLayoutTest] 8列3过道 viewport=" + r.viewport
                 + " contentWidth=" + r.contentWidth + " tableWidth=" + r.tableWidth
-                + " maxCellRight=" + r.maxCellRight + " lastCellRight=" + r.lastCellRight);
-        // 整张表（含最右侧排号列）必须完整落在可视区域内，无需横向滚动
-        assertTrue("座次表超出屏幕，最右侧一列仍会被遮住: tableWidth=" + r.tableWidth
-                + " viewport=" + r.viewport, r.tableWidth <= r.viewport);
-        assertTrue("最右侧一列超出可视区域: maxCellRight=" + r.maxCellRight
-                + " viewport=" + r.viewport, r.maxCellRight <= r.viewport);
+                + " maxCellRight=" + r.maxCellRight + " lastCellRight=" + r.lastCellRight
+                + " maxScroll=" + r.maxScroll + " lastVisibleAtMaxScroll=" + r.lastCellRightAtMaxScroll);
+
+        // 1) 所有姓名单行显示
+        assertTrue("存在换行显示的名字单元格: " + r.lineCountBad + " 个", r.lineCountBad == 0);
+
+        // 2) 所有列都完整落在表格自身宽度内
+        assertTrue("单元格超出表格宽度: maxCellRight=" + r.maxCellRight + " tableWidth=" + r.tableWidth,
+                r.maxCellRight <= r.tableWidth);
+
+        // 3) 滚动到最右端后，最右单元格完整可见
+        assertTrue("滚动到最右端后最右列仍超出可视区域: lastCellRight=" + r.lastCellRight
+                + " maxScroll=" + r.maxScroll + " viewport=" + r.viewport,
+                r.lastCellRightAtMaxScroll <= r.viewport);
     }
 
     @Test
-    public void wideLayoutFallsBackToScrollableButCellsFitTable() throws Exception {
+    public void wideLayoutStillScrollsToLastColumn() throws Exception {
         Context context = ApplicationProvider.getApplicationContext();
         LayoutResult r = renderAndMeasure(context, 8, 12, new int[]{3, 6, 9});
         System.out.println("[SeatingLayoutTest] 12列3过道 viewport=" + r.viewport
                 + " contentWidth=" + r.contentWidth + " tableWidth=" + r.tableWidth
-                + " maxCellRight=" + r.maxCellRight + " lastCellRight=" + r.lastCellRight);
-        // 列数过多：表格允许横向滚动（内容宽度大于视口）
-        assertTrue("宽布局应可横向滚动: contentWidth=" + r.contentWidth + " viewport=" + r.viewport,
+                + " maxCellRight=" + r.maxCellRight + " lastCellRight=" + r.lastCellRight
+                + " maxScroll=" + r.maxScroll + " lastVisibleAtMaxScroll=" + r.lastCellRightAtMaxScroll);
+
+        assertTrue("存在换行显示的名字单元格: " + r.lineCountBad + " 个", r.lineCountBad == 0);
+        assertTrue("单元格超出表格宽度: maxCellRight=" + r.maxCellRight + " tableWidth=" + r.tableWidth,
+                r.maxCellRight <= r.tableWidth);
+        assertTrue("宽表格应可横向滚动: contentWidth=" + r.contentWidth + " viewport=" + r.viewport,
                 r.contentWidth > r.viewport);
-        // 但所有列仍完整落在表格自身宽度内，滚动到末尾后无内容被裁
-        assertTrue("单元格超出表格自身宽度: maxCellRight=" + r.maxCellRight
-                + " tableWidth=" + r.tableWidth, r.maxCellRight <= r.tableWidth);
+        assertTrue("滚动到最右端后最右列仍超出可视区域: lastCellRight=" + r.lastCellRight
+                + " maxScroll=" + r.maxScroll + " viewport=" + r.viewport,
+                r.lastCellRightAtMaxScroll <= r.viewport);
     }
 
     private static final class LayoutResult {
@@ -148,6 +188,22 @@ public class SeatingLayoutTest {
         int tableWidth;
         int maxCellRight;
         int lastCellRight;
+        int maxScroll;
+        int lastCellRightAtMaxScroll;
+        int lineCountOk;
+        int lineCountBad;
+    }
+
+    private static TextView textViewInside(View view) {
+        if (view instanceof TextView) return (TextView) view;
+        if (view instanceof ViewGroup) {
+            ViewGroup g = (ViewGroup) view;
+            for (int i = 0; i < g.getChildCount(); i++) {
+                TextView found = textViewInside(g.getChildAt(i));
+                if (found != null) return found;
+            }
+        }
+        return null;
     }
 
     @SuppressWarnings("unchecked")
