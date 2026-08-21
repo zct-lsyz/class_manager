@@ -5,6 +5,8 @@ import android.content.Context;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
+import android.util.DisplayMetrics;
+import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
@@ -394,25 +396,54 @@ final class StructuredReportRenderer {
             if (row != null) assignments.put(row.optInt("row") + "_" + row.optInt("col"), row);
         }
         Set<Integer> aisles = integerSet(layout.optJSONArray("aisle_positions"));
+
+        // 单元格宽度策略：优先压缩列宽与字号，让整张座次表在一屏内完整显示，
+        // 保证最右侧一列不再被屏幕边缘遮住；列数过多、无法清晰容纳时退化为
+        // 固定宽度并横向滑动，同时给出提示。
+        DisplayMetrics metrics = context.getResources().getDisplayMetrics();
+        int screenWidthDp = Math.round(metrics.widthPixels / metrics.density);
+        int rowNumberWidth = 26;
+        int aisleWidth = 8;
+        int bodyPadding = 32; // ReportActivity 页面左右各 16dp 内边距
+        int availableWidth = Math.max(120, screenWidthDp - bodyPadding);
+        int fittedNameWidth = (availableWidth - rowNumberWidth * 2 - aisles.size() * aisleWidth) / cols;
+        boolean fitsScreen = fittedNameWidth >= 34;
+        int nameWidth = fitsScreen ? Math.min(fittedNameWidth, 64) : 52;
+        int tableWidth = rowNumberWidth * 2 + cols * nameWidth + aisles.size() * aisleWidth;
+        boolean scrollable = !fitsScreen;
+        if (scrollable) {
+            TextView hint = Ui.text(context, "左右滑动查看完整座次表");
+            hint.setTextColor(MUTED);
+            hint.setTextSize(13);
+            hint.setGravity(Gravity.CENTER);
+            LinearLayout.LayoutParams hintParams = new LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+            hintParams.bottomMargin = Ui.dp(context, 4);
+            root.addView(hint, hintParams);
+        }
+
         TableLayout table = new TableLayout(context);
         boolean reverse = "back".equals(layout.optString("podium_position"));
         for (int index = 0; index < rows; index++) {
             int rowNumber = reverse ? rows - index - 1 : index;
             TableRow tableRow = new TableRow(context);
-            tableRow.addView(cell(context, String.valueOf(rowNumber + 1), -28, HEADER, true, 44));
+            tableRow.addView(seatCell(context, String.valueOf(rowNumber + 1), rowNumberWidth, HEADER, true, 44));
             for (int col = 0; col < cols; col++) {
                 JSONObject assignment = assignments.get(rowNumber + "_" + col);
                 String name = assignment == null ? "空座" : assignment.optString("student_name");
                 int background = assignment == null ? Color.rgb(248, 250, 252) : genderColor(assignment.optString("student_gender"));
-                tableRow.addView(cell(context, name, -52, background, assignment != null, 44));
-                if (aisles.contains(col + 1)) tableRow.addView(spacer(context, 12));
+                tableRow.addView(seatCell(context, name, nameWidth, background, assignment != null, 44));
+                if (aisles.contains(col + 1)) tableRow.addView(spacer(context, aisleWidth));
             }
-            tableRow.addView(cell(context, String.valueOf(rowNumber + 1), -28, HEADER, true, 44));
+            tableRow.addView(seatCell(context, String.valueOf(rowNumber + 1), rowNumberWidth, HEADER, true, 44));
             table.addView(tableRow);
         }
         LinearLayout area = vertical(context);
-        area.addView(table);
-        TextView podium = cell(context, "讲台（教师视角）", Math.max(220, 56 + cols * 56 + aisles.size() * 12), Color.rgb(248, 250, 252), true, 40);
+        LinearLayout.LayoutParams tableParams = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        tableParams.gravity = Gravity.CENTER_HORIZONTAL;
+        area.addView(table, tableParams);
+        TextView podium = cell(context, "讲台（教师视角）", tableWidth, Color.rgb(248, 250, 252), true, 40);
         LinearLayout.LayoutParams podiumParams = new LinearLayout.LayoutParams(podium.getLayoutParams());
         podiumParams.topMargin = Ui.dp(context, 12);
         podium.setLayoutParams(podiumParams);
@@ -801,7 +832,10 @@ final class StructuredReportRenderer {
         HorizontalScrollView scroll = new HorizontalScrollView(context);
         scroll.setFillViewport(false);
         scroll.setHorizontalScrollBarEnabled(true);
-        scroll.addView(child);
+        // 显式指定内容为 wrap_content，避免部分设备/ROM 上滚动内容被量成视口宽度，
+        // 导致最右侧内容被裁掉且无法滚动到。
+        scroll.addView(child, new android.widget.FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         params.setMargins(0, Ui.dp(context, 10), 0, Ui.dp(context, 12));
         scroll.setLayoutParams(params);
@@ -823,6 +857,29 @@ final class StructuredReportRenderer {
             ViewGroup.LayoutParams.WRAP_CONTENT
         ));
         if (widthDp < 0) view.setMinWidth(Ui.dp(context, -widthDp));
+        return view;
+    }
+
+    /**
+     * 座次表单元格：固定宽度 + 字号自适应（9~14sp），姓名较长时自动缩小字号，
+     * 仍放不下时换行，保证姓名完整显示、整张表宽度可控。
+     */
+    private static TextView seatCell(Context context, String text, int widthDp, int background, boolean strong, int minHeightDp) {
+        TextView view = new TextView(context);
+        view.setText(text == null ? "" : text);
+        view.setTextSize(14);
+        view.setTextColor(context.getColor(R.color.text_primary));
+        view.setGravity(Gravity.CENTER);
+        view.setPadding(Ui.dp(context, 3), Ui.dp(context, 5), Ui.dp(context, 3), Ui.dp(context, 5));
+        view.setMinHeight(Ui.dp(context, minHeightDp));
+        if (strong) view.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        view.setBackground(box(background, 0));
+        view.setLayoutParams(new TableRow.LayoutParams(
+                Ui.dp(context, Math.max(1, widthDp)),
+                ViewGroup.LayoutParams.WRAP_CONTENT
+        ));
+        view.setAutoSizeTextTypeUniformWithConfiguration(9, 14, 1, TypedValue.COMPLEX_UNIT_SP);
+        view.setMaxLines(2);
         return view;
     }
 

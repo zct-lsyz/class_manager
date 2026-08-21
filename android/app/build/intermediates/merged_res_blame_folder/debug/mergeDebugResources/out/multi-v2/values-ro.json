@@ -1,7 +1,7 @@
 {
     "logs": [
         {
-            "outputFile": "com.classmanager.app-mergeDebugResources-21:/values-ro/values-ro.xml",
+            "outputFile": "com.classmanager.app-mergeDebugResources-28:/values-ro/values-ro.xml",
             "map": [
                 {
                     "source": "C:\\Users\\z1765\\.gradle\\caches\\9.3.0\\transforms\\4cfa348bebba4dd05336d50ead3518e2\\workspace\\transformed\\core-1.13.1\\res\\values-ro\\values-ro.xml",

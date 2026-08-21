@@ -1,16 +1,21 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.classmanager.app"
-    android:versionCode="2"
-    android:versionName="2.0.0" >
+    android:versionCode="6"
+    android:versionName="2.4.0" >
 
     <uses-sdk
         android:minSdkVersion="26"
         android:targetSdkVersion="34" />
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
 
     <permission
         android:name="com.classmanager.app.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION"
@@ -22,14 +27,21 @@
         android:name="com.classmanager.app.ClassManagerApp"
         android:allowBackup="false"
         android:appComponentFactory="androidx.core.app.CoreComponentFactory"
+        android:dataExtractionRules="@xml/data_extraction_rules"
         android:debuggable="true"
         android:extractNativeLibs="false"
+        android:fullBackupContent="@xml/backup_rules"
         android:icon="@drawable/ic_app"
         android:label="班级教学管理"
         android:networkSecurityConfig="@xml/network_security_config"
         android:supportsRtl="true"
         android:theme="@style/Theme.ClassManager"
         android:usesCleartextTraffic="false" >
+        <activity android:name="com.classmanager.app.ui.ExamPaperAnalysisActivity" />
+        <activity android:name="com.classmanager.app.ui.MediaArchiveActivity" />
+        <activity android:name="com.classmanager.app.ui.DormitoryActivity" />
+        <activity android:name="com.classmanager.app.ui.RankingActivity" />
+        <activity android:name="com.classmanager.app.ui.AiAnalysisActivity" />
         <activity android:name="com.classmanager.app.ui.AccountActivity" />
         <activity android:name="com.classmanager.app.ui.BackupActivity" />
         <activity android:name="com.classmanager.app.ui.ReportActivity" />
@@ -64,6 +76,9 @@
             android:authorities="com.classmanager.app.androidx-startup"
             android:exported="false" >
             <meta-data
+                android:name="androidx.work.WorkManagerInitializer"
+                android:value="androidx.startup" />
+            <meta-data
                 android:name="androidx.emoji2.text.EmojiCompatInitializer"
                 android:value="androidx.startup" />
             <meta-data
@@ -74,6 +89,97 @@
                 android:value="androidx.startup" />
         </provider>
 
+        <service
+            android:name="androidx.work.impl.background.systemalarm.SystemAlarmService"
+            android:directBootAware="false"
+            android:enabled="@bool/enable_system_alarm_service_default"
+            android:exported="false" />
+        <service
+            android:name="androidx.work.impl.background.systemjob.SystemJobService"
+            android:directBootAware="false"
+            android:enabled="@bool/enable_system_job_service_default"
+            android:exported="true"
+            android:permission="android.permission.BIND_JOB_SERVICE" />
+        <service
+            android:name="androidx.work.impl.foreground.SystemForegroundService"
+            android:directBootAware="false"
+            android:enabled="@bool/enable_system_foreground_service_default"
+            android:exported="false" />
+
+        <receiver
+            android:name="androidx.work.impl.utils.ForceStopRunnable$BroadcastReceiver"
+            android:directBootAware="false"
+            android:enabled="true"
+            android:exported="false" />
+        <receiver
+            android:name="androidx.work.impl.background.systemalarm.ConstraintProxy$BatteryChargingProxy"
+            android:directBootAware="false"
+            android:enabled="false"
+            android:exported="false" >
+            <intent-filter>
+                <action android:name="android.intent.action.ACTION_POWER_CONNECTED" />
+                <action android:name="android.intent.action.ACTION_POWER_DISCONNECTED" />
+            </intent-filter>
+        </receiver>
+        <receiver
+            android:name="androidx.work.impl.background.systemalarm.ConstraintProxy$BatteryNotLowProxy"
+            android:directBootAware="false"
+            android:enabled="false"
+            android:exported="false" >
+            <intent-filter>
+                <action android:name="android.intent.action.BATTERY_OKAY" />
+                <action android:name="android.intent.action.BATTERY_LOW" />
+            </intent-filter>
+        </receiver>
+        <receiver
+            android:name="androidx.work.impl.background.systemalarm.ConstraintProxy$StorageNotLowProxy"
+            android:directBootAware="false"
+            android:enabled="false"
+            android:exported="false" >
+            <intent-filter>
+                <action android:name="android.intent.action.DEVICE_STORAGE_LOW" />
+                <action android:name="android.intent.action.DEVICE_STORAGE_OK" />
+            </intent-filter>
+        </receiver>
+        <receiver
+            android:name="androidx.work.impl.background.systemalarm.ConstraintProxy$NetworkStateProxy"
+            android:directBootAware="false"
+            android:enabled="false"
+            android:exported="false" >
+            <intent-filter>
+                <action android:name="android.net.conn.CONNECTIVITY_CHANGE" />
+            </intent-filter>
+        </receiver>
+        <receiver
+            android:name="androidx.work.impl.background.systemalarm.RescheduleReceiver"
+            android:directBootAware="false"
+            android:enabled="false"
+            android:exported="false" >
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.TIME_SET" />
+                <action android:name="android.intent.action.TIMEZONE_CHANGED" />
+            </intent-filter>
+        </receiver>
+        <receiver
+            android:name="androidx.work.impl.background.systemalarm.ConstraintProxyUpdateReceiver"
+            android:directBootAware="false"
+            android:enabled="@bool/enable_system_alarm_service_default"
+            android:exported="false" >
+            <intent-filter>
+                <action android:name="androidx.work.impl.background.systemalarm.UpdateProxies" />
+            </intent-filter>
+        </receiver>
+        <receiver
+            android:name="androidx.work.impl.diagnostics.DiagnosticsReceiver"
+            android:directBootAware="false"
+            android:enabled="true"
+            android:exported="true"
+            android:permission="android.permission.DUMP" >
+            <intent-filter>
+                <action android:name="androidx.work.diagnostics.REQUEST_DIAGNOSTICS" />
+            </intent-filter>
+        </receiver>
         <receiver
             android:name="androidx.profileinstaller.ProfileInstallReceiver"
             android:directBootAware="false"
@@ -93,6 +199,11 @@
                 <action android:name="androidx.profileinstaller.action.BENCHMARK_OPERATION" />
             </intent-filter>
         </receiver>
+
+        <service
+            android:name="androidx.room.MultiInstanceInvalidationService"
+            android:directBootAware="true"
+            android:exported="false" />
     </application>
 
 </manifest>

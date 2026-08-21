@@ -1,5 +1,7 @@
 R_DEF: Internal format may change without notice
 local
+anim module_enter
+anim module_exit
 color accent
 color primary
 color primary_dark
@@ -7,8 +9,19 @@ color surface
 color text_primary
 drawable bg_card
 drawable ic_app
+drawable ic_menu
 id content
+id drawer_layout
+id navigation_drawer
+id navigation_items
 id toolbar
 layout activity_container
+string confirm_anonymous_ai_data
+string enable_ai_analysis
+string module_navigation_item
+string selected_paper
+string selected_score_sheet
 style Theme.ClassManager
+xml backup_rules
+xml data_extraction_rules
 xml network_security_config

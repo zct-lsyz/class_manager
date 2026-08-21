@@ -24,6 +24,8 @@ anim btn_radio_to_on_mtrl_dot_group_animation
 anim btn_radio_to_on_mtrl_ring_outer_animation
 anim btn_radio_to_on_mtrl_ring_outer_path_animation
 anim fragment_fast_out_extra_slow_in
+anim module_enter
+anim module_exit
 animator fragment_close_enter
 animator fragment_close_exit
 animator fragment_fade_enter
@@ -150,6 +152,7 @@ attr drawableTint
 attr drawableTintMode
 attr drawableTopCompat
 attr drawerArrowStyle
+attr drawerLayoutStyle
 attr dropDownListViewStyle
 attr dropdownListPreferredItemHeight
 attr editTextBackground
@@ -321,6 +324,10 @@ attr windowMinWidthMinor
 attr windowNoTitle
 bool abc_action_bar_embed_tabs
 bool abc_config_actionMenuItemAllCaps
+bool enable_system_alarm_service_default
+bool enable_system_foreground_service_default
+bool enable_system_job_service_default
+bool workmanager_test_configuration
 color abc_background_cache_hint_selector_material_dark
 color abc_background_cache_hint_selector_material_light
 color abc_btn_colored_borderless_text_material
@@ -503,6 +510,7 @@ dimen compat_button_padding_vertical_material
 dimen compat_control_corner_material
 dimen compat_notification_large_icon_max_height
 dimen compat_notification_large_icon_max_width
+dimen def_drawer_elevation
 dimen disabled_alpha_material_dark
 dimen disabled_alpha_material_light
 dimen highlight_alpha_material_colored
@@ -630,6 +638,7 @@ drawable ic_call_answer_video
 drawable ic_call_answer_video_low
 drawable ic_call_decline
 drawable ic_call_decline_low
+drawable ic_menu
 drawable notification_action_background
 drawable notification_bg
 drawable notification_bg_low
@@ -725,6 +734,7 @@ id decor_content_parent
 id default_activity_button
 id dialog_button
 id disableHome
+id drawer_layout
 id edit_query
 id edit_text_id
 id end
@@ -749,6 +759,8 @@ id list_item
 id message
 id middle
 id multiply
+id navigation_drawer
+id navigation_items
 id never
 id none
 id normal
@@ -916,7 +928,12 @@ string call_notification_hang_up_action
 string call_notification_incoming_text
 string call_notification_ongoing_text
 string call_notification_screening_text
+string confirm_anonymous_ai_data
+string enable_ai_analysis
+string module_navigation_item
 string search_menu_title
+string selected_paper
+string selected_score_sheet
 string status_bar_notification_info_overflow
 style AlertDialog_AppCompat
 style AlertDialog_AppCompat_Light
@@ -1291,6 +1308,7 @@ styleable CheckedTextView android_checkMark checkMarkCompat checkMarkTint checkM
 styleable ColorStateListItem android_color android_alpha android_lStar alpha lStar
 styleable CompoundButton android_button buttonCompat buttonTint buttonTintMode
 styleable DrawerArrowToggle arrowHeadLength arrowShaftLength barLength color drawableSize gapBetweenBars spinBars thickness
+styleable DrawerLayout elevation
 styleable FontFamily fontProviderAuthority fontProviderCerts fontProviderFetchStrategy fontProviderFetchTimeout fontProviderPackage fontProviderQuery fontProviderSystemFontFamily
 styleable FontFamilyFont android_font android_fontWeight android_fontStyle android_ttcIndex android_fontVariationSettings font fontStyle fontVariationSettings fontWeight ttcIndex
 styleable Fragment android_name android_id android_tag
@@ -1316,4 +1334,6 @@ styleable Toolbar android_gravity android_minHeight buttonGravity collapseConten
 styleable View android_theme android_focusable paddingEnd paddingStart theme
 styleable ViewBackgroundHelper android_background backgroundTint backgroundTintMode
 styleable ViewStubCompat android_id android_layout android_inflatedId
+xml backup_rules
+xml data_extraction_rules
 xml network_security_config
