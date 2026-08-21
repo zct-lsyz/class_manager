@@ -1,4 +1,4 @@
-﻿from django.contrib.auth.models import User
+from django.contrib.auth.models import User
 from django.test import TestCase
 from django.urls import reverse
 
@@ -6,7 +6,7 @@ from apps.classes.models import CommitteeRole, SchoolClass, Semester
 from apps.seating.forms import ClassroomLayoutForm
 from apps.seating.models import ClassroomLayout, SeatAssignment, SeatPlan
 from apps.seating.services import (
-    arrange_students, attach_student_seat_metadata, rotate_plan,
+    DEFAULT_PRIORITIES, arrange_students, attach_student_seat_metadata, rotate_plan,
 )
 from apps.students.models import Student
 
@@ -80,6 +80,56 @@ class SeatingFeatureTests(TestCase):
                 second = arranged.get((row, first_col + 1))
                 if first and second:
                     self.assertEqual(first.gender, second.gender)
+
+    def _make_students(self, specs):
+        """按 (gender, height) 列表批量创建测试学生。"""
+        students = []
+        for index, (gender, height) in enumerate(specs, start=1):
+            students.append(Student.objects.create(
+                school_class=self.school_class,
+                student_id=f"202600000000000{index:04d}",
+                name=f"测试生{index}", gender=gender, height=height,
+            ))
+        return students
+
+    def test_arrange_never_creates_4_consecutive_same_gender_in_column(self):
+        """默认前提：同一列前后不允许出现连续 4 个同性别（最多 3 人连坐）。"""
+        layout = ClassroomLayout.objects.create(
+            school_class=self.school_class, rows=6, cols=4,
+            aisle_count=1, aisle_positions=[2], podium_position="back",
+        )
+        specs = (
+            [("male", 150 + i * 2) for i in range(12)]
+            + [("female", 130 + i * 2) for i in range(12)]
+        )
+        students = self._make_students(specs)
+        attach_student_seat_metadata(students, self.school_class)
+        arranged = arrange_students(layout, students, list(DEFAULT_PRIORITIES))
+        self.assertEqual(len(arranged), 24)
+        for col in range(layout.cols):
+            column = [arranged[(row, col)].gender for row in range(layout.rows)]
+            run = 1
+            for prev, cur in zip(column, column[1:]):
+                run = run + 1 if cur == prev else 1
+                self.assertLess(run, 4, f"列 {col} 出现连续 4 个同性别: {column}")
+
+    def test_arrange_keeps_heights_close_instead_of_gender_inversion(self):
+        """默认前提：不为性别间隔把矮个子夹在两个高个子中间（先矮后高、身高平滑）。"""
+        layout = ClassroomLayout.objects.create(
+            school_class=self.school_class, rows=4, cols=1,
+            aisle_count=0, aisle_positions=[], podium_position="back",
+        )
+        students = self._make_students([
+            ("male", 180), ("male", 178), ("female", 135), ("female", 138),
+        ])
+        attach_student_seat_metadata(students, self.school_class)
+        arranged = arrange_students(layout, students, list(DEFAULT_PRIORITIES))
+        column = [arranged[(row, 0)] for row in range(4)]
+        # 矮个子女生在前，高个子男生在后，而不是为了间隔把女生夹在男生中间
+        self.assertTrue(all(s.gender == "female" and s.height <= 145 for s in column[:2]))
+        self.assertTrue(all(s.gender == "male" and s.height >= 170 for s in column[2:]))
+        for above, below in zip(column, column[1:]):
+            self.assertLessEqual(abs(above.height - below.height), 45)
 
     def test_auto_arrange_saves_priorities_and_rotation(self):
         response = self.client.post(reverse("seating:auto_arrange"), {

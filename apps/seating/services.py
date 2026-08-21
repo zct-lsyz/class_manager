@@ -17,6 +17,15 @@ PRIORITY_LABELS = {
     "special": "特殊要求",
 }
 
+# —— 智能排座默认前提（始终生效，先于用户可调的优先级链）——
+# 1. 男女间隔：同一列前后连续同性别最多 3 人（第 4 人硬性阻止）；
+#    尽量不超过 2 排（连续第 3 人施加软惩罚）。
+# 2. 身高相近：相邻同学身高差越小越好，且两项合并加权，
+#    避免为了性别间隔而牺牲身高（两个高个子中间夹两排矮个子）。
+MAX_COLUMN_SAME_GENDER = 3   # 同一列允许的最大连续同性别排数
+GENDER_RUN_WEIGHT = 30       # 列内连续同性别达到第 3 排时的软惩罚权重
+HEIGHT_DIFF_CAP = 60         # 单个相邻同学身高差计入惩罚的上限(cm)
+
 
 def attach_student_seat_metadata(students, school_class):
     """为座位人物块补充宿舍、最近考试总分和班级名次。"""
@@ -97,9 +106,154 @@ def _desk_mate(assigned, row, col):
     return assigned.get((row, mate_col))
 
 
+def _column_gender_run(assigned, row, col, gender):
+    """统计 (row, col) 正上方已就座且与 candidate 同性的连续学生数。
+
+    行优先填充时，同一列当前行上方的座位均已就座，因此可以准确判断
+    放入 candidate 后该列会形成多长的连续同性别队列。
+    """
+    run = 0
+    r = row - 1
+    while r >= 0:
+        item = assigned.get((r, col))
+        if item is None or item.gender != gender:
+            break
+        run += 1
+        r -= 1
+    return run
+
+
+def _run_at(assigned, layout, row, col):
+    """返回包含 (row, col) 的连续同性别长度。"""
+    student = assigned.get((row, col))
+    if student is None:
+        return 0
+    gender = student.gender
+    run = 1
+    r = row - 1
+    while r >= 0:
+        item = assigned.get((r, col))
+        if item is None or item.gender != gender:
+            break
+        run += 1
+        r -= 1
+    r = row + 1
+    while r < layout.rows:
+        item = assigned.get((r, col))
+        if item is None or item.gender != gender:
+            break
+        run += 1
+        r += 1
+    return run
+
+
+def _height_span(assigned, layout, row, col):
+    """位置上下相邻身高差之和（身高缺失的同学贡献 0）。"""
+    total = 0
+    student = assigned[(row, col)]
+    for r in (row - 1, row + 1):
+        if 0 <= r < layout.rows:
+            neighbor = assigned.get((r, col))
+            if (neighbor is not None and student.height is not None
+                    and neighbor.height is not None):
+                total += abs(student.height - neighbor.height)
+    return total
+
+
+def _find_run_violation(assigned, layout):
+    """返回第一个连续同性别超过上限的位置（串内最后越界者），没有则返回 None。"""
+    for col in range(layout.cols):
+        run = 0
+        prev = None
+        for row in range(layout.rows):
+            student = assigned.get((row, col))
+            if student is None:
+                run, prev = 0, None
+                continue
+            gender = student.gender
+            run = run + 1 if gender == prev else 1
+            if run > MAX_COLUMN_SAME_GENDER:
+                return (row, col)
+            prev = gender
+    return None
+
+
+def _find_swap_target(assigned, layout, row, col):
+    """寻找可与 (row, col) 交换的异性学生位置，交换后两侧都不产生新违规。
+
+    优先选择身高扰动最小的位置，避免修复本身破坏“身高相近”的默认前提；
+    不移动有特殊座位要求的学生。
+    """
+    student = assigned.get((row, col))
+    if student is None or student.seat_requirement.strip():
+        return None
+    gender = student.gender
+    best = None
+    best_score = None
+    for r2 in range(layout.rows):
+        for c2 in range(layout.cols):
+            if (r2, c2) == (row, col):
+                continue
+            other = assigned.get((r2, c2))
+            if other is None or other.gender == gender or other.seat_requirement.strip():
+                continue
+            assigned[(row, col)], assigned[(r2, c2)] = other, assigned[(row, col)]
+            if (_run_at(assigned, layout, row, col) <= MAX_COLUMN_SAME_GENDER
+                    and _run_at(assigned, layout, r2, c2) <= MAX_COLUMN_SAME_GENDER):
+                score = _height_span(assigned, layout, row, col) + _height_span(assigned, layout, r2, c2)
+                if best_score is None or score < best_score:
+                    best_score = score
+                    best = (r2, c2)
+            assigned[(row, col)], assigned[(r2, c2)] = assigned[(r2, c2)], assigned[(row, col)]
+    return best
+
+
+def _repair_column_runs(assigned, layout, max_iterations=60):
+    """交换修复：保证同一列连续同性别不超过 MAX_COLUMN_SAME_GENDER。
+
+    行优先贪心在性别比例与身高差异较大时，可能在某列堆出超过上限的连续
+    同性别（另一种性别在其余列被先消耗完）。此处通过跨列交换拆开违规串，
+    每次交换只影响两个格子所在列的局部连续串，且交换后两侧均校验不超过
+    上限，因此修复只会减少违规、不会制造新违规。实在找不到合适交换对象
+    （性别严重失衡）时才保留原状。
+    """
+    for _ in range(max_iterations):
+        violation = _find_run_violation(assigned, layout)
+        if violation is None:
+            break
+        repaired = False
+        # 优先交换串的最后一个（越界者），失败则尝试串内更靠前的位置
+        for row in range(violation[0], violation[0] - MAX_COLUMN_SAME_GENDER, -1):
+            target = _find_swap_target(assigned, layout, row, violation[1])
+            if target is not None:
+                assigned[(row, violation[1])], assigned[target] = (
+                    assigned[target], assigned[(row, violation[1])],
+                )
+                repaired = True
+                break
+        if not repaired:
+            break
+    return assigned
+
+
 def _candidate_key(student, row, col, layout, assigned, priorities):
     key = []
     neighbors = _adjacent_students(assigned, row, col, layout)
+
+    # —— 默认前提（先于用户优先级链）：男女间隔 + 相邻身高相近 ——
+    # 列内上方连续同性别超过 1 排（即放入后达到第 3 排）开始软惩罚；
+    # 与已就座相邻同学的身高差之和也计入惩罚。两项合并为一个加权得分：
+    # 性别间隔偏好与身高相近偏好互相制约，避免为岔开男女而把很矮的学生
+    # 夹在两位很高的同学之间（此时身高惩罚会超过性别间隔惩罚，允许连坐 3 排）。
+    run = _column_gender_run(assigned, row, col, student.gender)
+    run_penalty = max(0, run - 1) * GENDER_RUN_WEIGHT
+    height_diff = 0.0
+    if student.height is not None:
+        for item in neighbors:
+            if item.height is not None:
+                height_diff += min(abs(item.height - student.height), HEIGHT_DIFF_CAP)
+    key.append(run_penalty + height_diff)
+
     for priority in priorities:
         if priority == "height":
             key.extend((_vision_key(student), student.height is None, student.height or 999))
@@ -130,7 +284,13 @@ def _candidate_key(student, row, col, layout, assigned, priorities):
 
 
 def arrange_students(layout, students, priorities):
-    """按优先级和硬约束生成 {(row, col): student}。"""
+    """按优先级和硬约束生成 {(row, col): student}。
+
+    默认前提（始终生效，先于优先级链）：
+    - 男女间隔：同一列前后不允许出现连续 4 个同性别（尽量不超过 2 排）；
+    - 身高相近：相邻同学身高差尽量小，且不与性别间隔冲突（不为岔开男女
+      而在两位高个子中间夹两排矮个子）。
+    """
     priorities = normalize_priorities(priorities)
     remaining = list(students)
     positions = [(row, col) for row in range(layout.rows) for col in range(layout.cols)]
@@ -147,6 +307,14 @@ def arrange_students(layout, students, priorities):
             if not mate or mate.gender == student.gender:
                 compatible.append(position)
         choices = compatible or positions
+        # 硬约束：特殊学生同样不能造成同一列连续 4 个同性别
+        run_safe = [
+            position for position in choices
+            if _column_gender_run(assigned, position[0], position[1], student.gender)
+            < MAX_COLUMN_SAME_GENDER
+        ]
+        if run_safe:
+            choices = run_safe
         position = min(
             choices,
             key=lambda seat: (
@@ -164,8 +332,16 @@ def arrange_students(layout, students, priorities):
             break
         mate = _desk_mate(assigned, row, col)
         candidates = remaining
+        # 硬约束：同一列不允许出现连续 4 个同性别（实在没有其他选择时才破例）
+        run_safe = [
+            student for student in candidates
+            if _column_gender_run(assigned, row, col, student.gender)
+            < MAX_COLUMN_SAME_GENDER
+        ]
+        if run_safe:
+            candidates = run_safe
         if mate:
-            same_gender = [student for student in remaining if student.gender == mate.gender]
+            same_gender = [student for student in candidates if student.gender == mate.gender]
             if same_gender:
                 candidates = same_gender
         student = min(
@@ -174,6 +350,8 @@ def arrange_students(layout, students, priorities):
         )
         assigned[(row, col)] = student
         remaining.remove(student)
+    # 兜底：修复贪心在个别列可能堆出的超长连续同性别（跨列交换拆开）
+    _repair_column_runs(assigned, layout)
     return assigned
 
 
