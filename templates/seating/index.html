@@ -6,6 +6,9 @@
     <div>
         <a href="{% url 'seating:plan_create' %}" class="btn btn-primary btn-sm"><i class="bi bi-plus-lg"></i> 新方案</a>
         <a href="{% url 'seating:layout' %}" class="btn btn-outline-primary btn-sm"><i class="bi bi-gear"></i> 布局</a>
+        {% if layouts %}
+        <button type="button" class="btn btn-outline-success btn-sm" data-bs-toggle="modal" data-bs-target="#seatImportModal"><i class="bi bi-file-earmark-arrow-up me-1"></i>导入Excel</button>
+        {% endif %}
         {% if current_plan %}
         <a href="{% url 'seating:export' %}" class="btn btn-success btn-sm"><i class="bi bi-file-earmark-excel me-1"></i>导出Excel</a>
         <a href="{% url 'seating:print' %}" target="_blank" class="btn btn-outline-secondary btn-sm"><i class="bi bi-printer me-1"></i>导出/打印</a>
@@ -140,6 +143,43 @@
                 <div class="form-text">轮换时每两列向右移动一组：1-2列 → 3-4列，最后一组回到1-2列。</div>
             </div>
             <div class="modal-footer"><button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">取消</button><button type="submit" class="btn btn-primary">生成并保存座位</button></div>
+        </form>
+    </div></div>
+</div>
+{% endif %}
+
+{% if layouts %}
+<div class="modal fade" id="seatImportModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable"><div class="modal-content">
+        <form method="post" action="{% url 'seating:plan_import' %}" enctype="multipart/form-data">
+            {% csrf_token %}
+            <div class="modal-header"><h5 class="modal-title"><i class="bi bi-file-earmark-arrow-up me-1"></i>从 Excel 导入座位方案</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+            <div class="modal-body">
+                <div class="alert alert-info small py-2 mb-3"><i class="bi bi-info-circle me-1"></i>Excel 模板与右上角「导出Excel」格式一致：<strong>首行或末行为“讲台”</strong>，其余每一行对应一个座位排、每格放一个学生姓名（按实际座位摆放），空座位留空。可先「导出Excel」下载后改名编辑，再用此功能导入。</div>
+                <div class="mb-3">
+                    <label class="form-label">座位表 Excel 文件（.xlsx）</label>
+                    <input type="file" name="file" accept=".xlsx" class="form-control" required>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">目标教室布局</label>
+                    <select name="layout" class="form-select">
+                        {% for l in layouts %}
+                        <option value="{{ l.pk }}"{% if l.is_current %} selected{% endif %}>{{ l.name }}（{{ l.rows }}排 x {{ l.cols }}列）{% if l.is_current %}（当前）{% endif %}</option>
+                        {% endfor %}
+                    </select>
+                    <div class="form-text">Excel 的行列数需要与该布局一致（“讲台”行不计入）。</div>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">版本号（可选）</label>
+                    <input type="text" name="version" class="form-control" placeholder="如 v3 / 期中调位">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">调整原因（可选）</label>
+                    <textarea name="reason" class="form-control" rows="2" placeholder="如：按期中考试名次重新排座"></textarea>
+                </div>
+                <div class="form-text">导入后会新建并启用该座位方案（原当前方案自动转为历史方案）。姓名按当前花名册匹配，未能匹配或重复的会提示并跳过。</div>
+            </div>
+            <div class="modal-footer"><button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">取消</button><button type="submit" class="btn btn-success"><i class="bi bi-upload me-1"></i>导入并生成座位方案</button></div>
         </form>
     </div></div>
 </div>

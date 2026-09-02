@@ -1,4 +1,4 @@
-﻿from django.contrib import messages
+from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.shortcuts import render, redirect, get_object_or_404
 from django.core.paginator import Paginator
@@ -138,6 +138,10 @@ def index(request):
         attach_student_seat_metadata([a.student for a in assignments] + unassigned, current_class)
 
     plans = SeatPlan.objects.filter(school_class=current_class).order_by("-created_at") if current_class else []
+    layouts = (
+        ClassroomLayout.objects.filter(school_class=current_class).order_by("-is_current", "-updated_at")
+        if current_class else ClassroomLayout.objects.none()
+    )
     priorities = normalize_priorities(
         current_plan.arrangement_priorities if current_plan else DEFAULT_PRIORITIES
     )
@@ -148,6 +152,7 @@ def index(request):
         "grid": grid,
         "unassigned": unassigned,
         "plans": plans,
+        "layouts": layouts,
         "aisle_positions": layout.aisle_positions if layout else [],
         "priority_rows": list(enumerate(priorities, start=1)),
         "priority_options": PRIORITY_LABELS.items(),
@@ -228,6 +233,178 @@ def plan_activate(request, pk):
         plan.is_active = True
         plan.save()
         messages.success(request, f"座位方案 v{plan.version or plan.pk} 已恢复为当前方案。")
+    return redirect("seating:index")
+
+
+def _parse_seat_plan_excel(file_obj):
+    """解析“导出的座位表Excel”模板。
+
+    返回 (seat_rows, podium_top)：
+    - seat_rows：学生姓名网格 list[list[str]]（已剔除“讲台”行，空座位为空串）
+    - podium_top：讲台是否在学生区上方
+    """
+    from openpyxl import load_workbook
+
+    workbook = load_workbook(file_obj, read_only=True, data_only=True)
+    try:
+        sheet = workbook.worksheets[0]
+        raw_rows = []
+        for row in sheet.iter_rows(values_only=True):
+            raw_rows.append(["" if value is None else str(value).strip() for value in row])
+    finally:
+        workbook.close()
+
+    podium_rows = []
+    seat_rows = []
+    for index, texts in enumerate(raw_rows):
+        if "讲台" in "".join(texts):
+            podium_rows.append(index)
+            continue
+        if any(texts):
+            seat_rows.append(texts)
+
+    podium_top = True  # 默认按“讲台在上”（本页导出的标准样式）
+    if podium_rows:
+        first_seat = next(
+            (index for index, texts in enumerate(raw_rows)
+             if index not in podium_rows and any(texts)),
+            None,
+        )
+        podium_top = min(podium_rows) < (first_seat if first_seat is not None else 10 ** 9)
+
+    # 统一各行宽度（保留中间空座位的位置）
+    width = max((len(row) for row in seat_rows), default=0)
+    if width:
+        seat_rows = [row + [""] * (width - len(row)) for row in seat_rows]
+    return seat_rows, podium_top
+
+
+def _map_file_row_to_grid(podium_top, total_rows, file_index):
+    """Excel 里第 file_index 个学生行（0 起）对应的布局排号（0 起）。
+
+    讲台在上：文件自上而下是第 total_rows-1 排 → 第 0 排，需反转；
+    讲台在下：文件自上而下即第 0 排 → 第 total_rows-1 排，保持不变。
+    """
+    if podium_top:
+        return total_rows - 1 - file_index
+    return file_index
+
+
+@login_required
+@transaction.atomic
+def plan_import(request):
+    """按“导出的座位表Excel”模板导入，新建并启用一个座位方案。"""
+    current_class = get_current_class(request.user)
+    if not current_class:
+        messages.error(request, "请先设置当前班级。")
+        return redirect("seating:index")
+    if request.method != "POST":
+        return redirect("seating:index")
+
+    upload = request.FILES.get("file")
+    if not upload:
+        messages.error(request, "请选择要导入的 Excel 文件。")
+        return redirect("seating:index")
+    filename = (upload.name or "").strip().lower()
+    if not filename.endswith(".xlsx"):
+        messages.error(request, "仅支持 .xlsx 文件，可先用本页「导出Excel」下载模板。")
+        return redirect("seating:index")
+
+    try:
+        layout = ClassroomLayout.objects.get(
+            pk=int(request.POST.get("layout") or 0),
+            school_class=current_class,
+        )
+    except (ClassroomLayout.DoesNotExist, TypeError, ValueError):
+        messages.error(request, "请选择有效的教室布局。")
+        return redirect("seating:index")
+
+    try:
+        seat_rows, podium_top = _parse_seat_plan_excel(upload)
+    except Exception as exc:
+        messages.error(request, f"无法解析 Excel 文件（请确认是 .xlsx 且未损坏）：{exc}")
+        return redirect("seating:index")
+
+    if not seat_rows or not any(any(cell) for cell in seat_rows):
+        messages.error(request, "表格中没有识别到学生姓名，请检查文件是否为座位表格式（讲台行 + 学生姓名）。")
+        return redirect("seating:index")
+
+    detected_rows, detected_cols = len(seat_rows), len(seat_rows[0])
+    if detected_rows != layout.rows:
+        messages.error(
+            request,
+            f"表格中识别到 {detected_rows} 排学生行（不含讲台行），"
+            f"但布局「{layout}」是 {layout.rows} 排，请选择匹配的布局或修正文件。",
+        )
+        return redirect("seating:index")
+    if detected_cols > layout.cols:
+        messages.error(
+            request,
+            f"表格中识别到 {detected_cols} 列，超过布局「{layout}」的 {layout.cols} 列。",
+        )
+        return redirect("seating:index")
+
+    students = list(Student.objects.filter(
+        Q(school_class=current_class) | Q(school_class__isnull=True), is_deleted=False,
+    ))
+    by_name = {}
+    for student in students:
+        by_name.setdefault(student.name.strip(), []).append(student)
+
+    version = (request.POST.get("version") or "").strip()
+    reason = (request.POST.get("reason") or "").strip()
+
+    assignments = []
+    placed_ids = set()
+    skipped = []
+    for file_row, row in enumerate(seat_rows):
+        grid_row = _map_file_row_to_grid(podium_top, layout.rows, file_row)
+        for col, cell in enumerate(row):
+            name = cell.strip()
+            if not name:
+                continue
+            matches = by_name.get(name, [])
+            if not matches:
+                skipped.append(f"第{file_row + 1}行第{col + 1}列「{name}」不在学生花名册中")
+            elif len(matches) > 1:
+                skipped.append(f"第{file_row + 1}行第{col + 1}列「{name}」花名册中有多个同名，已跳过")
+            elif matches[0].pk in placed_ids:
+                skipped.append(f"第{file_row + 1}行第{col + 1}列「{name}」重复出现，已跳过")
+            else:
+                placed_ids.add(matches[0].pk)
+                assignments.append((grid_row, col, matches[0]))
+
+    if not assignments:
+        messages.error(
+            request,
+            "未能匹配到任何学生，未创建方案。"
+            + ("；".join(skipped[:8]) + ("；…" if len(skipped) > 8 else "") if skipped else ""),
+        )
+        return redirect("seating:index")
+
+    plan = SeatPlan.objects.create(
+        school_class=current_class, layout=layout, version=version, reason=reason,
+    )
+    SeatPlan.objects.filter(school_class=current_class).exclude(pk=plan.pk).update(is_active=False)
+    SeatAssignment.objects.bulk_create([
+        SeatAssignment(seat_plan=plan, student=student, row=row, col=col)
+        for (row, col, student) in assignments
+    ])
+    Student.objects.filter(pk__in=placed_ids, school_class__isnull=True).update(
+        school_class=current_class,
+    )
+
+    OperationLog.objects.create(
+        user=request.user, action="import", module="seating",
+        object_repr=f"座位方案 v{plan.version or plan.pk}",
+        detail=f"Excel 导入 {len(assignments)} 个位置；文件 {upload.name}；跳过 {len(skipped)} 处",
+        ip_address=get_client_ip(request), success=True,
+    )
+
+    messages.success(request, f"已按 Excel 导入并启用座位方案 v{plan.version or plan.pk}，共安排 {len(assignments)} 名学生。")
+    if skipped:
+        preview = "；".join(skipped[:8]) + ("；…" if len(skipped) > 8 else "")
+        messages.warning(request, f"有 {len(skipped)} 处未能安排：{preview}")
     return redirect("seating:index")
 
 
