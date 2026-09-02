@@ -30,9 +30,16 @@
     <div class="card">
         <div class="card-header d-flex justify-content-between align-items-center">
             <span><i class="bi bi-grid me-2"></i>教室座位图</span>
-            <span class="small text-muted">拖动学生块到空座；目标已有学生时，原学生自动回到未分配区</span>
+            <span class="d-flex align-items-center gap-2 flex-wrap">
+                <span id="seatSelCount" class="badge bg-primary d-none">已选 0 人</span>
+                <span class="small text-muted">单块拖到已占座位＝两人互换；空白处按住左键框选多个学生块后拖动其中任一块可整体移动</span>
+            </span>
         </div>
         <div class="card-body">
+            <div class="d-flex flex-wrap gap-2 small text-muted mb-2">
+                <span><i class="bi bi-arrow-left-right me-1"></i><strong>单块移动：</strong>拖到空座＝落座；拖到已占座位＝两人直接互换（未分配学生拖到已占座位时，原学生回到未分配区）。</span>
+                <span><i class="bi bi-bounding-box me-1"></i><strong>框选移动：</strong>在座位区空白处按住鼠标左键拖出矩形框选多个学生块，再拖动其中任一块即可整体移动；被覆盖座位的学生会沿所在行/列顺移到新空出的行列。单击空白处可取消选择。</span>
+            </div>
             <div class="table-responsive seat-table-wrapper">
                 <table class="table table-bordered text-center mb-0 mx-auto seat-table">
                     {% for row_num, row in grid.items %}
@@ -150,58 +157,449 @@
 .student-name { font-size:.92rem; font-weight:700; }
 .student-meta { margin-top:4px; overflow:hidden; text-overflow:ellipsis; font-size:.68rem; font-weight:400; white-space:nowrap; color:#475569; }
 .special-star { position:absolute; top:2px; right:5px; color:#dc2626; font-size:.9rem; line-height:1; }
+
+/* —— 框选 / 整体拖动交互 —— */
+.student-block.selected { outline:2px solid #0d6efd; outline-offset:2px; box-shadow:0 0 0 4px rgba(13,110,253,.15); }
+.student-block.dragging { opacity:.35; }
+td.seat-cell.drop-ok .seat-slot { box-shadow:inset 0 0 0 2px #198754; }
+td.seat-cell.drop-bad .seat-slot { box-shadow:inset 0 0 0 2px #dc3545; }
+#unassignedStudents.drop-ok { outline:2px dashed #198754; outline-offset:2px; border-radius:8px; }
+.marquee-overlay { position:fixed; z-index:2000; border:1px dashed #0d6efd; background:rgba(13,110,253,.10); pointer-events:none; }
+body.selecting-active, body.drag-active { user-select:none; -webkit-user-select:none; }
+body.drag-active .student-block { cursor:grabbing; }
+.seat-table-wrapper td.seat-cell:has(.seat-placeholder) { cursor:crosshair; }
+#unassignedStudents { cursor:crosshair; }
+#unassignedStudents:has(.student-block) { cursor:default; }
 </style>
 <script>
-document.addEventListener('DOMContentLoaded', function() {
-    let dragged = null;
+document.addEventListener('DOMContentLoaded', function () {
     const unassigned = document.getElementById('unassignedStudents');
     if (!unassigned) return;
-    const syncSeats = () => document.querySelectorAll('.seat-slot').forEach(slot => {
+
+    // ---------- 基础工具 ----------
+    const seatCells = () => Array.from(document.querySelectorAll('td.seat-cell'));
+    const seatTdAt = (row, col) => document.querySelector(`td.seat-cell[data-row="${row}"][data-col="${col}"]`);
+    const blockOf = td => (td ? td.querySelector('.student-block') : null);
+    const posOf = el => {
+        const td = el.closest('td.seat-cell');
+        return td ? { td, row: Number(td.dataset.row), col: Number(td.dataset.col) } : null;
+    };
+    const seats = seatCells();
+    const ROWS = seats.length ? Math.max(...seats.map(td => Number(td.dataset.row))) + 1 : 0;
+    const COLS = seats.length ? Math.max(...seats.map(td => Number(td.dataset.col))) + 1 : 0;
+
+    // 同步每个座位的隐藏字段与“空座”占位
+    const syncSeats = () => seatCells().forEach(td => {
+        const slot = td.querySelector('.seat-slot');
         const block = slot.querySelector('.student-block');
         slot.querySelector('input[type="hidden"]').value = block ? block.dataset.studentId : '';
-        let placeholder = slot.querySelector('.seat-placeholder');
-        if (!block && !placeholder) {
-            placeholder = document.createElement('span');
-            placeholder.className = 'seat-placeholder text-muted small';
-            placeholder.textContent = '空座';
-            slot.appendChild(placeholder);
+        let ph = slot.querySelector('.seat-placeholder');
+        if (!block && !ph) {
+            ph = document.createElement('span');
+            ph.className = 'seat-placeholder text-muted small';
+            ph.textContent = '空座';
+            slot.appendChild(ph);
         }
-        if (block && placeholder) placeholder.remove();
+        if (block && ph) ph.remove();
     });
-    const bindBlock = block => block.addEventListener('dragstart', () => { dragged = block; });
-    // 根据所在位置切换块宽度：座位格子内占满（w-100），未分配区按名字宽度自适应
-    const syncBlockWidth = (block, inSeat) => block.classList.toggle('w-100', !!inSeat);
-    document.querySelectorAll('.student-block').forEach(bindBlock);
-    if (window.bootstrap) document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(element => {
-        new bootstrap.Tooltip(element, {delay: {show: 300, hide: 100}, container: 'body'});
-    });
-    document.querySelectorAll('.seat-slot').forEach(slot => {
-        slot.addEventListener('dragover', event => event.preventDefault());
-        slot.addEventListener('drop', event => {
-            event.preventDefault();
-            if (!dragged || dragged.parentElement === slot) return;
-            const origin = dragged.parentElement;
-            const occupied = slot.querySelector('.student-block');
-            if (occupied) {
-                unassigned.appendChild(occupied);
-                syncBlockWidth(occupied, false);  // 被挤回未分配区 → 恢复名字宽度
-            }
-            slot.appendChild(dragged);
-            syncBlockWidth(dragged, true);  // 拖入座位 → 占满格子
-            if (origin.classList.contains('seat-slot')) syncSeats();
-            unassigned.querySelector('.unassigned-empty')?.remove();
-            syncSeats();
+    const manageUnassignedHint = () => {
+        const empty = unassigned.querySelector('.unassigned-empty');
+        const has = unassigned.querySelectorAll('.student-block').length > 0;
+        if (has && empty) empty.remove();
+        if (!has && !empty) {
+            const span = document.createElement('span');
+            span.className = 'unassigned-empty text-muted small';
+            span.textContent = '暂无未分配学生';
+            unassigned.appendChild(span);
+        }
+    };
+
+    // ---------- 选中管理 ----------
+    const selection = new Set(); // 选中的 .student-block 元素
+    const selChip = document.getElementById('seatSelCount');
+    const paintSelection = () => {
+        seatCells().forEach(td => {
+            const b = blockOf(td);
+            if (b) b.classList.toggle('selected', selection.has(b));
         });
-    });
-    unassigned.addEventListener('dragover', event => event.preventDefault());
-    unassigned.addEventListener('drop', event => {
-        event.preventDefault();
-        if (dragged) {
-            unassigned.appendChild(dragged);
-            syncBlockWidth(dragged, false);  // 拖回未分配区 → 恢复名字宽度
-            syncSeats();
+        unassigned.querySelectorAll('.student-block').forEach(b => b.classList.toggle('selected', selection.has(b)));
+        if (selChip) {
+            selChip.textContent = `已选 ${selection.size} 人`;
+            selChip.classList.toggle('d-none', selection.size === 0);
         }
+    };
+    const setSelection = blocks => {
+        selection.clear();
+        blocks.forEach(b => selection.add(b));
+        paintSelection();
+    };
+    const clearSelection = () => setSelection([]);
+    const selectedSeated = () => Array.from(selection).filter(b => b.closest('td.seat-cell'));
+
+    // ---------- 矩形框选 ----------
+    let marquee = null;
+    const startMarquee = e => {
+        e.preventDefault();
+        cancelCurrent();
+        const ov = document.createElement('div');
+        ov.className = 'marquee-overlay';
+        ov.style.left = e.clientX + 'px';
+        ov.style.top = e.clientY + 'px';
+        document.body.appendChild(ov);
+        marquee = { x0: e.clientX, y0: e.clientY, x1: e.clientX, y1: e.clientY, ov };
+        document.body.classList.add('selecting-active');
+        window.addEventListener('mousemove', onMarqueeMove);
+        window.addEventListener('mouseup', onMarqueeEnd);
+    };
+    const onMarqueeMove = e => {
+        if (!marquee) return;
+        marquee.x1 = e.clientX;
+        marquee.y1 = e.clientY;
+        const left = Math.min(marquee.x0, marquee.x1);
+        const top = Math.min(marquee.y0, marquee.y1);
+        marquee.ov.style.left = left + 'px';
+        marquee.ov.style.top = top + 'px';
+        marquee.ov.style.width = Math.abs(marquee.x1 - marquee.x0) + 'px';
+        marquee.ov.style.height = Math.abs(marquee.y1 - marquee.y0) + 'px';
+    };
+    const blocksInRect = (left, top, right, bottom) => {
+        const hits = [];
+        document.querySelectorAll('.student-block').forEach(b => {
+            const r = b.getBoundingClientRect();
+            if (!(r.right < left || r.left > right || r.bottom < top || r.top > bottom)) hits.push(b);
+        });
+        return hits;
+    };
+    const onMarqueeEnd = () => {
+        if (!marquee) return;
+        const m = marquee;
+        window.removeEventListener('mousemove', onMarqueeMove);
+        window.removeEventListener('mouseup', onMarqueeEnd);
+        document.body.classList.remove('selecting-active');
+        marquee = null;
+        const left = Math.min(m.x0, m.x1), top = Math.min(m.y0, m.y1);
+        const right = Math.max(m.x0, m.x1), bottom = Math.max(m.y0, m.y1);
+        m.ov.remove();
+        setSelection(blocksInRect(left, top, right, bottom));
+    };
+
+    // ---------- 拖动 ----------
+    let drag = null;
+    const DRAG_THRESHOLD = 4;
+
+    const beginBlockPress = (e, block) => {
+        e.preventDefault();
+        cancelCurrent();
+        if (!selection.has(block)) clearSelection();
+        drag = {
+            grabbed: block, startX: e.clientX, startY: e.clientY,
+            active: false, isGroup: false, members: [], bounds: null,
+            hoverTd: null, hoverUn: false,
+        };
+        window.addEventListener('mousemove', onDragMove);
+        window.addEventListener('mouseup', onDragEnd);
+    };
+
+    const onDragMove = e => {
+        if (!drag) return;
+        if (!drag.active) {
+            if (Math.hypot(e.clientX - drag.startX, e.clientY - drag.startY) < DRAG_THRESHOLD) return;
+            activateDrag();
+        }
+        updateDragHover(e);
+    };
+
+    const activateDrag = () => {
+        const grabbed = drag.grabbed;
+        const seated = selectedSeated();
+        drag.isGroup = selection.has(grabbed) && selection.size > 1 &&
+            seated.length === selection.size && seated.includes(grabbed);
+        drag.members = drag.isGroup ? seated : [grabbed];
+        drag.bounds = computeBounds(drag.members);
+        drag.active = true;
+        drag.members.forEach(b => b.classList.add('dragging'));
+        document.body.classList.add('drag-active');
+    };
+
+    const computeBounds = blocks => {
+        const ps = blocks.map(posOf).filter(Boolean);
+        if (!ps.length) return null;
+        return {
+            minR: Math.min(...ps.map(p => p.row)),
+            maxR: Math.max(...ps.map(p => p.row)),
+            minC: Math.min(...ps.map(p => p.col)),
+            maxC: Math.max(...ps.map(p => p.col)),
+        };
+    };
+
+    const zoneAt = (x, y) => {
+        const el = document.elementFromPoint(x, y);
+        if (!el) return null;
+        const td = el.closest('td.seat-cell');
+        if (td) return { type: 'seat', td };
+        if (el.closest('#unassignedStudents')) return { type: 'unassigned' };
+        return null;
+    };
+
+    const clearHover = () => {
+        if (!drag) return;
+        if (drag.hoverTd) {
+            drag.hoverTd.classList.remove('drop-ok', 'drop-bad');
+            drag.hoverTd = null;
+        }
+        if (drag.hoverUn) {
+            unassigned.classList.remove('drop-ok');
+            drag.hoverUn = false;
+        }
+    };
+
+    const canMove = (members, dr, dc) => {
+        if (!dr && !dc) return false;
+        const b = computeBounds(members);
+        if (!b) return false;
+        if (b.minR + dr < 0 || b.maxR + dr >= ROWS || b.minC + dc < 0 || b.maxC + dc >= COLS) return false;
+        return true;
+    };
+
+    const updateDragHover = e => {
+        if (!drag || !drag.active) return;
+        clearHover();
+        const zone = zoneAt(e.clientX, e.clientY);
+        if (!zone) return;
+        if (zone.type === 'seat') {
+            const g = posOf(drag.grabbed);
+            if (!g && !drag.isGroup) {
+                // 未分配学生拖到任意座位都可行
+                drag.hoverTd = zone.td;
+                zone.td.classList.add('drop-ok');
+                return;
+            }
+            if (!g) return;
+            const dr = Number(zone.td.dataset.row) - g.row;
+            const dc = Number(zone.td.dataset.col) - g.col;
+            if (canMove(drag.members, dr, dc)) {
+                drag.hoverTd = zone.td;
+                zone.td.classList.add('drop-ok');
+            } else if (dr || dc) {
+                drag.hoverTd = zone.td;
+                zone.td.classList.add('drop-bad');
+            }
+        } else if (zone.type === 'unassigned' &&
+            drag.members.some(b => b.closest('td.seat-cell'))) {
+            drag.hoverUn = true;
+            unassigned.classList.add('drop-ok');
+        }
+    };
+
+    // 单格旋转：把 index 上 s..e 这一行/列内容平移一个单位。
+    // horizontal=true：index 为行号，s..e 为列范围；否则 index 为列号，s..e 为行范围。
+    // dir>0 右/下移：段首 ← 段尾；其余顺移；dir<0 左/上移：段尾 ← 段首。
+    const rotateSegment = (map, index, s, e, horizontal, dir) => {
+        const vals = [];
+        for (let i = s; i <= e; i++) vals.push(map.get(horizontal ? `${index},${i}` : `${i},${index}`) || null);
+        const len = vals.length;
+        for (let i = s; i <= e; i++) {
+            const offset = (dir > 0 ? (i - s - 1 + len) % len : (i - s + 1) % len);
+            const val = vals[offset];
+            const key = horizontal ? `${index},${i}` : `${i},${index}`;
+            if (val) map.set(key, val);
+            else map.delete(key);
+        }
+    };
+
+    const buildMap = () => {
+        const map = new Map();
+        seatCells().forEach(td => {
+            const b = blockOf(td);
+            if (b) map.set(`${Number(td.dataset.row)},${Number(td.dataset.col)}`, b);
+        });
+        return map;
+    };
+
+    const applyMap = map => {
+        // 先摘除所有座位里的块，再按新地图放回
+        seatCells().forEach(td => {
+            const slot = td.querySelector('.seat-slot');
+            const b = slot.querySelector('.student-block');
+            if (b) slot.removeChild(b);
+        });
+        const placed = new Set();
+        map.forEach((b, key) => {
+            if (!b) return;
+            const parts = key.split(',');
+            const td = seatTdAt(Number(parts[0]), Number(parts[1]));
+            if (!td) return;
+            td.querySelector('.seat-slot').appendChild(b);
+            b.classList.add('w-100');
+            placed.add(b);
+        });
+        document.querySelectorAll('.student-block').forEach(b => {
+            if (placed.has(b)) return;
+            b.classList.remove('w-100');
+            if (b.parentElement !== unassigned) unassigned.appendChild(b);
+        });
+        syncSeats();
+        manageUnassignedHint();
+    };
+
+    // 多人整体移动：先按行处理横向分量，再按列处理纵向分量；
+    // 被覆盖座位的学生 = 所在行/列上新出现的格子里的人，会被顺移到同一行/列中新空出的格子。
+    const moveGroup = (blocks, dr, dc) => {
+        const b = computeBounds(blocks);
+        if (!b || (!dr && !dc)) return false;
+        if (b.minR + dr < 0 || b.maxR + dr >= ROWS || b.minC + dc < 0 || b.maxC + dc >= COLS) return false;
+
+        const memberRows = new Set();
+        const memberCols = new Set();
+        blocks.forEach(blk => {
+            const p = posOf(blk);
+            if (p) {
+                memberRows.add(p.row);
+                memberCols.add(p.col);
+            }
+        });
+
+        const map = buildMap();
+        const cDir = Math.sign(dc);
+        for (let k = 0; k < Math.abs(dc); k++) {
+            for (const r of memberRows) {
+                if (cDir > 0) rotateSegment(map, r, b.minC + k, b.maxC + 1 + k, true, 1);
+                else rotateSegment(map, r, b.minC - 1 - k, b.maxC - k, true, -1);
+            }
+        }
+        const rDir = Math.sign(dr);
+        for (let k = 0; k < Math.abs(dr); k++) {
+            for (const c of memberCols) {
+                const col = c + dc; // 横向平移后成员所在列
+                if (rDir > 0) rotateSegment(map, col, b.minR + k, b.maxR + 1 + k, false, 1);
+                else rotateSegment(map, col, b.minR - 1 - k, b.maxR - k, false, -1);
+            }
+        }
+        applyMap(map);
+        return true;
+    };
+
+    const placeIntoSeat = (block, td) => {
+        td.querySelector('.seat-slot').appendChild(block);
+        block.classList.add('w-100');
+    };
+
+    // 落到座位：返回 'seat'（已移动）或 null
+    const dropToSeat = (d, td) => {
+        const g = posOf(d.grabbed);
+        if (d.isGroup) {
+            if (!g) return null;
+            const dr = Number(td.dataset.row) - g.row;
+            const dc = Number(td.dataset.col) - g.col;
+            return (canMove(d.members, dr, dc) && moveGroup(d.members, dr, dc)) ? 'seat' : null;
+        }
+        const occupant = blockOf(td);
+        if (!g) {
+            // 未分配学生拖入座位
+            if (occupant) {
+                // 座位已占：原学生回到未分配区
+                unassigned.appendChild(occupant);
+                occupant.classList.remove('w-100');
+            }
+            placeIntoSeat(d.grabbed, td);
+        } else {
+            // 座位上的学生拖动
+            const dr = Number(td.dataset.row) - g.row;
+            const dc = Number(td.dataset.col) - g.col;
+            if (!dr && !dc || g.td === td) return null;
+            if (!occupant) {
+                // 空座：直接落座
+                placeIntoSeat(d.grabbed, td);
+            } else {
+                // 两个座位上的学生：直接互换
+                const targetSlot = td.querySelector('.seat-slot');
+                const originSlot = g.td.querySelector('.seat-slot');
+                targetSlot.appendChild(d.grabbed);
+                originSlot.appendChild(occupant);
+            }
+        }
+        syncSeats();
+        manageUnassignedHint();
+        return 'seat';
+    };
+
+    // 落到未分配区：返回 'unassigned'（已移动）或 null
+    const dropToUnassigned = d => {
+        const seatedMembers = d.members.filter(b => b.closest('td.seat-cell'));
+        if (!seatedMembers.length) return null;
+        seatedMembers.forEach(b => {
+            unassigned.appendChild(b);
+            b.classList.remove('w-100');
+        });
+        syncSeats();
+        manageUnassignedHint();
+        return 'unassigned';
+    };
+
+    const onDragEnd = e => {
+        if (!drag) return;
+        const d = drag;
+        window.removeEventListener('mousemove', onDragMove);
+        window.removeEventListener('mouseup', onDragEnd);
+        document.body.classList.remove('drag-active');
+        if (!d.active) {
+            // 单击：点未选中的块＝选中它；点已选中的块＝取消选中
+            if (selection.has(d.grabbed)) {
+                setSelection(Array.from(selection).filter(x => x !== d.grabbed));
+            } else {
+                setSelection([d.grabbed]);
+            }
+            drag = null;
+            return;
+        }
+        const zone = zoneAt(e.clientX, e.clientY);
+        let outcome = null;
+        if (zone && zone.type === 'seat') outcome = dropToSeat(d, zone.td);
+        else if (zone && zone.type === 'unassigned') outcome = dropToUnassigned(d);
+        clearHover();
+        d.members.forEach(b => b.classList.remove('dragging'));
+        drag = null;
+        // 整体移动成功后保留选中，方便连续微调；其余情况清空选中
+        if (!(outcome === 'seat' && d.isGroup)) clearSelection();
+    };
+
+    const cancelCurrent = () => {
+        if (marquee) {
+            window.removeEventListener('mousemove', onMarqueeMove);
+            window.removeEventListener('mouseup', onMarqueeEnd);
+            marquee.ov.remove();
+            marquee = null;
+        }
+        if (drag) {
+            window.removeEventListener('mousemove', onDragMove);
+            window.removeEventListener('mouseup', onDragEnd);
+            clearHover();
+            drag.members.forEach(b => b.classList.remove('dragging'));
+            drag = null;
+        }
+        document.body.classList.remove('drag-active', 'selecting-active');
+    };
+
+    // ---------- 事件入口 ----------
+    document.addEventListener('mousedown', e => {
+        if (e.button !== 0) return;
+        const block = e.target.closest('.student-block');
+        if (block) {
+            beginBlockPress(e, block);
+            return;
+        }
+        if (e.target.closest('.seat-table-wrapper, #unassignedStudents')) startMarquee(e);
     });
+    // 屏蔽浏览器原生拖拽，避免与学生块的自定义拖动冲突
+    document.addEventListener('dragstart', e => {
+        if (e.target.closest('.student-block')) e.preventDefault();
+    });
+    document.addEventListener('keydown', e => {
+        if (e.key === 'Escape') cancelCurrent();
+    });
+    window.addEventListener('blur', cancelCurrent);
+
+    // 智能排座的优先级下拉去重
     const prioritySelects = Array.from(document.querySelectorAll('.priority-select'));
     prioritySelects.forEach(select => {
         select.dataset.previous = select.value;
@@ -213,6 +611,9 @@ document.addEventListener('DOMContentLoaded', function() {
             }
             select.dataset.previous = select.value;
         });
+    });
+    if (window.bootstrap) document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(element => {
+        new bootstrap.Tooltip(element, {delay: {show: 300, hide: 100}, container: 'body'});
     });
 });
 </script>
